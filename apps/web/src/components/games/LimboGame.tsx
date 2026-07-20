@@ -5,6 +5,8 @@ import { motion, useAnimationControls } from 'framer-motion';
 import { GameLayout } from '@/components/GameLayout';
 import { BetAmount } from '@/components/BetControls';
 import { BetButton } from './BetButton';
+import { AutoBet } from './AutoBet';
+import { ModeTabs } from './ModeTabs';
 import { usePlay } from '@/hooks/usePlay';
 import { useCasino } from '@/lib/store';
 import { playLimbo, clampEdge, DEFAULT_EDGE } from '@/lib/games';
@@ -20,31 +22,39 @@ export function LimboGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params 
   const [result, setResult] = useState<number | null>(null);
   const [win, setWin] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
+  const [mode, setMode] = useState<'manual' | 'auto'>('manual');
   const controls = useAnimationControls();
 
   const winChance = ((1 - clampEdge(edge)) / target) * 100;
   const g = guard(bet);
 
-  const doBet = async () => {
-    setBusy(true);
+  const playRound = (amount: number, quiet: boolean) => {
     const seeds = reserveSeeds();
-    const res = playLimbo(bet, target, seeds, edge);
-    // Count-up animation from 1.00 → crashPoint
-    setWin(null);
-    await controls.start({ opacity: [0.3, 1], transition: { duration: 0.15 } });
+    const res = playLimbo(amount, target, seeds, edge);
     setResult(res.crashPoint);
     setWin(res.win);
-    settle({
-      game: gameName ?? meta.name,
-      template: 'limbo',
-      bet,
-      multiplier: res.multiplier,
-      payout: res.payout,
-      win: res.win,
-      meta: { crashPoint: res.crashPoint, target },
-      seeds,
-    });
-    if (gameId) bumpUgc(gameId, bet);
+    settle(
+      {
+        game: gameName ?? meta.name,
+        template: 'limbo',
+        bet: amount,
+        multiplier: res.multiplier,
+        payout: res.payout,
+        win: res.win,
+        meta: { crashPoint: res.crashPoint, target },
+        seeds,
+      },
+      { quiet },
+    );
+    if (gameId) bumpUgc(gameId, amount);
+    return { win: res.win, payout: res.payout };
+  };
+
+  const doBet = async () => {
+    setBusy(true);
+    setWin(null);
+    await controls.start({ opacity: [0.3, 1], transition: { duration: 0.15 } });
+    playRound(bet, false);
     setBusy(false);
   };
 
@@ -85,6 +95,7 @@ export function LimboGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params 
       }
       controls={
         <div className="space-y-4">
+          <ModeTabs mode={mode} setMode={setMode} />
           <div>
             <div className="flex items-center justify-between">
               <span className="label-eyebrow">Target multiplier</span>
@@ -115,18 +126,22 @@ export function LimboGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params 
             </div>
           </div>
 
-          <BetAmount value={bet} onChange={setBet} disabled={busy} />
-
-          <div className="rounded-xl border border-white/[0.06] bg-void-900/50 px-4 py-2.5 text-sm">
-            <div className="flex justify-between">
-              <span className="text-slate-500">Payout on win</span>
-              <span className="font-mono font-semibold text-win">◎ {(bet * target).toFixed(4)}</span>
-            </div>
-          </div>
-
-          <BetButton guard={g} onClick={doBet} busy={busy}>
-            Bet {bet > 0 ? `◎${bet}` : ''}
-          </BetButton>
+          {mode === 'manual' ? (
+            <>
+              <BetAmount value={bet} onChange={setBet} disabled={busy} />
+              <div className="rounded-xl border border-white/[0.06] bg-void-900/50 px-4 py-2.5 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Payout on win</span>
+                  <span className="font-mono font-semibold text-win">◎ {(bet * target).toFixed(4)}</span>
+                </div>
+              </div>
+              <BetButton guard={g} onClick={doBet} busy={busy}>
+                Bet {bet > 0 ? `◎${bet}` : ''}
+              </BetButton>
+            </>
+          ) : (
+            <AutoBet baseBet={bet} setBaseBet={setBet} guard={guard} playRound={playRound} />
+          )}
         </div>
       }
     />

@@ -57,16 +57,19 @@ export function usePlay() {
 
   /** Commit a finished bet to the ledger (atomic debit/credit + history). */
   const settle = useCallback(
-    (args: {
-      game: string;
-      template: Template;
-      bet: number;
-      multiplier: number;
-      payout: number;
-      win: boolean;
-      meta?: Record<string, unknown>;
-      seeds: SeedsSnapshot;
-    }) => {
+    (
+      args: {
+        game: string;
+        template: Template;
+        bet: number;
+        multiplier: number;
+        payout: number;
+        win: boolean;
+        meta?: Record<string, unknown>;
+        seeds: SeedsSnapshot;
+      },
+      opts?: { quiet?: boolean },
+    ) => {
       const rec: Omit<BetRecord, 'id' | 'ts' | 'serverSeed' | 'serverSeedHash' | 'clientSeed' | 'nonce'> & {
         seeds: SeedsSnapshot;
       } = {
@@ -83,17 +86,23 @@ export function usePlay() {
 
       // Progression + feedback (the community + feel layer).
       const events = recordProgress({ bet: args.bet, win: args.win, payout: args.payout, key: args.game });
-      if (args.win && args.payout > args.bet) {
+      const quiet = opts?.quiet;
+      // In auto-bet we suppress the per-round feedback, but a genuinely big win
+      // (or the jackpot) still breaks through the quiet.
+      if (!quiet && args.win && args.payout > args.bet) {
         sfx.win(args.multiplier);
         burstWin(args.multiplier);
-      } else if (!args.win) {
+      } else if (!quiet && !args.win) {
         sfx.loss();
+      } else if (quiet && args.multiplier >= 10 && args.win) {
+        burstWin(args.multiplier);
       }
       if (events.jackpotWon > 0) {
         sfx.jackpot();
         burstJackpot(events.jackpotWon);
       }
-      if (events.leveledUp) window.setTimeout(() => sfx.levelUp(), 260);
+      if (!quiet && events.leveledUp) window.setTimeout(() => sfx.levelUp(), 260);
+      return { ...events, win: args.win, payout: args.payout, multiplier: args.multiplier };
     },
     [settleBet, recordProgress],
   );

@@ -5,6 +5,8 @@ import { motion } from 'framer-motion';
 import { GameLayout } from '@/components/GameLayout';
 import { BetAmount } from '@/components/BetControls';
 import { BetButton } from './BetButton';
+import { AutoBet } from './AutoBet';
+import { ModeTabs } from './ModeTabs';
 import { usePlay } from '@/hooks/usePlay';
 import { useCasino } from '@/lib/store';
 import { playCoinflip, clampEdge, DEFAULT_EDGE } from '@/lib/games';
@@ -22,32 +24,48 @@ export function CoinflipGame({ meta, edge = DEFAULT_EDGE, gameId, gameName }: Ga
   const [heads, setHeads] = useState<boolean | null>(null);
   const [win, setWin] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
+  const [mode, setMode] = useState<'manual' | 'auto'>('manual');
 
   const mult = 2 * (1 - clampEdge(edge));
   const g = guard(bet);
 
-  const doBet = async () => {
-    setBusy(true);
-    const seeds = reserveSeeds();
-    const res = playCoinflip(bet, pickHeads, seeds, edge);
-    // Land on the right face: even multiples of 180 → heads up.
-    const base = spin - (spin % 360);
-    const target = base + 360 * 5 + (res.heads ? 0 : 180);
-    setSpin(target);
-    setTimeout(() => {
-      setHeads(res.heads);
-      setWin(res.win);
-      settle({
+  const settleFlip = (amount: number, res: ReturnType<typeof playCoinflip>, seeds: any, quiet: boolean) => {
+    setHeads(res.heads);
+    setWin(res.win);
+    settle(
+      {
         game: gameName ?? meta.name,
         template: 'coinflip',
-        bet,
+        bet: amount,
         multiplier: res.multiplier,
         payout: res.payout,
         win: res.win,
         meta: { heads: res.heads, pickHeads },
         seeds,
-      });
-      if (gameId) bumpUgc(gameId, bet);
+      },
+      { quiet },
+    );
+    if (gameId) bumpUgc(gameId, amount);
+  };
+
+  // Auto mode: no 1.1s coin animation wait — resolve immediately, quietly.
+  const playRound = (amount: number, quiet: boolean) => {
+    const seeds = reserveSeeds();
+    const res = playCoinflip(amount, pickHeads, seeds, edge);
+    const base = spin - (spin % 360);
+    setSpin(base + 360 * 3 + (res.heads ? 0 : 180));
+    settleFlip(amount, res, seeds, quiet);
+    return { win: res.win, payout: res.payout };
+  };
+
+  const doBet = async () => {
+    setBusy(true);
+    const seeds = reserveSeeds();
+    const res = playCoinflip(bet, pickHeads, seeds, edge);
+    const base = spin - (spin % 360);
+    setSpin(base + 360 * 5 + (res.heads ? 0 : 180));
+    setTimeout(() => {
+      settleFlip(bet, res, seeds, false);
       setBusy(false);
     }, 1100);
   };
@@ -76,6 +94,7 @@ export function CoinflipGame({ meta, edge = DEFAULT_EDGE, gameId, gameName }: Ga
       }
       controls={
         <div className="space-y-4">
+          <ModeTabs mode={mode} setMode={setMode} />
           <div className="flex gap-1 rounded-xl bg-void-900/80 p-1">
             {[
               { k: true, label: 'Heads', e: 'moon' as const },
@@ -94,18 +113,22 @@ export function CoinflipGame({ meta, edge = DEFAULT_EDGE, gameId, gameName }: Ga
             ))}
           </div>
 
-          <BetAmount value={bet} onChange={setBet} disabled={busy} />
-
-          <div className="rounded-xl border border-white/[0.06] bg-void-900/50 px-4 py-2.5 text-sm">
-            <div className="flex justify-between">
-              <span className="text-slate-500">Payout ({fmtMult(mult)})</span>
-              <span className="font-mono font-semibold text-win">◎ {(bet * mult).toFixed(4)}</span>
-            </div>
-          </div>
-
-          <BetButton guard={g} onClick={doBet} busy={busy}>
-            Flip ◎{bet}
-          </BetButton>
+          {mode === 'manual' ? (
+            <>
+              <BetAmount value={bet} onChange={setBet} disabled={busy} />
+              <div className="rounded-xl border border-white/[0.06] bg-void-900/50 px-4 py-2.5 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Payout ({fmtMult(mult)})</span>
+                  <span className="font-mono font-semibold text-win">◎ {(bet * mult).toFixed(4)}</span>
+                </div>
+              </div>
+              <BetButton guard={g} onClick={doBet} busy={busy}>
+                Flip ◎{bet}
+              </BetButton>
+            </>
+          ) : (
+            <AutoBet baseBet={bet} setBaseBet={setBet} guard={guard} playRound={playRound} />
+          )}
         </div>
       }
     />

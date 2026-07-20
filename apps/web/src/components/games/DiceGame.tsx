@@ -5,6 +5,8 @@ import { motion } from 'framer-motion';
 import { GameLayout } from '@/components/GameLayout';
 import { BetAmount } from '@/components/BetControls';
 import { BetButton } from './BetButton';
+import { AutoBet } from './AutoBet';
+import { ModeTabs } from './ModeTabs';
 import { usePlay } from '@/hooks/usePlay';
 import { useCasino } from '@/lib/store';
 import { playDice, diceMultiplier, DEFAULT_EDGE } from '@/lib/games';
@@ -21,28 +23,37 @@ export function DiceGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params }
   const [roll, setRoll] = useState<number | null>(null);
   const [lastWin, setLastWin] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
+  const [mode, setMode] = useState<'manual' | 'auto'>('manual');
 
   const winChance = over ? 100 - target : target;
   const mult = diceMultiplier(target, over, edge);
   const g = guard(bet);
 
-  const doBet = () => {
-    setBusy(true);
+  const playRound = (amount: number, quiet: boolean) => {
     const seeds = reserveSeeds();
-    const res = playDice(bet, target, over, seeds, edge);
+    const res = playDice(amount, target, over, seeds, edge);
     setRoll(res.roll);
     setLastWin(res.win);
-    settle({
-      game: gameName ?? meta.name,
-      template: 'dice',
-      bet,
-      multiplier: res.multiplier,
-      payout: res.payout,
-      win: res.win,
-      meta: { roll: res.roll, target, over },
-      seeds,
-    });
-    if (gameId) bumpUgc(gameId, bet);
+    settle(
+      {
+        game: gameName ?? meta.name,
+        template: 'dice',
+        bet: amount,
+        multiplier: res.multiplier,
+        payout: res.payout,
+        win: res.win,
+        meta: { roll: res.roll, target, over },
+        seeds,
+      },
+      { quiet },
+    );
+    if (gameId) bumpUgc(gameId, amount);
+    return { win: res.win, payout: res.payout };
+  };
+
+  const doBet = () => {
+    setBusy(true);
+    playRound(bet, false);
     setBusy(false);
   };
 
@@ -117,6 +128,8 @@ export function DiceGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params }
       }
       controls={
         <div className="space-y-4">
+          <ModeTabs mode={mode} setMode={setMode} />
+
           <div className="grid grid-cols-2 gap-2">
             <Stat label="Multiplier" value={fmtMult(mult)} />
             <Stat label="Win chance" value={`${winChance.toFixed(0)}%`} />
@@ -139,18 +152,22 @@ export function DiceGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params }
             ))}
           </div>
 
-          <BetAmount value={bet} onChange={setBet} disabled={busy} />
-
-          <div className="rounded-xl border border-white/[0.06] bg-void-900/50 px-4 py-2.5 text-sm">
-            <div className="flex justify-between">
-              <span className="text-slate-500">Payout on win</span>
-              <span className="font-mono font-semibold text-win">◎ {(bet * mult).toFixed(4)}</span>
-            </div>
-          </div>
-
-          <BetButton guard={g} onClick={doBet} busy={busy}>
-            Bet {bet > 0 ? `◎${bet}` : ''}
-          </BetButton>
+          {mode === 'manual' ? (
+            <>
+              <BetAmount value={bet} onChange={setBet} disabled={busy} />
+              <div className="rounded-xl border border-white/[0.06] bg-void-900/50 px-4 py-2.5 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-slate-500">Payout on win</span>
+                  <span className="font-mono font-semibold text-win">◎ {(bet * mult).toFixed(4)}</span>
+                </div>
+              </div>
+              <BetButton guard={g} onClick={doBet} busy={busy}>
+                Bet {bet > 0 ? `◎${bet}` : ''}
+              </BetButton>
+            </>
+          ) : (
+            <AutoBet baseBet={bet} setBaseBet={setBet} guard={guard} playRound={playRound} />
+          )}
         </div>
       }
     />
