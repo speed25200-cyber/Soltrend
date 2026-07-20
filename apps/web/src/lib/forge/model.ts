@@ -14,7 +14,17 @@
 import { createServerSeed, floatStream } from '../provably-fair';
 import { MIN_EDGE, MAX_EDGE } from '../games';
 
-export type NodeKind = 'rng' | 'const' | 'math' | 'branch' | 'curve' | 'payout';
+export type NodeKind =
+  | 'rng'
+  | 'const'
+  | 'math'
+  | 'branch'
+  | 'curve'
+  | 'randint'
+  | 'map'
+  | 'chance'
+  | 'segments'
+  | 'payout';
 
 export interface ForgeNode {
   id: string;
@@ -37,7 +47,7 @@ export interface PortDef {
 export interface ParamDef {
   key: string;
   label: string;
-  type: 'number' | 'select';
+  type: 'number' | 'select' | 'text';
   options?: string[];
   min?: number;
   max?: number;
@@ -141,6 +151,70 @@ export const NODE_DEFS: Record<NodeKind, NodeDef> = {
       }
     },
   },
+  randint: {
+    kind: 'randint',
+    label: 'Rand int',
+    hint: 'Turn a [0,1) value into an integer 0…N-1',
+    color: '#8b5cf6',
+    inputs: [{ key: 'x', label: 'X' }],
+    params: [{ key: 'n', label: 'N', type: 'number', default: 6, step: 1 }],
+    eval: (i, p) => Math.floor(Math.min(0.999999, Math.max(0, i.x ?? 0)) * Math.max(1, num(p.n, 6))),
+  },
+  map: {
+    kind: 'map',
+    label: 'Remap',
+    hint: 'Linearly remap a value between ranges',
+    color: '#3b82f6',
+    inputs: [{ key: 'x', label: 'X' }],
+    params: [
+      { key: 'inMin', label: 'in min', type: 'number', default: 0 },
+      { key: 'inMax', label: 'in max', type: 'number', default: 1 },
+      { key: 'outMin', label: 'out min', type: 'number', default: 0 },
+      { key: 'outMax', label: 'out max', type: 'number', default: 10 },
+    ],
+    eval: (i, p) => {
+      const x = i.x ?? 0;
+      const a = num(p.inMin, 0), b = num(p.inMax, 1), c = num(p.outMin, 0), d = num(p.outMax, 10);
+      if (b === a) return c;
+      return c + ((x - a) / (b - a)) * (d - c);
+    },
+  },
+  chance: {
+    kind: 'chance',
+    label: 'Chance',
+    hint: 'Win with probability P → outputs 1 (win) or 0 (loss)',
+    color: '#ec4899',
+    inputs: [{ key: 'x', label: 'RNG' }],
+    params: [{ key: 'p', label: 'P win', type: 'number', default: 0.5, step: 0.01 }],
+    eval: (i, p) => ((i.x ?? 1) < num(p.p, 0.5) ? 1 : 0),
+  },
+  segments: {
+    kind: 'segments',
+    label: 'Segments',
+    hint: 'Weighted wheel: "mult:weight" list. Picks one by RNG.',
+    color: '#f59e0b',
+    inputs: [{ key: 'x', label: 'RNG' }],
+    params: [{ key: 'segs', label: 'mult:weight', type: 'text', default: '0:8, 1.5:8, 2:4, 4:2' }],
+    eval: (i, p) => {
+      const parts = String(p.segs || '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .map((s) => {
+          const [m, w] = s.split(':');
+          return { m: parseFloat(m) || 0, w: Math.max(0, parseFloat(w) || 0) };
+        })
+        .filter((s) => s.w > 0);
+      if (parts.length === 0) return 0;
+      const total = parts.reduce((a, b) => a + b.w, 0);
+      let r = Math.min(0.999999, Math.max(0, i.x ?? 0)) * total;
+      for (const s of parts) {
+        r -= s.w;
+        if (r < 0) return s.m;
+      }
+      return parts[parts.length - 1].m;
+    },
+  },
   payout: {
     kind: 'payout',
     label: 'Payout',
@@ -187,6 +261,11 @@ export function runGraph(g: ForgeGraph, next: () => number): number {
 
 /* ---------------------------------------------------------------- validation */
 
+export interface SimBucket {
+  label: string;
+  count: number;
+}
+
 export interface GraphSim {
   ok: boolean;
   errors: string[];
@@ -196,7 +275,17 @@ export interface GraphSim {
   maxMult: number;
   volatility: number;
   rounds: number;
+  buckets: SimBucket[];
 }
+
+const BUCKETS: { label: string; min: number; max: number }[] = [
+  { label: 'Loss', min: 0, max: 0.0001 },
+  { label: '0–1×', min: 0.0001, max: 1 },
+  { label: '1–2×', min: 1, max: 2 },
+  { label: '2–5×', min: 2, max: 5 },
+  { label: '5–10×', min: 5, max: 10 },
+  { label: '10×+', min: 10, max: Infinity },
+];
 
 export function simulateGraph(g: ForgeGraph, rounds = 4000): GraphSim {
   const errors: string[] = [];
@@ -205,6 +294,7 @@ export function simulateGraph(g: ForgeGraph, rounds = 4000): GraphSim {
   if (!hasRng) errors.push('Add at least one RNG node so the outcome is random.');
 
   const serverSeed = createServerSeed().serverSeed;
+  const buckets = BUCKETS.map((b) => ({ label: b.label, count: 0 }));
   let total = 0;
   let wins = 0;
   let maxMult = 0;
@@ -218,6 +308,12 @@ export function simulateGraph(g: ForgeGraph, rounds = 4000): GraphSim {
     sumSq += m * m;
     if (m >= 1) wins++;
     if (m > maxMult) maxMult = m;
+    for (let bi = 0; bi < BUCKETS.length; bi++) {
+      if (m >= BUCKETS[bi].min && m < BUCKETS[bi].max) {
+        buckets[bi].count++;
+        break;
+      }
+    }
   }
   const rtp = total / rounds;
   const edge = 1 - rtp;
@@ -230,7 +326,7 @@ export function simulateGraph(g: ForgeGraph, rounds = 4000): GraphSim {
     if (maxMult > 1000) errors.push(`Max payout ${maxMult.toFixed(0)}× exceeds the 1000× vault-safety cap.`);
   }
 
-  return { ok: errors.length === 0, errors, rtp, edge, hitRate: wins / rounds, maxMult, volatility, rounds };
+  return { ok: errors.length === 0, errors, rtp, edge, hitRate: wins / rounds, maxMult, volatility, rounds, buckets };
 }
 
 /** Find the payout scale that makes the realised edge hit `targetEdge`. */
@@ -263,3 +359,66 @@ export function starterGraph(): ForgeGraph {
   const payout = { id: 'pay', kind: 'payout' as const, x: 700, y: 170, params: { scale: 1 }, inputs: { mult: 'b1' } };
   return { nodes: [hundred, rng, scaled, win, lose, branch, payout] };
 }
+
+/** Remixable starter templates — load one, then rewire it into something new. */
+export interface ForgeTemplate {
+  id: string;
+  label: string;
+  hint: string;
+  build: () => ForgeGraph;
+}
+
+export const FORGE_TEMPLATES: ForgeTemplate[] = [
+  { id: 'dice', label: 'Dice', hint: 'Over/under a threshold', build: starterGraph },
+  {
+    id: 'coinflip',
+    label: 'Coinflip',
+    hint: '50/50, pays ~2×',
+    build: (): ForgeGraph => ({
+      nodes: [
+        { id: 'r', kind: 'rng', x: 40, y: 160, params: {}, inputs: {} },
+        { id: 'ch', kind: 'chance', x: 250, y: 150, params: { p: 0.5 }, inputs: { x: 'r' } },
+        { id: 'c2', kind: 'const', x: 250, y: 300, params: { value: 1.98 }, inputs: {} },
+        { id: 'm', kind: 'math', x: 470, y: 190, params: { op: '×' }, inputs: { a: 'ch', b: 'c2' } },
+        { id: 'pay', kind: 'payout', x: 690, y: 200, params: { scale: 1 }, inputs: { mult: 'm' } },
+      ],
+    }),
+  },
+  {
+    id: 'crash',
+    label: 'Crash',
+    hint: 'Exponential crash curve, capped',
+    build: (): ForgeGraph => ({
+      nodes: [
+        { id: 'r', kind: 'rng', x: 40, y: 190, params: {}, inputs: {} },
+        { id: 'cv', kind: 'curve', x: 250, y: 180, params: { type: 'crash', k: 0.99 }, inputs: { x: 'r' } },
+        { id: 'cap', kind: 'const', x: 250, y: 320, params: { value: 100 }, inputs: {} },
+        { id: 'mn', kind: 'math', x: 470, y: 210, params: { op: 'min' }, inputs: { a: 'cv', b: 'cap' } },
+        { id: 'pay', kind: 'payout', x: 690, y: 220, params: { scale: 1 }, inputs: { mult: 'mn' } },
+      ],
+    }),
+  },
+  {
+    id: 'wheel',
+    label: 'Wheel',
+    hint: 'Weighted segments',
+    build: (): ForgeGraph => ({
+      nodes: [
+        { id: 'r', kind: 'rng', x: 60, y: 180, params: {}, inputs: {} },
+        { id: 'sg', kind: 'segments', x: 300, y: 150, params: { segs: '0:12, 1.5:8, 2:4, 5:2, 20:1' }, inputs: { x: 'r' } },
+        { id: 'pay', kind: 'payout', x: 620, y: 190, params: { scale: 1 }, inputs: { mult: 'sg' } },
+      ],
+    }),
+  },
+  {
+    id: 'blank',
+    label: 'Blank',
+    hint: 'Start from scratch',
+    build: (): ForgeGraph => ({
+      nodes: [
+        { id: 'r', kind: 'rng', x: 80, y: 180, params: {}, inputs: {} },
+        { id: 'pay', kind: 'payout', x: 520, y: 190, params: { scale: 1 }, inputs: {} },
+      ],
+    }),
+  },
+];

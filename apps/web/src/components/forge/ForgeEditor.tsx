@@ -11,7 +11,7 @@ const outPortY = (n: ForgeNode) => n.y + 17;
 const inPortY = (n: ForgeNode, idx: number) => n.y + HEADER + IN_GAP / 2 + idx * IN_GAP;
 const inDotTop = (idx: number) => HEADER + IN_GAP / 2 + idx * IN_GAP - 7;
 
-const PALETTE: NodeKind[] = ['rng', 'const', 'math', 'branch', 'curve', 'payout'];
+const PALETTE: NodeKind[] = ['rng', 'const', 'math', 'branch', 'curve', 'randint', 'map', 'chance', 'segments', 'payout'];
 
 export function ForgeEditor({ graph, onChange }: { graph: ForgeGraph; onChange: (g: ForgeGraph) => void }) {
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -177,6 +177,15 @@ export function ForgeEditor({ graph, onChange }: { graph: ForgeGraph; onChange: 
                               {o}
                             </button>
                           ))}
+                        </div>
+                      ) : p.type === 'text' ? (
+                        <div>
+                          <span className="text-[0.62rem] text-slate-500">{p.label}</span>
+                          <input
+                            value={String(n.params[p.key] ?? '')}
+                            onChange={(e) => patch(n.id, (nn) => ({ ...nn, params: { ...nn.params, [p.key]: e.target.value } }))}
+                            className="mt-0.5 w-full rounded bg-void-900 px-1.5 py-0.5 font-mono text-[0.62rem] text-white outline-none"
+                          />
                         </div>
                       ) : (
                         <label className="flex items-center justify-between gap-2">

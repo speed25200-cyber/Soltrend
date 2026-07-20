@@ -9,7 +9,7 @@ import { SectionHead } from '@/components/SectionHead';
 import { Icon, STUDIO_ICONS, type IconName } from '@/components/Icon';
 import { ForgeEditor } from '@/components/forge/ForgeEditor';
 import { GraphGame } from '@/components/games/GraphGame';
-import { simulateGraph, normaliseEdge, starterGraph, type ForgeGraph } from '@/lib/forge/model';
+import { simulateGraph, normaliseEdge, starterGraph, FORGE_TEMPLATES, type ForgeGraph } from '@/lib/forge/model';
 import { clampEdge } from '@/lib/games';
 import { AURAS } from '@/lib/auras';
 import { ACCENT_HEX, type GameMeta } from '@/lib/catalog';
@@ -87,9 +87,14 @@ export default function ForgePage() {
             </p>
           </div>
 
-          <div className="flex gap-2">
-            <button className="btn-ghost flex-1" onClick={() => setGraph(starterGraph())}>Reset to dice example</button>
-            <button className="btn-ghost flex-1" onClick={() => setTesting((t) => !t)}>{testing ? 'Hide test' : 'Test drive'}</button>
+          <div className="glass flex flex-wrap items-center gap-2 p-3">
+            <span className="label-eyebrow mr-1">Load template</span>
+            {FORGE_TEMPLATES.map((t) => (
+              <button key={t.id} className="chip hover:border-neon-violet/50" title={t.hint} onClick={() => { setGraph(t.build()); sfx.click(); }}>
+                {t.label}
+              </button>
+            ))}
+            <button className="btn-ghost ml-auto !py-1.5 text-xs" onClick={() => setTesting((t) => !t)}>{testing ? 'Hide test' : 'Test drive'}</button>
           </div>
 
           {testing && (
@@ -117,6 +122,26 @@ export default function ForgePage() {
               </label>
               <button className="btn-ghost" onClick={normalise}>Normalise</button>
             </div>
+            {/* distribution histogram */}
+            {sim.buckets.some((b) => b.count > 0) && (
+              <div className="mt-4">
+                <div className="flex items-end gap-1.5" style={{ height: 84 }}>
+                  {sim.buckets.map((b, i) => {
+                    const maxC = Math.max(...sim.buckets.map((x) => x.count), 1);
+                    const h = (b.count / maxC) * 100;
+                    const color = b.label === 'Loss' ? '#ff3b6b' : i >= 4 ? '#ffd25f' : i >= 3 ? '#22d3ee' : '#a855f7';
+                    return (
+                      <div key={b.label} className="flex flex-1 flex-col items-center gap-1">
+                        <div className="flex w-full items-end" style={{ height: 60 }}>
+                          <div className="w-full rounded-t" style={{ height: `${Math.max(2, h)}%`, background: color }} />
+                        </div>
+                        <span className="text-[0.5rem] text-slate-600">{b.label}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             {sim.errors.map((e) => (
               <p key={e} className="mt-2 flex items-start gap-1.5 rounded-lg bg-loss/10 px-3 py-2 text-xs text-loss"><Icon name="block" size={13} className="mt-px shrink-0" /> {e}</p>
             ))}
