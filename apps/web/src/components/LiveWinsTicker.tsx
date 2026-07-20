@@ -68,11 +68,12 @@ export function LiveWinsTicker() {
 function synth(seed: number): Win {
   const h = (seed * 2654435761) >>> 0;
   const game = CATALOG[h % CATALOG.length];
-  const mult = 1.2 + ((h >> 3) % 900) / 100;
-  const amount = 0.05 + ((h >> 7) % 500) / 100;
+  // Unsigned shifts (>>>) — a signed >> can go negative for h ≥ 2^31.
+  const mult = 1.2 + ((h >>> 3) % 900) / 100;
+  const amount = 0.05 + ((h >>> 7) % 500) / 100;
   return {
     id: seed,
-    user: NAMES[(h >> 5) % NAMES.length],
+    user: NAMES[(h >>> 5) % NAMES.length],
     game: game.name,
     icon: game.icon,
     color: ACCENT_HEX[game.accent],
