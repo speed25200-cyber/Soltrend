@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { useCasino, metricValue } from '@/lib/store';
 import { SectionHead } from '@/components/SectionHead';
 import { Icon } from '@/components/Icon';
+import { WeeklyTournament } from '@/components/WeeklyTournament';
 import { SolMark } from '@/components/BalanceWidget';
 import { fmtSol, timeAgo } from '@/lib/format';
 import {
@@ -93,6 +94,8 @@ export default function RewardsPage() {
           {claimedToday ? 'Claimed today' : 'Claim daily bonus'}
         </button>
       </div>
+
+      <WeeklyTournament />
 
       {/* Missions */}
       <section>
