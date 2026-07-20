@@ -19,6 +19,7 @@ in the browser.
 ```
 soltrend/
 ├─ apps/web/                 Next.js 14 (App Router) casino — Phantom, 7 games, Studio, leaderboards
+├─ apps/api/                 NestJS backend — server-authoritative provably-fair, settlement, metrics, compliance
 ├─ packages/shared/          Canonical provably-fair engine + GameSpec contract (dependency-free)
 └─ programs/house_vault/     Anchor/Rust program — custody, settlement, revenue split, creator vaults
 ```
@@ -34,6 +35,14 @@ soltrend/
 - **Provably-fair verifier** (`/verify`): re-derive any bet from its seeds, entirely client-side.
 - **Compliance first-class:** 18+ gate, geo posture banner, and a full responsible-gaming panel
   (max bet, daily-loss limit, cooling-off / self-exclusion, KYC status).
+
+### The backend (`apps/api`)
+A **NestJS** service that owns the server seeds and settles every bet through a
+single compliance-guarded, provably-fair path — then indexes metrics for the
+leaderboards. It exposes the fairness lifecycle over HTTP (`/fair/current`
+publishes only the seed *hash*; `/fair/rotate` reveals; `/fair/verify` replays)
+and enforces geo-blocking + responsible-gaming limits. Unit + HTTP e2e tests
+cover the full settle → reveal → verify loop. See `apps/api/README.md`.
 
 ### The engine (`packages/shared`)
 Dependency-free **SHA-256 + HMAC-SHA256** (byte-verified against Node `crypto`), a deterministic
@@ -72,6 +81,15 @@ npm run build && npm run start
 ```
 
 Configure RPC via `apps/web/.env.local` (see `.env.example`). Defaults to public devnet.
+
+### The backend
+
+```bash
+cd apps/api
+npm install
+npm start          # http://localhost:4000
+npm test           # unit + HTTP e2e
+```
 
 ### The Anchor program
 
