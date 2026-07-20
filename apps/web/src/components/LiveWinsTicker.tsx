@@ -1,14 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { CATALOG } from '@/lib/catalog';
+import { CATALOG, ACCENT_HEX } from '@/lib/catalog';
 import { fmtMult } from '@/lib/format';
+import { Icon, type IconName } from './Icon';
 
 interface Win {
   id: number;
   user: string;
   game: string;
-  emoji: string;
+  icon: IconName;
+  color: string;
   mult: number;
   amount: number;
 }
@@ -44,7 +46,9 @@ export function LiveWinsTicker() {
             key={w.id}
             className="flex shrink-0 items-center gap-2 rounded-xl border border-white/[0.06] bg-void-900/60 px-3 py-2 animate-float-up"
           >
-            <span className="text-lg">{w.emoji}</span>
+            <span style={{ color: w.color }}>
+              <Icon name={w.icon} size={18} />
+            </span>
             <div className="leading-tight">
               <div className="text-xs font-semibold text-slate-300">{w.user}</div>
               <div className="text-[0.65rem] text-slate-500">{w.game}</div>
@@ -70,7 +74,8 @@ function synth(seed: number): Win {
     id: seed,
     user: NAMES[(h >> 5) % NAMES.length],
     game: game.name,
-    emoji: game.emoji,
+    icon: game.icon,
+    color: ACCENT_HEX[game.accent],
     mult: Math.round(mult * 100) / 100,
     amount,
   };

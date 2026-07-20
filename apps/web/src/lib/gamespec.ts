@@ -21,7 +21,7 @@ export interface GameSpec {
   name: string;
   edge: number;
   params: Record<string, number | string>;
-  theme: { accent: string; emoji: string };
+  theme: { accent: string; icon: string };
 }
 
 export interface Validation {

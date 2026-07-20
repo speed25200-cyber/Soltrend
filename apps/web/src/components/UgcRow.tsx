@@ -5,6 +5,7 @@ import { useCasino, type UgcGame } from '@/lib/store';
 import { fmtCompact } from '@/lib/format';
 import { ACCENT_HEX } from '@/lib/catalog';
 import { SectionHead } from './SectionHead';
+import { Icon } from './Icon';
 
 export function UgcRow() {
   const ugc = useCasino((s) => s.ugc);
@@ -40,11 +41,11 @@ export function UgcCard({ game }: { game: UgcGame }) {
       />
       {game.featured && (
         <span className="absolute right-2.5 top-2.5 chip !border-gold/40 !bg-gold/10 !text-gold">
-          ★ Featured
+          <Icon name="star" size={11} /> Featured
         </span>
       )}
-      <span className="text-4xl" style={{ filter: `drop-shadow(0 6px 18px ${hex}88)` }}>
-        {game.theme.emoji}
+      <span style={{ color: hex, filter: `drop-shadow(0 6px 18px ${hex}88)` }}>
+        <Icon name={game.theme.icon} size={38} strokeWidth={1.5} />
       </span>
       <h3 className="mt-3 font-display font-bold text-white">{game.name}</h3>
       <p className="text-xs text-slate-500">by {game.creator}</p>

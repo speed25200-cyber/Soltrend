@@ -9,6 +9,7 @@ import { usePlay } from '@/hooks/usePlay';
 import { useCasino } from '@/lib/store';
 import { playCoinflip, clampEdge, DEFAULT_EDGE } from '@/lib/games';
 import { fmtMult } from '@/lib/format';
+import { Icon } from '@/components/Icon';
 import type { GameConfig } from './types';
 
 export function CoinflipGame({ meta, edge = DEFAULT_EDGE, gameId, gameName }: GameConfig) {
@@ -68,7 +69,7 @@ export function CoinflipGame({ meta, edge = DEFAULT_EDGE, gameId, gameName }: Ga
             </motion.div>
           </div>
           <div className="h-6 font-semibold">
-            {win === true && <span className="text-win">🎉 {heads ? 'Heads' : 'Tails'} — you win!</span>}
+            {win === true && <span className="text-win">{heads ? 'Heads' : 'Tails'} — you win!</span>}
             {win === false && <span className="text-loss">{heads ? 'Heads' : 'Tails'} — not this time.</span>}
           </div>
         </div>
@@ -77,18 +78,18 @@ export function CoinflipGame({ meta, edge = DEFAULT_EDGE, gameId, gameName }: Ga
         <div className="space-y-4">
           <div className="flex gap-1 rounded-xl bg-void-900/80 p-1">
             {[
-              { k: true, label: 'Heads', e: '🌕' },
-              { k: false, label: 'Tails', e: '⚡' },
+              { k: true, label: 'Heads', e: 'moon' as const },
+              { k: false, label: 'Tails', e: 'bolt' as const },
             ].map((o) => (
               <button
                 key={String(o.k)}
                 onClick={() => setPickHeads(o.k)}
                 disabled={busy}
-                className={`flex-1 rounded-lg py-2.5 text-sm font-semibold transition ${
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2.5 text-sm font-semibold transition ${
                   pickHeads === o.k ? 'bg-white/10 text-white' : 'text-slate-400 hover:text-white'
                 }`}
               >
-                {o.e} {o.label}
+                <Icon name={o.e} size={15} /> {o.label}
               </button>
             ))}
           </div>
@@ -114,7 +115,7 @@ export function CoinflipGame({ meta, edge = DEFAULT_EDGE, gameId, gameName }: Ga
 function CoinFace({ side, back }: { side: 'H' | 'T'; back?: boolean }) {
   return (
     <div
-      className="absolute inset-0 grid place-items-center rounded-full font-display text-5xl font-bold text-void-950"
+      className="absolute inset-0 grid place-items-center rounded-full text-void-950"
       style={{
         backfaceVisibility: 'hidden',
         transform: back ? 'rotateY(180deg)' : undefined,
@@ -125,7 +126,7 @@ function CoinFace({ side, back }: { side: 'H' | 'T'; back?: boolean }) {
         boxShadow: '0 12px 40px -8px rgba(0,0,0,0.7), inset 0 0 0 6px rgba(255,255,255,0.25)',
       }}
     >
-      {side === 'H' ? '🌕' : '⚡'}
+      <Icon name={side === 'H' ? 'moon' : 'bolt'} size={56} strokeWidth={1.6} />
     </div>
   );
 }

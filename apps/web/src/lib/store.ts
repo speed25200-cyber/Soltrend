@@ -15,6 +15,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { createServerSeed, randomHex, sha256Hex } from './provably-fair';
 import type { Template } from './games';
+import type { IconName } from '@/components/Icon';
 
 export interface BetRecord {
   id: string;
@@ -39,7 +40,7 @@ export interface UgcGame {
   creator: string;
   edge: number;
   params: Record<string, number | string>;
-  theme: { accent: string; emoji: string };
+  theme: { accent: string; icon: IconName };
   volume: number;
   players: number;
   plays: number;
@@ -105,7 +106,7 @@ export const seededUgc = (): UgcGame[] => [
     creator: 'CryptoWizard',
     edge: 0.01,
     params: { target: 50, over: 1 },
-    theme: { accent: 'violet', emoji: '🎲' },
+    theme: { accent: 'violet', icon: 'dice' },
     volume: 184203,
     players: 2841,
     plays: 51204,
@@ -120,7 +121,7 @@ export const seededUgc = (): UgcGame[] => [
     creator: 'DegenKing',
     edge: 0.02,
     params: { target: 2 },
-    theme: { accent: 'cyan', emoji: '🚀' },
+    theme: { accent: 'cyan', icon: 'trend' },
     volume: 142980,
     players: 1920,
     plays: 38210,
@@ -134,7 +135,7 @@ export const seededUgc = (): UgcGame[] => [
     creator: 'GemHunter',
     edge: 0.015,
     params: { grid: 25, bombs: 3 },
-    theme: { accent: 'gold', emoji: '💎' },
+    theme: { accent: 'gold', icon: 'gem' },
     volume: 98120,
     players: 1502,
     plays: 24012,
@@ -217,7 +218,7 @@ export const useCasino = create<CasinoState>()(
         })),
     }),
     {
-      name: 'soltrend-casino',
+      name: 'soltrend-casino-v2',
       partialize: (s) => ({
         balance: s.balance,
         ageVerified: s.ageVerified,

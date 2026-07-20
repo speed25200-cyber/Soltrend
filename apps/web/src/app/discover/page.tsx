@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useCasino } from '@/lib/store';
 import { UgcCard } from '@/components/UgcRow';
 import { SectionHead } from '@/components/SectionHead';
+import { Icon } from '@/components/Icon';
 import { ACCENT_HEX } from '@/lib/catalog';
 import { fmtCompact } from '@/lib/format';
 
@@ -25,11 +26,11 @@ export default function DiscoverPage() {
         >
           <div className="pointer-events-none absolute -right-10 -top-10 h-64 w-64 rounded-full blur-3xl" style={{ background: `${hex}44` }} />
           <div className="relative z-10 flex flex-col items-start gap-4 md:flex-row md:items-center">
-            <span className="grid h-20 w-20 place-items-center rounded-2xl text-5xl" style={{ background: `${hex}22`, boxShadow: `0 0 40px -10px ${hex}` }}>
-              {gotw.theme.emoji}
+            <span className="grid h-20 w-20 place-items-center rounded-2xl" style={{ color: hex, background: `${hex}22`, boxShadow: `0 0 40px -10px ${hex}` }}>
+              <Icon name={gotw.theme.icon} size={44} strokeWidth={1.4} />
             </span>
             <div className="flex-1">
-              <span className="chip !border-gold/40 !bg-gold/10 !text-gold">★ Game of the Week</span>
+              <span className="chip !border-gold/40 !bg-gold/10 !text-gold"><Icon name="star" size={11} /> Game of the Week</span>
               <h2 className="mt-2 font-display text-3xl font-bold text-white">{gotw.name}</h2>
               <p className="text-slate-400">by {gotw.creator} · {fmtCompact(gotw.players)} players · ◎{fmtCompact(gotw.volume)} wagered</p>
             </div>
@@ -39,7 +40,7 @@ export default function DiscoverPage() {
       )}
 
       <section>
-        <SectionHead eyebrow="🔥 Hot" title="Trending now" />
+        <SectionHead eyebrow="Hot" title="Trending now" />
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
           {trending.map((g) => (
             <UgcCard key={g.id} game={g} />
@@ -48,7 +49,7 @@ export default function DiscoverPage() {
       </section>
 
       <section>
-        <SectionHead eyebrow="✨ New" title="Fresh drops" />
+        <SectionHead eyebrow="New" title="Fresh drops" />
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
           {fresh.map((g) => (
             <UgcCard key={g.id} game={g} />

@@ -10,6 +10,7 @@ import { useCasino } from '@/lib/store';
 import { crashPointFromFloat, DEFAULT_EDGE, round2 } from '@/lib/games';
 import { firstFloat } from '@/lib/provably-fair';
 import { fmtMult } from '@/lib/format';
+import { Icon } from '@/components/Icon';
 import type { GameConfig } from './types';
 
 type Phase = 'idle' | 'running' | 'crashed' | 'cashed';
@@ -146,11 +147,19 @@ export function CrashGame({ meta, edge = DEFAULT_EDGE, gameId, gameName }: GameC
             >
               {fmtMult(phase === 'cashed' && cashMult ? cashMult : mult)}
             </motion.div>
-            <div className="mt-2 h-6 font-semibold">
-              {phase === 'crashed' && <span className="text-loss">💥 Crashed @ {fmtMult(crashPoint.current)}</span>}
-              {phase === 'cashed' && <span className="text-win">✅ Cashed out {fmtMult(cashMult!)}</span>}
+            <div className="mt-2 flex h-6 items-center justify-center gap-1.5 font-semibold">
+              {phase === 'crashed' && (
+                <span className="inline-flex items-center gap-1.5 text-loss">
+                  <Icon name="flame" size={15} /> Crashed @ {fmtMult(crashPoint.current)}
+                </span>
+              )}
+              {phase === 'cashed' && (
+                <span className="inline-flex items-center gap-1.5 text-win">
+                  <Icon name="check" size={15} /> Cashed out {fmtMult(cashMult!)}
+                </span>
+              )}
               {phase === 'running' && <span className="text-slate-400">Cash out any time…</span>}
-              {phase === 'idle' && <span className="text-slate-600">Place a bet to launch 🚀</span>}
+              {phase === 'idle' && <span className="text-slate-600">Place a bet to launch</span>}
             </div>
           </div>
         </div>

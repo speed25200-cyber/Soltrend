@@ -9,6 +9,7 @@ import { usePlay } from '@/hooks/usePlay';
 import { useCasino } from '@/lib/store';
 import { minesLayout, minesMultiplier, DEFAULT_EDGE, round2 } from '@/lib/games';
 import { fmtMult } from '@/lib/format';
+import { Icon } from '@/components/Icon';
 import type { GameConfig } from './types';
 
 const GRID = 25;
@@ -100,19 +101,23 @@ export function MinesGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params 
                   whileTap={{ scale: 0.92 }}
                   disabled={phase !== 'playing' || isRevealed}
                   onClick={() => reveal(i)}
-                  className={`grid h-14 w-14 place-items-center rounded-xl text-2xl transition-all md:h-16 md:w-16 ${
+                  className={`grid h-14 w-14 place-items-center rounded-xl transition-all md:h-16 md:w-16 ${
                     isBomb
-                      ? 'bg-loss/20 border border-loss/50'
+                      ? 'bg-loss/20 border border-loss/50 text-loss'
                       : isRevealed
-                        ? 'bg-win/15 border border-win/40'
+                        ? 'bg-win/15 border border-win/40 text-win'
                         : 'border border-white/[0.07] bg-void-900/70 hover:border-neon-violet/50 hover:bg-void-700/60'
                   }`}
                   style={isRevealed && !isBomb ? { boxShadow: '0 0 20px -6px #10f5a0' } : undefined}
                 >
                   {isBomb ? (
-                    <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }}>💣</motion.span>
+                    <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }}>
+                      <Icon name="bomb" size={26} />
+                    </motion.span>
                   ) : isRevealed ? (
-                    <motion.span initial={{ scale: 0, rotate: -30 }} animate={{ scale: 1, rotate: 0 }}>💎</motion.span>
+                    <motion.span initial={{ scale: 0, rotate: -30 }} animate={{ scale: 1, rotate: 0 }}>
+                      <Icon name="gem" size={26} />
+                    </motion.span>
                   ) : (
                     ''
                   )}

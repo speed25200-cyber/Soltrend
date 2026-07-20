@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { useCasino } from '@/lib/store';
 import { shortAddr } from '@/lib/format';
+import { Icon } from './Icon';
 
 /**
  * Provably-fair control strip. Shows the committed server-seed hash (published
@@ -20,7 +21,9 @@ export function FairnessBar() {
   return (
     <div className="glass mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3 text-xs">
       <div className="flex items-center gap-2">
-        <span className="grid h-6 w-6 place-items-center rounded-md bg-win/15 text-win">✓</span>
+        <span className="grid h-6 w-6 place-items-center rounded-md bg-win/15 text-win">
+          <Icon name="shield" size={13} />
+        </span>
         <span className="font-semibold text-slate-300">Provably fair</span>
       </div>
 
@@ -42,8 +45,8 @@ export function FairnessBar() {
             className="w-28 rounded bg-void-900 px-2 py-0.5 font-mono text-white outline-none"
           />
         ) : (
-          <button className="font-mono text-slate-400 hover:text-white" onClick={() => setEditing(true)}>
-            {seeds.clientSeed} ✎
+          <button className="inline-flex items-center gap-1 font-mono text-slate-400 hover:text-white" onClick={() => setEditing(true)}>
+            {seeds.clientSeed} <Icon name="pencil" size={11} />
           </button>
         )}
       </Field>

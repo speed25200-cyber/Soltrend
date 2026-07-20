@@ -1,4 +1,4 @@
-# 🎰 Soltrend
+# Soltrend
 
 **The on-chain casino the community builds.** A provably-fair Solana casino with instant "Originals"
 and a no-code **Studio** where anyone designs a casino game from audited primitives and earns a
@@ -7,7 +7,7 @@ royalty on every bet it generates — *"the Roblox of on-chain casino."*
 Players connect with **Phantom** (Solflare & Backpack also supported), and every result is verifiable
 in the browser.
 
-> ⚠️ **Reference build.** This is a fully-playable product built on a Solana **devnet / demo hot-balance**
+> **Reference build.** This is a fully-playable product built on a Solana **devnet / demo hot-balance**
 > flow. It is not a licensed operator and ships no real-money custody. See
 > [`docs/COMPLIANCE.md`](docs/COMPLIANCE.md) and [`CHECKLIST_AUDIT.md`](CHECKLIST_AUDIT.md) before any
 > mainnet consideration.
@@ -26,7 +26,7 @@ soltrend/
 ### The casino (`apps/web`)
 - **Wallet:** `@solana/wallet-adapter` — Phantom / Solflare / Backpack, custom-styled connect flow.
 - **7 playable Originals**, each provably fair with bounded house edge (1–5%):
-  🚀 Crash (live curve + cash-out) · 🎲 Dice · 💣 Mines · ⚪ Plinko · 📈 Limbo · 🪙 Coinflip · 🎡 Wheel.
+  Crash (live curve + cash-out) · Dice · Mines · Plinko · Limbo · Coinflip · Wheel.
 - **Studio:** assemble a game (mechanic → math → theme) into a validated *GameSpec*, with a live
   house-edge / RTP / max-win preview that **refuses invalid or vault-draining configs**. Publish →
   it appears in Discover and starts accruing creator royalties.

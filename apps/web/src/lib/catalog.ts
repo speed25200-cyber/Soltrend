@@ -1,9 +1,10 @@
 import type { Template } from './games';
+import type { IconName } from '@/components/Icon';
 
 export interface GameMeta {
   slug: string;
   name: string;
-  emoji: string;
+  icon: IconName;
   tagline: string;
   template: Template;
   tier: 1 | 2;
@@ -13,13 +14,13 @@ export interface GameMeta {
 
 /** Launch catalogue — the "Originals" that drive the volume (§2). */
 export const CATALOG: GameMeta[] = [
-  { slug: 'crash', name: 'Crash', emoji: '🚀', tagline: 'Cash out before it blows', template: 'limbo', tier: 1, accent: 'pink', hot: true },
-  { slug: 'dice', name: 'Dice', emoji: '🎲', tagline: 'Roll over or under', template: 'dice', tier: 1, accent: 'violet', hot: true },
-  { slug: 'mines', name: 'Mines', emoji: '💣', tagline: 'Dodge the bombs, bank the gems', template: 'mines', tier: 1, accent: 'cyan', hot: true },
-  { slug: 'plinko', name: 'Plinko', emoji: '⚪', tagline: 'Drop the ball, chase the edges', template: 'plinko', tier: 1, accent: 'gold', hot: true },
-  { slug: 'limbo', name: 'Limbo', emoji: '📈', tagline: 'Aim for the multiplier', template: 'limbo', tier: 1, accent: 'win' },
-  { slug: 'coinflip', name: 'Coinflip', emoji: '🪙', tagline: 'Fifty-fifty, instant', template: 'coinflip', tier: 2, accent: 'gold' },
-  { slug: 'wheel', name: 'Wheel', emoji: '🎡', tagline: 'Spin the segments', template: 'wheel', tier: 2, accent: 'violet' },
+  { slug: 'crash', name: 'Crash', icon: 'trend', tagline: 'Cash out before it blows', template: 'limbo', tier: 1, accent: 'pink', hot: true },
+  { slug: 'dice', name: 'Dice', icon: 'dice', tagline: 'Roll over or under', template: 'dice', tier: 1, accent: 'violet', hot: true },
+  { slug: 'mines', name: 'Mines', icon: 'bomb', tagline: 'Dodge the bombs, bank the gems', template: 'mines', tier: 1, accent: 'cyan', hot: true },
+  { slug: 'plinko', name: 'Plinko', icon: 'plinko', tagline: 'Drop the ball, chase the edges', template: 'plinko', tier: 1, accent: 'gold', hot: true },
+  { slug: 'limbo', name: 'Limbo', icon: 'limbo', tagline: 'Aim for the multiplier', template: 'limbo', tier: 1, accent: 'win' },
+  { slug: 'coinflip', name: 'Coinflip', icon: 'coin', tagline: 'Fifty-fifty, instant', template: 'coinflip', tier: 2, accent: 'gold' },
+  { slug: 'wheel', name: 'Wheel', icon: 'wheel', tagline: 'Spin the segments', template: 'wheel', tier: 2, accent: 'violet' },
 ];
 
 export const bySlug = (slug: string) => CATALOG.find((g) => g.slug === slug);

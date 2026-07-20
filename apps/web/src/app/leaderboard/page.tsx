@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { useCasino } from '@/lib/store';
 import { SectionHead } from '@/components/SectionHead';
+import { Icon } from '@/components/Icon';
 import { fmtCompact } from '@/lib/format';
 import { ACCENT_HEX } from '@/lib/catalog';
 
@@ -52,8 +53,8 @@ export default function LeaderboardPage() {
             return (
               <Link key={g.id} href={`/play/ugc/${g.id}`} className="flex items-center gap-4 p-4 transition hover:bg-white/[0.02]">
                 <Rank i={i} />
-                <span className="grid h-11 w-11 place-items-center rounded-xl text-2xl" style={{ background: `${hex}22` }}>
-                  {g.theme.emoji}
+                <span className="grid h-11 w-11 place-items-center rounded-xl" style={{ color: hex, background: `${hex}22` }}>
+                  <Icon name={g.theme.icon} size={22} />
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-display font-bold text-white">{g.name}</div>
@@ -99,11 +100,25 @@ export default function LeaderboardPage() {
   );
 }
 
+const MEDALS = [
+  'linear-gradient(135deg,#fde68a,#f59e0b)',
+  'linear-gradient(135deg,#e2e8f0,#94a3b8)',
+  'linear-gradient(135deg,#fbbf9c,#c2703f)',
+];
 function Rank({ i }: { i: number }) {
-  const medal = ['🥇', '🥈', '🥉'][i];
+  if (i < 3) {
+    return (
+      <span
+        className="grid h-7 w-7 shrink-0 place-items-center rounded-lg font-display text-xs font-bold text-void-950"
+        style={{ background: MEDALS[i], boxShadow: `0 4px 14px -4px rgba(0,0,0,0.6)` }}
+      >
+        {i + 1}
+      </span>
+    );
+  }
   return (
-    <span className={`grid h-7 w-7 shrink-0 place-items-center font-display text-sm font-bold ${i < 3 ? '' : 'text-slate-500'}`}>
-      {medal ?? i + 1}
+    <span className="grid h-7 w-7 shrink-0 place-items-center font-display text-sm font-bold text-slate-500">
+      {i + 1}
     </span>
   );
 }

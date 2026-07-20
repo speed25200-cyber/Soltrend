@@ -9,16 +9,19 @@ import { MIN_EDGE, MAX_EDGE, type Template } from '@/lib/games';
 import { fmtMult } from '@/lib/format';
 import { shortAddr } from '@/lib/format';
 import { SectionHead } from '@/components/SectionHead';
+import { Icon, STUDIO_ICONS, type IconName } from '@/components/Icon';
+import { ACCENT_HEX } from '@/lib/catalog';
 
-const TEMPLATE_META: Record<string, { emoji: string; label: string; blurb: string }> = {
-  dice: { emoji: '🎲', label: 'Dice', blurb: 'Over/under a threshold' },
-  limbo: { emoji: '📈', label: 'Limbo', blurb: 'Aim for a target multiplier' },
-  mines: { emoji: '💣', label: 'Mines', blurb: 'Reveal gems, dodge bombs' },
-  plinko: { emoji: '⚪', label: 'Plinko', blurb: 'Drop the ball into buckets' },
-  wheel: { emoji: '🎡', label: 'Wheel', blurb: 'Spin weighted segments' },
-  coinflip: { emoji: '🪙', label: 'Coinflip', blurb: 'Instant 50/50' },
+const accentHex = (a: string) => ACCENT_HEX[(a as keyof typeof ACCENT_HEX)] ?? '#a855f7';
+
+const TEMPLATE_META: Record<string, { icon: IconName; label: string; blurb: string }> = {
+  dice: { icon: 'dice', label: 'Dice', blurb: 'Over/under a threshold' },
+  limbo: { icon: 'limbo', label: 'Limbo', blurb: 'Aim for a target multiplier' },
+  mines: { icon: 'bomb', label: 'Mines', blurb: 'Reveal gems, dodge bombs' },
+  plinko: { icon: 'plinko', label: 'Plinko', blurb: 'Drop the ball into buckets' },
+  wheel: { icon: 'wheel', label: 'Wheel', blurb: 'Spin weighted segments' },
+  coinflip: { icon: 'coin', label: 'Coinflip', blurb: 'Instant 50/50' },
 };
-const EMOJIS = ['🎲', '🚀', '💎', '🔥', '⚡', '🌙', '👑', '🍀', '🎰', '🪩', '🦄', '🧨'];
 const ACCENTS = ['violet', 'cyan', 'gold', 'pink'];
 
 export default function StudioPage() {
@@ -28,7 +31,7 @@ export default function StudioPage() {
 
   const [template, setTemplate] = useState<Template>('dice');
   const [name, setName] = useState('');
-  const [emoji, setEmoji] = useState('🎲');
+  const [icon, setIcon] = useState<IconName>('dice');
   const [accent, setAccent] = useState('violet');
   const [edge, setEdge] = useState(0.01);
   const [bombs, setBombs] = useState(3);
@@ -49,7 +52,7 @@ export default function StudioPage() {
     return p;
   }, [template, bombs, risk, rows]);
 
-  const spec: GameSpec = { template, name, edge, params, theme: { accent, emoji } };
+  const spec: GameSpec = { template, name, edge, params, theme: { accent, icon } };
   const v = validateSpec(spec);
 
   const publish = () => {
@@ -60,7 +63,7 @@ export default function StudioPage() {
       creator: publicKey ? shortAddr(publicKey.toBase58()) : 'anon',
       edge,
       params,
-      theme: { accent, emoji },
+      theme: { accent, icon },
     });
     router.push(`/play/ugc/${game.id}`);
   };
@@ -89,7 +92,7 @@ export default function StudioPage() {
                     key={t}
                     onClick={() => {
                       setTemplate(t);
-                      setEmoji(m.emoji);
+                      setIcon(m.icon);
                     }}
                     className={`rounded-xl border p-3 text-left transition ${
                       active
@@ -97,8 +100,10 @@ export default function StudioPage() {
                         : 'border-white/[0.06] bg-void-900/50 hover:border-white/20'
                     }`}
                   >
-                    <div className="text-2xl">{m.emoji}</div>
-                    <div className="mt-1 font-display text-sm font-bold text-white">{m.label}</div>
+                    <div className={active ? 'text-neon-violet' : 'text-slate-300'}>
+                      <Icon name={m.icon} size={26} />
+                    </div>
+                    <div className="mt-1.5 font-display text-sm font-bold text-white">{m.label}</div>
                     <div className="text-[0.68rem] text-slate-500">{m.blurb}</div>
                   </button>
                 );
@@ -163,15 +168,15 @@ export default function StudioPage() {
               <div>
                 <span className="text-xs text-slate-500">Icon</span>
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
-                  {EMOJIS.map((e) => (
+                  {STUDIO_ICONS.map((e) => (
                     <button
                       key={e}
-                      onClick={() => setEmoji(e)}
-                      className={`grid h-9 w-9 place-items-center rounded-lg text-lg transition ${
-                        emoji === e ? 'bg-neon-violet/20 ring-1 ring-neon-violet/60' : 'bg-void-900/60 hover:bg-white/5'
+                      onClick={() => setIcon(e)}
+                      className={`grid h-9 w-9 place-items-center rounded-lg transition ${
+                        icon === e ? 'bg-neon-violet/20 text-neon-violet ring-1 ring-neon-violet/60' : 'bg-void-900/60 text-slate-400 hover:bg-white/5'
                       }`}
                     >
-                      {e}
+                      <Icon name={e} size={18} />
                     </button>
                   ))}
                 </div>
@@ -199,8 +204,13 @@ export default function StudioPage() {
           <div className="glass overflow-hidden p-5">
             <span className="label-eyebrow">Live preview</span>
             <div className="mt-3 rounded-2xl border border-white/[0.06] bg-void-900/60 p-5 text-center">
-              <div className="text-5xl">{emoji}</div>
-              <div className="mt-2 font-display text-lg font-bold text-white">{name || 'Untitled game'}</div>
+              <div
+                className="mx-auto grid h-16 w-16 place-items-center rounded-2xl"
+                style={{ color: accentHex(accent), background: `${accentHex(accent)}1f`, boxShadow: `0 0 30px -12px ${accentHex(accent)}` }}
+              >
+                <Icon name={icon} size={34} strokeWidth={1.5} />
+              </div>
+              <div className="mt-3 font-display text-lg font-bold text-white">{name || 'Untitled game'}</div>
               <div className="text-xs text-slate-500 capitalize">{template}</div>
             </div>
 
@@ -211,19 +221,19 @@ export default function StudioPage() {
             </dl>
 
             {v.errors.map((e) => (
-              <p key={e} className="mt-2 rounded-lg bg-loss/10 px-3 py-2 text-xs text-loss">
-                ⛔ {e}
+              <p key={e} className="mt-2 flex items-start gap-1.5 rounded-lg bg-loss/10 px-3 py-2 text-xs text-loss">
+                <Icon name="block" size={13} className="mt-px shrink-0" /> {e}
               </p>
             ))}
             {v.ok &&
               v.warnings.map((w) => (
-                <p key={w} className="mt-2 rounded-lg bg-gold/10 px-3 py-2 text-xs text-gold">
-                  ⚠ {w}
+                <p key={w} className="mt-2 flex items-start gap-1.5 rounded-lg bg-gold/10 px-3 py-2 text-xs text-gold">
+                  <Icon name="warn" size={13} className="mt-px shrink-0" /> {w}
                 </p>
               ))}
             {v.ok && (
-              <p className="mt-2 rounded-lg bg-win/10 px-3 py-2 text-xs text-win">
-                ✓ Spec is valid & vault-safe. RNG is the platform VRF — you can’t bias it.
+              <p className="mt-2 flex items-start gap-1.5 rounded-lg bg-win/10 px-3 py-2 text-xs text-win">
+                <Icon name="shield" size={13} className="mt-px shrink-0" /> Spec is valid &amp; vault-safe. RNG is the platform VRF — you can’t bias it.
               </p>
             )}
 

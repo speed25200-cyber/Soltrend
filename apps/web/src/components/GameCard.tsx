@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { GameMeta, ACCENT_HEX } from '@/lib/catalog';
+import { Icon } from './Icon';
 
 export function GameCard({ meta, index = 0 }: { meta: GameMeta; index?: number }) {
   const hex = ACCENT_HEX[meta.accent];
@@ -24,17 +25,17 @@ export function GameCard({ meta, index = 0 }: { meta: GameMeta; index?: number }
           />
           {meta.hot && (
             <span className="absolute right-3 top-3 z-10 chip !border-loss/40 !bg-loss/10 !text-loss">
-              🔥 Hot
+              <Icon name="flame" size={12} /> Hot
             </span>
           )}
 
           <div className="relative flex h-full flex-col">
             <div className="flex-1 grid place-items-center">
               <span
-                className="text-6xl transition-transform duration-500 group-hover:scale-110 group-hover:-rotate-6"
-                style={{ filter: `drop-shadow(0 8px 24px ${hex}88)` }}
+                className="transition-transform duration-500 group-hover:scale-110 group-hover:-rotate-6"
+                style={{ color: hex, filter: `drop-shadow(0 8px 24px ${hex}88)` }}
               >
-                {meta.emoji}
+                <Icon name={meta.icon} size={56} strokeWidth={1.5} />
               </span>
             </div>
             <div>

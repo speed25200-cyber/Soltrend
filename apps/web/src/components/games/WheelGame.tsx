@@ -10,6 +10,7 @@ import { useCasino } from '@/lib/store';
 import { clampEdge, DEFAULT_EDGE, round2 } from '@/lib/games';
 import { firstFloat } from '@/lib/provably-fair';
 import { fmtMult } from '@/lib/format';
+import { Icon } from '@/components/Icon';
 import type { GameConfig } from './types';
 
 type Risk = 'low' | 'medium' | 'high';
@@ -141,7 +142,9 @@ export function WheelGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params 
                   {fmtMult(result.mult)}
                 </motion.span>
               ) : (
-                <span className="text-3xl">🎡</span>
+                <span className="text-slate-500">
+                  <Icon name="wheel" size={30} />
+                </span>
               )}
             </div>
           </div>

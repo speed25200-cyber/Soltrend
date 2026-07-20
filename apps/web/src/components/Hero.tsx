@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { ConnectButton } from './ConnectButton';
+import { Icon } from './Icon';
 import { fmtCompact } from '@/lib/format';
 
 export function Hero() {
@@ -20,7 +21,7 @@ export function Hero() {
           animate={{ opacity: 1, y: 0 }}
           className="chip !border-neon-violet/40 !bg-neon-violet/10 !text-neon-violet"
         >
-          ⚡ Provably fair on Solana — settle in &lt;1s
+          <Icon name="bolt" size={12} /> Provably fair on Solana — settle in &lt;1s
         </motion.span>
         <motion.h1
           initial={{ opacity: 0, y: 14 }}

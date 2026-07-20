@@ -6,6 +6,7 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { useCasino } from '@/lib/store';
 import { SectionHead } from '@/components/SectionHead';
 import { ConnectButton } from '@/components/ConnectButton';
+import { Icon } from '@/components/Icon';
 import { fmtSol, fmtMult, shortAddr, timeAgo } from '@/lib/format';
 
 export default function ProfilePage() {
@@ -118,7 +119,9 @@ function ResponsibleGaming() {
   return (
     <div className="glass p-6">
       <div className="flex items-center gap-2">
-        <span className="grid h-8 w-8 place-items-center rounded-lg bg-win/15 text-win">♥</span>
+        <span className="grid h-8 w-8 place-items-center rounded-lg bg-win/15 text-win">
+          <Icon name="heart" size={16} />
+        </span>
         <div>
           <h3 className="font-display font-bold text-white">Responsible gaming</h3>
           <p className="text-xs text-slate-500">First-class controls, not a footer. Limits apply instantly.</p>

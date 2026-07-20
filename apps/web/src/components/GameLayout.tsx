@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { ReactNode } from 'react';
 import { FairnessBar } from './FairnessBar';
 import { GameMeta, ACCENT_HEX } from '@/lib/catalog';
+import { Icon } from './Icon';
 
 /**
  * Standard game screen: a large "stage" (the play canvas) beside a control
@@ -30,10 +31,10 @@ export function GameLayout({
           </svg>
         </Link>
         <span
-          className="grid h-11 w-11 place-items-center rounded-xl text-2xl"
-          style={{ background: `radial-gradient(circle at 30% 30%, ${hex}33, ${hex}0a)`, boxShadow: `0 0 24px -8px ${hex}` }}
+          className="grid h-11 w-11 place-items-center rounded-xl"
+          style={{ color: hex, background: `radial-gradient(circle at 30% 30%, ${hex}33, ${hex}0a)`, boxShadow: `0 0 24px -8px ${hex}` }}
         >
-          {meta.emoji}
+          <Icon name={meta.icon} size={24} />
         </span>
         <div>
           <h1 className="font-display text-2xl font-bold text-white">{meta.name}</h1>

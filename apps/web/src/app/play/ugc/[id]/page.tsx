@@ -24,7 +24,7 @@ export default function UgcPlayPage() {
   const meta: GameMeta = {
     slug: game.id,
     name: game.name,
-    emoji: game.theme.emoji,
+    icon: game.theme.icon,
     tagline: `Community game by ${game.creator}`,
     template: game.template,
     tier: 2,

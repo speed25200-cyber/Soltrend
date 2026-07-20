@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Icon } from './Icon';
 
 /**
  * Compliance banner (demo). In production the backend geo-blocks by IP + wallet
@@ -20,7 +21,7 @@ export function GeoNotice() {
           limits are enforced before mainnet.
         </p>
         <button className="text-slate-500 hover:text-white" onClick={() => setOpen(false)} aria-label="Dismiss">
-          ✕
+          <Icon name="close" size={14} />
         </button>
       </div>
     </div>
