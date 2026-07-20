@@ -57,12 +57,22 @@ export default function DiscoverPage() {
         </div>
       </section>
 
-      <div className="glass flex flex-col items-center gap-3 p-8 text-center">
-        <p className="font-display text-xl font-bold text-white">Got an idea for a game?</p>
-        <p className="max-w-md text-sm text-slate-400">
-          Publish it in minutes and start earning royalties the moment people play.
-        </p>
-        <Link href="/studio" className="btn-primary">Open the Studio</Link>
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="glass flex flex-col items-center gap-3 p-8 text-center">
+          <p className="font-display text-xl font-bold text-white">Got an idea for a game?</p>
+          <p className="max-w-md text-sm text-slate-400">
+            Publish it in minutes and start earning royalties the moment people play.
+          </p>
+          <Link href="/studio" className="btn-primary">Open the Studio</Link>
+        </div>
+        <div className="glass relative flex flex-col items-center gap-3 overflow-hidden p-8 text-center">
+          <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-win/15 blur-3xl" />
+          <p className="font-display text-xl font-bold text-white">Don’t just play — <span className="text-win">be the house</span></p>
+          <p className="max-w-md text-sm text-slate-400">
+            Stake SOL into a game’s bankroll and earn a share of its edge on every bet.
+          </p>
+          <Link href="/vault" className="btn-primary btn-win">Open the Vaults</Link>
+        </div>
       </div>
     </div>
   );

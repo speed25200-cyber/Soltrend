@@ -24,6 +24,7 @@ import {
   xpForBet,
   type Metric,
 } from './progression';
+import { EDGE_SPLIT } from './economics';
 
 export interface BetRecord {
   id: string;
@@ -57,6 +58,8 @@ export interface UgcGame {
   featured?: boolean;
   mine?: boolean;
   specHash?: string;
+  /** Bankroll TVL — SOL staked to back this game (pays winners, earns edge yield). */
+  tvl?: number;
 }
 
 export interface RgLimits {
@@ -127,6 +130,8 @@ interface CasinoState {
   progress: Progress;
   jackpot: number;
   jackpotWins: JackpotWin[];
+  bankrollStakes: Record<string, number>;
+  bankrollYield: number;
 
   setAgeVerified: (v: boolean) => void;
   setSoundOn: (v: boolean) => void;
@@ -153,6 +158,11 @@ interface CasinoState {
   setRg: (patch: Partial<RgLimits>) => void;
   publishUgc: (g: Omit<UgcGame, 'id' | 'createdAt' | 'volume' | 'players' | 'plays' | 'rating'>) => UgcGame;
   bumpUgc: (id: string, wagered: number) => void;
+
+  /** Stake SOL into a game's bankroll to earn a share of its edge yield. */
+  stakeBankroll: (id: string, amt: number) => void;
+  unstakeBankroll: (id: string, amt: number) => void;
+  claimBankrollYield: () => number;
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -209,6 +219,7 @@ export const seededUgc = (): UgcGame[] => [
     players: 2841,
     plays: 51204,
     rating: 4.8,
+    tvl: 324,
     createdAt: Date.now() - 86400000 * 5,
     featured: true,
   },
@@ -224,6 +235,7 @@ export const seededUgc = (): UgcGame[] => [
     players: 1920,
     plays: 38210,
     rating: 4.6,
+    tvl: 187,
     createdAt: Date.now() - 86400000 * 3,
   },
   {
@@ -238,6 +250,7 @@ export const seededUgc = (): UgcGame[] => [
     players: 1502,
     plays: 24012,
     rating: 4.9,
+    tvl: 96,
     createdAt: Date.now() - 86400000 * 9,
   },
 ];
@@ -257,6 +270,8 @@ export const useCasino = create<CasinoState>()(
       progress: progressInit(),
       jackpot: 12.84,
       jackpotWins: [],
+      bankrollStakes: {},
+      bankrollYield: 0,
 
       setAgeVerified: (v) => set({ ageVerified: v }),
       setSoundOn: (v) => set({ soundOn: v }),
@@ -439,11 +454,56 @@ export const useCasino = create<CasinoState>()(
         return game;
       },
       bumpUgc: (id, wagered) =>
-        set((s) => ({
-          ugc: s.ugc.map((g) =>
-            g.id === id ? { ...g, volume: round4(g.volume + wagered), plays: g.plays + 1 } : g,
-          ),
-        })),
+        set((s) => {
+          const game = s.ugc.find((g) => g.id === id);
+          // Accrue the bankroll-edge yield (20% of the edge) to the player's stake, pro-rata.
+          let bankrollYield = s.bankrollYield;
+          const stake = s.bankrollStakes[id] ?? 0;
+          if (game && stake > 0) {
+            const tvl = game.tvl || stake;
+            const share = Math.min(1, stake / tvl);
+            bankrollYield = round4(bankrollYield + wagered * game.edge * EDGE_SPLIT.bankroll * share);
+          }
+          return {
+            bankrollYield,
+            ugc: s.ugc.map((g) =>
+              g.id === id ? { ...g, volume: round4(g.volume + wagered), plays: g.plays + 1 } : g,
+            ),
+          };
+        }),
+
+      stakeBankroll: (id, amt) =>
+        set((s) => {
+          const a = round4(Math.min(amt, s.balance));
+          if (a <= 0) return {};
+          return {
+            balance: round4(s.balance - a),
+            bankrollStakes: { ...s.bankrollStakes, [id]: round4((s.bankrollStakes[id] ?? 0) + a) },
+            ugc: s.ugc.map((g) => (g.id === id ? { ...g, tvl: round4((g.tvl ?? 0) + a) } : g)),
+          };
+        }),
+
+      unstakeBankroll: (id, amt) =>
+        set((s) => {
+          const cur = s.bankrollStakes[id] ?? 0;
+          const a = round4(Math.min(amt, cur));
+          if (a <= 0) return {};
+          const nextStakes = { ...s.bankrollStakes, [id]: round4(cur - a) };
+          if (nextStakes[id] <= 0) delete nextStakes[id];
+          return {
+            balance: round4(s.balance + a),
+            bankrollStakes: nextStakes,
+            ugc: s.ugc.map((g) => (g.id === id ? { ...g, tvl: round4(Math.max(0, (g.tvl ?? 0) - a)) } : g)),
+          };
+        }),
+
+      claimBankrollYield: () => {
+        const s = get();
+        const y = round4(s.bankrollYield);
+        if (y <= 0) return 0;
+        set({ balance: round4(s.balance + y), bankrollYield: 0 });
+        return y;
+      },
     }),
     {
       name: 'soltrend-casino-v2',
@@ -460,6 +520,8 @@ export const useCasino = create<CasinoState>()(
         progress: s.progress,
         jackpot: s.jackpot,
         jackpotWins: s.jackpotWins,
+        bankrollStakes: s.bankrollStakes,
+        bankrollYield: s.bankrollYield,
       }),
     },
   ),
