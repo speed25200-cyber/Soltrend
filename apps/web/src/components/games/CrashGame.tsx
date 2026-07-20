@@ -19,6 +19,27 @@ type Phase = 'idle' | 'running' | 'crashed' | 'cashed';
 const multAt = (s: number) => Math.max(1, Math.pow(Math.E, 0.11 * s));
 const RATE = 0.11;
 
+const PLAYER_NAMES = ['degenape', '0xVela', 'moonboy', 'satosh', 'pixel', 'gm_wagmi', 'solmaxi', 'frenzy', 'zkNova', 'luna', 'chad', 'wojak', 'vitalik', 'ansem'];
+interface Player {
+  id: number;
+  name: string;
+  bet: number;
+  target: number;
+  status: 'in' | 'won' | 'lost';
+  at: number | null;
+}
+function genPlayers(): Player[] {
+  const n = 6 + Math.floor(Math.random() * 7);
+  return Array.from({ length: n }, (_, i) => ({
+    id: i,
+    name: PLAYER_NAMES[Math.floor(Math.random() * PLAYER_NAMES.length)],
+    bet: Math.round((0.05 + Math.random() * 3) * 100) / 100,
+    target: Math.round((1.15 + Math.random() * 7) * 100) / 100,
+    status: 'in' as const,
+    at: null,
+  }));
+}
+
 export function CrashGame({ meta, edge = DEFAULT_EDGE, gameId, gameName }: GameConfig) {
   const { guard, reserveSeeds, settle } = usePlay();
   const bumpUgc = useCasino((s) => s.bumpUgc);
@@ -28,6 +49,8 @@ export function CrashGame({ meta, edge = DEFAULT_EDGE, gameId, gameName }: GameC
   const [phase, setPhase] = useState<Phase>('idle');
   const [mult, setMult] = useState(1);
   const [cashMult, setCashMult] = useState<number | null>(null);
+  const [players, setPlayers] = useState<Player[]>([]);
+  const playersRef = useRef<Player[]>([]);
 
   const raf = useRef<number>();
   const startTs = useRef<number>(0);
@@ -51,6 +74,9 @@ export function CrashGame({ meta, edge = DEFAULT_EDGE, gameId, gameName }: GameC
     );
     setCashMult(null);
     setMult(1);
+    const list = genPlayers();
+    playersRef.current = list;
+    setPlayers(list);
     setPhase('running');
     startTs.current = performance.now();
     tick();
@@ -65,6 +91,16 @@ export function CrashGame({ meta, edge = DEFAULT_EDGE, gameId, gameName }: GameC
       return;
     }
     setMult(m);
+    // Other players cash out as the curve passes their target.
+    let changed = false;
+    for (const p of playersRef.current) {
+      if (p.status === 'in' && m >= p.target && p.target < crashPoint.current) {
+        p.status = 'won';
+        p.at = p.target;
+        changed = true;
+      }
+    }
+    if (changed) setPlayers([...playersRef.current]);
     // auto cash-out
     if (autoCashout > 1 && m >= autoCashout) {
       cashOut(autoCashout);
@@ -75,6 +111,14 @@ export function CrashGame({ meta, edge = DEFAULT_EDGE, gameId, gameName }: GameC
 
   const bust = () => {
     cancelAnimationFrame(raf.current!);
+    let changed = false;
+    for (const p of playersRef.current) {
+      if (p.status === 'in') {
+        p.status = 'lost';
+        changed = true;
+      }
+    }
+    if (changed) setPlayers([...playersRef.current]);
     setPhase('crashed');
     if (!settledRef.current && seedsRef.current) {
       settledRef.current = true;
@@ -196,7 +240,45 @@ export function CrashGame({ meta, edge = DEFAULT_EDGE, gameId, gameName }: GameC
           )}
         </div>
       }
+      footer={<PlayersPanel players={players} phase={phase} />}
     />
+  );
+}
+
+function PlayersPanel({ players, phase }: { players: Player[]; phase: Phase }) {
+  if (players.length === 0) {
+    return (
+      <div className="glass mt-4 p-4 text-center text-xs text-slate-500">
+        Launch a round to join the table — watch the crowd cash out live.
+      </div>
+    );
+  }
+  const total = players.reduce((s, p) => s + p.bet, 0);
+  const cashed = players.filter((p) => p.status === 'won').length;
+  return (
+    <div className="glass mt-4 overflow-hidden">
+      <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-2.5">
+        <span className="flex items-center gap-2 text-xs font-semibold text-slate-300">
+          <span className="h-2 w-2 animate-pulse-glow rounded-full bg-win" /> {players.length} players this round
+        </span>
+        <span className="font-mono text-xs text-slate-500">◎{total.toFixed(2)} in · {cashed} cashed</span>
+      </div>
+      <div className="max-h-44 overflow-y-auto divide-y divide-white/[0.04]">
+        {players.map((p) => (
+          <div key={p.id} className="grid grid-cols-[1fr_auto_auto] items-center gap-3 px-4 py-2 text-sm">
+            <span className="truncate text-slate-300">{p.name}</span>
+            <span className="font-mono text-xs text-slate-500">◎{p.bet.toFixed(2)}</span>
+            <span
+              className={`w-20 text-right font-mono text-xs font-bold ${
+                p.status === 'won' ? 'text-win' : p.status === 'lost' ? 'text-loss' : 'text-slate-500'
+              }`}
+            >
+              {p.status === 'won' ? fmtMult(p.at!) : p.status === 'lost' ? (phase === 'crashed' ? 'busted' : '—') : 'in play'}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
