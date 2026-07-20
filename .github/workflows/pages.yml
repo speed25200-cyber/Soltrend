@@ -24,11 +24,10 @@ jobs:
         working-directory: apps/web
     steps:
       - uses: actions/checkout@v4
-      # Auto-enables Pages (build type: workflow) so no manual Source step is needed.
-      # Requires the repo to be public (free plan) or GitHub Pro for a private repo.
+      # Reads the Pages config. Pages must be enabled once in the UI
+      # (Settings → Pages → Source: GitHub Actions) — the Actions token cannot
+      # create the Pages site itself ("Resource not accessible by integration").
       - uses: actions/configure-pages@v5
-        with:
-          enablement: true
       - uses: actions/setup-node@v4
         with:
           node-version: 20
