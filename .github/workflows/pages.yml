@@ -25,7 +25,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # Auto-enables Pages (build type: workflow) so no manual Source step is needed.
+      # Requires the repo to be public (free plan) or GitHub Pro for a private repo.
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - uses: actions/setup-node@v4
         with:
           node-version: 20
