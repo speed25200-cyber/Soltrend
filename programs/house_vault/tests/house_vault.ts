@@ -32,12 +32,12 @@ describe('house_vault', () => {
     program.programId,
   );
 
-  it('initialises config with a valid edge band + 55/30/5/10 split', async () => {
+  it('initialises config with a valid edge band + 50/20/20/10 split', async () => {
     await program.methods
       .initConfig(100, 500, new anchor.BN(10 * LAMPORTS_PER_SOL), {
-        platformBps: 5500,
-        creatorBps: 3000,
-        referralBps: 500,
+        platformBps: 5000,
+        creatorBps: 2000,
+        referralBps: 2000, // bankroll / LP / affiliate share
         treasuryBps: 1000,
       })
       .accounts({ config, vault, admin: admin.publicKey, systemProgram: SystemProgram.programId })

@@ -49,7 +49,7 @@ client-side in this reference build and maps 1:1 onto the on-chain flow.
 
 ## Revenue split
 
-House edge is split (default **55/30/5/10** — platform / creator / referral / treasury). The
+House edge is split (default **50/20/20/10** — platform / creator / bankroll-LP / community). The
 creator share is a **design royalty paid by the operator**, KYC-gated at claim — deliberately *not* a
 share of player losses (see `COMPLIANCE.md`).
 

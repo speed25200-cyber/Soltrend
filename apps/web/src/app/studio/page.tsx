@@ -7,12 +7,14 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { useCasino } from '@/lib/store';
 import { CREATABLE_TEMPLATES, validateSpec, type GameSpec } from '@/lib/gamespec';
 import { MIN_EDGE, MAX_EDGE, type Template } from '@/lib/games';
-import { fmtMult, shortAddr } from '@/lib/format';
+import { fmtMult, fmtSol, shortAddr } from '@/lib/format';
 import { SectionHead } from '@/components/SectionHead';
 import { Icon, STUDIO_ICONS, type IconName } from '@/components/Icon';
+import { SolMark } from '@/components/BalanceWidget';
 import { ACCENT_HEX, type GameMeta } from '@/lib/catalog';
 import { AURAS, auraCss } from '@/lib/auras';
 import { simulate, type SimResult } from '@/lib/simulate';
+import { CREATION_FEE, EDGE_SPLIT, maxBetFor, projectRevenue, ruinRisk } from '@/lib/economics';
 import { sha256Hex } from '@/lib/provably-fair';
 import { GameScreen } from '@/components/games/GameScreen';
 import { sfx } from '@/lib/sound';
@@ -29,10 +31,11 @@ const TEMPLATE_META: Record<string, { icon: IconName; label: string; blurb: stri
   coinflip: { icon: 'coin', label: 'Coinflip', blurb: 'Instant 50/50' },
 };
 
-type Tab = 'design' | 'simulate' | 'test' | 'publish';
+type Tab = 'design' | 'simulate' | 'economics' | 'test' | 'publish';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'design', label: 'Design' },
   { id: 'simulate', label: 'Simulate' },
+  { id: 'economics', label: 'Economics' },
   { id: 'test', label: 'Test drive' },
   { id: 'publish', label: 'Publish' },
 ];
@@ -56,6 +59,7 @@ export default function StudioPage() {
   const [target, setTarget] = useState(50);
   const [over, setOver] = useState(true);
   const [simPicks, setSimPicks] = useState(3);
+  const [bankroll, setBankroll] = useState(10);
 
   const params = useMemo<Record<string, number | string>>(() => {
     const p: Record<string, number | string> = {};
@@ -146,6 +150,9 @@ export default function StudioPage() {
           )}
           {tab === 'simulate' && (
             <SimulateTab template={template} params={params} edge={edge} simPicks={simPicks} setSimPicks={setSimPicks} />
+          )}
+          {tab === 'economics' && (
+            <EconomicsTab edge={edge} maxWinMult={v.maxWinMult} bankroll={bankroll} setBankroll={setBankroll} />
           )}
           {tab === 'test' && (
             <div className="glass p-2">
@@ -382,6 +389,106 @@ function verdict(s: SimResult): string {
   bits.push(s.hitRate > 0.45 ? `Players win often (${(s.hitRate * 100).toFixed(0)}%) — feels friendly and sticky.` : `Wins are rarer (${(s.hitRate * 100).toFixed(0)}%) but bigger — a thrill-seeker's game.`);
   bits.push(s.volatilityLabel === 'Extreme' || s.volatilityLabel === 'High' ? `${s.volatilityLabel} volatility: big swings, very streamable, needs bankroll.` : `${s.volatilityLabel} volatility: steady sessions, great for newcomers.`);
   return bits.join(' ');
+}
+
+/* ---------------------------------------------------------------- Economics */
+
+const SPLIT_ROWS = [
+  { key: 'platform', label: 'Platform rake', color: '#a855f7', note: 'risk-free' },
+  { key: 'creator', label: 'You (design royalty)', color: '#22d3ee', note: 'royalty' },
+  { key: 'bankroll', label: 'Bankroll yield', color: '#10f5a0', note: 'you + LPs' },
+  { key: 'community', label: 'Jackpot + treasury', color: '#ffd25f', note: 'community' },
+] as const;
+
+function EconomicsTab({ edge, maxWinMult, bankroll, setBankroll }: { edge: number; maxWinMult: number; bankroll: number; setBankroll: (n: number) => void }) {
+  const [volume, setVolume] = useState(1000);
+  const fee = bankroll * CREATION_FEE;
+  const net = bankroll - fee;
+  const maxBet = maxBetFor(net, maxWinMult);
+  const proj = projectRevenue(volume, edge);
+  const risk = ruinRisk(net, maxBet, maxWinMult);
+
+  return (
+    <div className="space-y-4">
+      <div className="glass p-5">
+        <div className="flex items-center gap-2">
+          <span className="grid h-8 w-8 place-items-center rounded-lg bg-win/15 text-win"><Icon name="gem" size={16} /></span>
+          <div>
+            <h3 className="font-display font-bold text-white">Bankroll &amp; economics</h3>
+            <p className="text-xs text-slate-500">Deposit SOL to fund your game. It pays winners and earns yield from the edge.</p>
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-slate-400">Bankroll deposit</span>
+            <span className="flex items-center gap-1 font-mono font-bold text-white"><SolMark size={13} />{fmtSol(bankroll, 1)}</span>
+          </div>
+          <input type="range" min={1} max={200} value={bankroll} onChange={(e) => setBankroll(parseInt(e.target.value))} className="mt-2 w-full accent-neon-violet" />
+        </div>
+
+        <div className="mt-4 grid grid-cols-3 gap-3">
+          <EcoStat label="Creation fee (3%)" value={`◎${fmtSol(fee, 3)}`} sub="to platform, now" />
+          <EcoStat label="Net bankroll" value={`◎${fmtSol(net, 2)}`} sub="pays winners" />
+          <EcoStat label="Max bet (safe)" value={`◎${fmtSol(maxBet, 3)}`} sub={`ruin risk: ${risk.label}`} accent={risk.label === 'High' ? 'loss' : 'win'} />
+        </div>
+      </div>
+
+      {/* Edge split */}
+      <div className="glass p-5">
+        <span className="label-eyebrow">How the house edge is split (per bet)</span>
+        <div className="mt-3 flex h-3 overflow-hidden rounded-full">
+          {SPLIT_ROWS.map((r) => (
+            <div key={r.key} style={{ width: `${EDGE_SPLIT[r.key] * 100}%`, background: r.color }} title={`${r.label} ${EDGE_SPLIT[r.key] * 100}%`} />
+          ))}
+        </div>
+        <div className="mt-4 space-y-2">
+          {SPLIT_ROWS.map((r) => (
+            <div key={r.key} className="flex items-center gap-3 text-sm">
+              <span className="h-3 w-3 rounded-sm" style={{ background: r.color }} />
+              <span className="flex-1 text-slate-300">{r.label} <span className="text-slate-600">· {r.note}</span></span>
+              <span className="font-mono font-bold text-white">{EDGE_SPLIT[r.key] * 100}%</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Projection */}
+      <div className="glass p-5">
+        <div className="flex items-center justify-between">
+          <span className="label-eyebrow">Revenue projection</span>
+          <div className="flex gap-1 rounded-xl bg-void-900/80 p-1">
+            {[100, 1000, 10000, 100000].map((v) => (
+              <button key={v} onClick={() => setVolume(v)} className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${volume === v ? 'bg-white/10 text-white' : 'text-slate-400'}`}>
+                {v >= 1000 ? `${v / 1000}k` : v}
+              </button>
+            ))}
+          </div>
+        </div>
+        <p className="mt-2 text-xs text-slate-500">If your game does <span className="font-mono text-slate-300">◎{fmtSol(volume, 0)}</span> in total wagers at a {(edge * 100).toFixed(1)}% edge:</p>
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <EcoStat label="Platform" value={`◎${fmtSol(proj.platform, 2)}`} accent="violet" />
+          <EcoStat label="You (royalty)" value={`◎${fmtSol(proj.creator, 2)}`} accent="cyan" />
+          <EcoStat label="Bankroll yield" value={`◎${fmtSol(proj.bankroll, 2)}`} accent="win" />
+          <EcoStat label="Community" value={`◎${fmtSol(proj.community, 2)}`} accent="gold" />
+        </div>
+        <p className="mt-3 rounded-xl border border-neon-violet/20 bg-neon-violet/[0.06] p-3 text-xs leading-relaxed text-slate-300">
+          As the creator you earn the <b>royalty</b> (20%) <i>plus</i> the <b>bankroll yield</b> (20%) on the liquidity you provide — up to ~40% of the edge. The platform keeps 50% as pure, risk-free rake. Bring community liquidity and the bankroll share splits pro-rata.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function EcoStat({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: 'violet' | 'cyan' | 'win' | 'gold' | 'loss' }) {
+  const color = accent === 'cyan' ? 'text-neon-cyan' : accent === 'win' ? 'text-win' : accent === 'gold' ? 'text-gold' : accent === 'loss' ? 'text-loss' : accent === 'violet' ? 'text-neon-violet' : 'text-white';
+  return (
+    <div className="rounded-xl border border-white/[0.06] bg-void-900/50 p-3">
+      <div className="label-eyebrow">{label}</div>
+      <div className={`font-mono text-base font-bold ${color}`}>{value}</div>
+      {sub && <div className="text-[0.62rem] text-slate-600">{sub}</div>}
+    </div>
+  );
 }
 
 /* ----------------------------------------------------------------- Publish */

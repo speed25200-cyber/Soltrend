@@ -58,7 +58,7 @@ Idiomatic **Anchor 0.30** program that is the *sole legal operator*:
 - `settle_bet` — atomic stake/payout with a hard **per-bet payout cap** and a **vault-solvency** check.
 - `register_game` — a creator registers a GameSpec *hash* with an edge clamped to the global band.
   Creators never touch funds and can't bias the RNG.
-- Creator vaults + **revenue split** (default 55/30/5/10) with **KYC-gated** royalty claims.
+- Creator vaults + **revenue split** (default 50/20/20/10 — platform / creator / bankroll-LP / community) with **KYC-gated** royalty claims. See [`docs/TOKENOMICS.md`](docs/TOKENOMICS.md).
 - Tests cover every security invariant (`tests/house_vault.ts`).
 
 ---
