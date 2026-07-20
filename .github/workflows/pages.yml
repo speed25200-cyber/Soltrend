@@ -24,6 +24,8 @@ jobs:
         working-directory: apps/web
     steps:
       - uses: actions/checkout@v4
+      # Auto-enables Pages (build type: workflow) so no manual Source step is needed.
+      - uses: actions/configure-pages@v5
       - uses: actions/setup-node@v4
         with:
           node-version: 20
