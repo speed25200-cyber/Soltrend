@@ -1,0 +1,184 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-sans: 'Sora', system-ui, -apple-system, sans-serif;
+  --font-display: 'Space Grotesk', 'Sora', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-void-950 text-slate-200 font-sans antialiased;
+    background-image:
+      radial-gradient(60% 50% at 20% -5%, rgba(139, 92, 246, 0.14), transparent 60%),
+      radial-gradient(50% 45% at 95% 0%, rgba(217, 70, 239, 0.1), transparent 55%),
+      radial-gradient(45% 45% at 50% 105%, rgba(34, 211, 238, 0.07), transparent 60%);
+    background-attachment: fixed;
+    overflow-x: hidden;
+  }
+  ::selection {
+    background: rgba(139, 92, 246, 0.35);
+    color: #fff;
+  }
+  /* Sleek scrollbars */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #2a2f57, #171a35);
+    border-radius: 99px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #3a3f6a;
+    background-clip: padding-box;
+  }
+}
+
+@layer components {
+  /* Frosted glass surface — the workhorse card */
+  .glass {
+    @apply bg-void-800/60 backdrop-blur-xl border border-white/[0.06] rounded-2xl;
+    box-shadow:
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.05),
+      0 20px 40px -24px rgba(0, 0, 0, 0.9);
+  }
+  .glass-hover {
+    @apply transition-all duration-300;
+  }
+  .glass-hover:hover {
+    @apply border-neon-violet/40 -translate-y-0.5;
+    box-shadow:
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.08),
+      0 24px 50px -20px rgba(0, 0, 0, 0.9),
+      0 0 40px -18px rgba(139, 92, 246, 0.6);
+  }
+
+  /* Primary CTA — the "bet" button. Loud, glowing, satisfying. */
+  .btn-primary {
+    @apply relative inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3
+      font-display font-bold tracking-wide text-void-950 select-none
+      transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed;
+    background: linear-gradient(135deg, #c4b5fd 0%, #a855f7 40%, #d946ef 100%);
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.15) inset,
+      0 10px 30px -8px rgba(168, 85, 247, 0.7);
+  }
+  .btn-primary:not(:disabled):hover {
+    filter: brightness(1.08);
+    transform: translateY(-1px);
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.25) inset,
+      0 14px 40px -8px rgba(217, 70, 239, 0.85);
+  }
+  .btn-primary:not(:disabled):active {
+    transform: translateY(1px) scale(0.99);
+  }
+
+  .btn-win {
+    background: linear-gradient(135deg, #6ee7b7 0%, #10f5a0 50%, #059669 100%);
+    box-shadow: 0 10px 30px -8px rgba(16, 245, 160, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.15) inset;
+    @apply text-void-950;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5
+      font-semibold text-slate-300 border border-white/[0.08] bg-white/[0.02]
+      transition-all duration-200;
+  }
+  .btn-ghost:hover {
+    @apply border-white/20 bg-white/[0.05] text-white;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold
+      border border-white/10 bg-white/[0.03] text-slate-300;
+  }
+
+  .stat-tile {
+    @apply glass p-4 flex flex-col gap-1;
+  }
+
+  .input-num {
+    @apply w-full rounded-xl bg-void-900/80 border border-white/[0.08] px-4 py-3
+      font-mono text-white outline-none transition
+      focus:border-neon-violet/60 focus:shadow-glow-violet;
+  }
+
+  .label-eyebrow {
+    @apply text-[0.7rem] uppercase tracking-[0.18em] text-slate-500 font-semibold;
+  }
+
+  .neon-text {
+    background: linear-gradient(120deg, #e9d5ff, #a855f7 40%, #22d3ee);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .divider {
+    @apply h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent;
+  }
+}
+
+/* Shimmer skeleton */
+.shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.06), transparent);
+  animation: shimmer 1.8s infinite;
+}
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Wallet-adapter modal → match our theme */
+.wallet-adapter-button {
+  font-family: var(--font-display) !important;
+}
+.wallet-adapter-modal-wrapper {
+  background: #0d1024 !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 0 80px -20px rgba(139, 92, 246, 0.5) !important;
+}
+.wallet-adapter-modal-title {
+  color: #fff !important;
+}
+.wallet-adapter-modal-list .wallet-adapter-button {
+  background: rgba(255, 255, 255, 0.03) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  border-radius: 12px !important;
+}
+.wallet-adapter-modal-list .wallet-adapter-button:hover {
+  background: rgba(139, 92, 246, 0.14) !important;
+}
+
+/* Reduced-motion respect */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
