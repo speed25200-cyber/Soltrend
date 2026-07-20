@@ -9,6 +9,7 @@ import { MinesGame } from './MinesGame';
 import { PlinkoGame } from './PlinkoGame';
 import { CoinflipGame } from './CoinflipGame';
 import { WheelGame } from './WheelGame';
+import { GraphGame } from './GraphGame';
 
 const BY_TEMPLATE: Record<Template, (c: GameConfig) => JSX.Element> = {
   dice: DiceGame,
@@ -18,6 +19,7 @@ const BY_TEMPLATE: Record<Template, (c: GameConfig) => JSX.Element> = {
   coinflip: CoinflipGame,
   wheel: WheelGame,
   towers: DiceGame, // fallback — no bespoke Towers UI yet
+  graph: GraphGame,
 };
 
 /**
