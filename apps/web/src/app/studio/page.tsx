@@ -65,7 +65,7 @@ export default function StudioPage() {
       params,
       theme: { accent, icon },
     });
-    router.push(`/play/ugc/${game.id}`);
+    router.push(`/play/ugc?id=${game.id}`);
   };
 
   return (

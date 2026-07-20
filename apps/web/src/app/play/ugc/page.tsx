@@ -1,13 +1,22 @@
 'use client';
 
+import { Suspense } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { useCasino } from '@/lib/store';
 import { GameScreen } from '@/components/games/GameScreen';
 import type { GameMeta } from '@/lib/catalog';
 
 export default function UgcPlayPage() {
-  const { id } = useParams<{ id: string }>();
+  return (
+    <Suspense fallback={<div className="glass p-16 text-center text-slate-500">Loading…</div>}>
+      <UgcInner />
+    </Suspense>
+  );
+}
+
+function UgcInner() {
+  const id = useSearchParams().get('id') ?? '';
   const game = useCasino((s) => s.ugc.find((g) => g.id === id));
 
   if (!game) {

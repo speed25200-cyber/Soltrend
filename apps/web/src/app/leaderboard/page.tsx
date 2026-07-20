@@ -51,7 +51,7 @@ export default function LeaderboardPage() {
           {games.map((g, i) => {
             const hex = ACCENT_HEX[(g.theme.accent as keyof typeof ACCENT_HEX) ?? 'violet'];
             return (
-              <Link key={g.id} href={`/play/ugc/${g.id}`} className="flex items-center gap-4 p-4 transition hover:bg-white/[0.02]">
+              <Link key={g.id} href={`/play/ugc?id=${g.id}`} className="flex items-center gap-4 p-4 transition hover:bg-white/[0.02]">
                 <Rank i={i} />
                 <span className="grid h-11 w-11 place-items-center rounded-xl" style={{ color: hex, background: `${hex}22` }}>
                   <Icon name={g.theme.icon} size={22} />

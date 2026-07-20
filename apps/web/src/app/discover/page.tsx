@@ -21,7 +21,7 @@ export default function DiscoverPage() {
 
       {gotw && (
         <Link
-          href={`/play/ugc/${gotw.id}`}
+          href={`/play/ugc?id=${gotw.id}`}
           className="glass glass-hover relative block overflow-hidden p-8 md:p-10"
         >
           <div className="pointer-events-none absolute -right-10 -top-10 h-64 w-64 rounded-full blur-3xl" style={{ background: `${hex}44` }} />

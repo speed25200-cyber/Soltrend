@@ -1,12 +1,12 @@
-'use client';
+import { CATALOG } from '@/lib/catalog';
+import { PlayClient } from './PlayClient';
 
-import { notFound, useParams } from 'next/navigation';
-import { bySlug } from '@/lib/catalog';
-import { GameScreen } from '@/components/games/GameScreen';
+// Static export needs the full param set up-front (server component).
+export function generateStaticParams() {
+  return CATALOG.map((g) => ({ slug: g.slug }));
+}
+export const dynamicParams = false;
 
-export default function PlayPage() {
-  const { slug } = useParams<{ slug: string }>();
-  const meta = bySlug(slug);
-  if (!meta) return notFound();
-  return <GameScreen config={{ meta }} crashVariant={meta.slug === 'crash'} />;
+export default function PlayPage({ params }: { params: { slug: string } }) {
+  return <PlayClient slug={params.slug} />;
 }

@@ -7,6 +7,9 @@ royalty on every bet it generates — *"the Roblox of on-chain casino."*
 Players connect with **Phantom** (Solflare & Backpack also supported), and every result is verifiable
 in the browser.
 
+**Live demo:** https://speed25200-cyber.github.io/Soltrend/ — auto-deployed via GitHub Pages
+(enable once under Settings → Pages → Source: GitHub Actions; see [`docs/DEPLOY.md`](docs/DEPLOY.md)).
+
 > **Reference build.** This is a fully-playable product built on a Solana **devnet / demo hot-balance**
 > flow. It is not a licensed operator and ships no real-money custody. See
 > [`docs/COMPLIANCE.md`](docs/COMPLIANCE.md) and [`CHECKLIST_AUDIT.md`](CHECKLIST_AUDIT.md) before any

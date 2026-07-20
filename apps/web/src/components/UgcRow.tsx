@@ -32,7 +32,7 @@ export function UgcCard({ game }: { game: UgcGame }) {
   const hex = ACCENT_HEX[(game.theme.accent as keyof typeof ACCENT_HEX)] ?? ACCENT_HEX.violet;
   return (
     <Link
-      href={`/play/ugc/${game.id}`}
+      href={`/play/ugc?id=${game.id}`}
       className="glass glass-hover group relative w-52 shrink-0 overflow-hidden p-4"
     >
       <div
