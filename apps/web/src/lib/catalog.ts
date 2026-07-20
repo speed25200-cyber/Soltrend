@@ -10,6 +10,7 @@ export interface GameMeta {
   tier: 1 | 2;
   accent: 'violet' | 'cyan' | 'gold' | 'pink' | 'win' | 'loss';
   hot?: boolean;
+  aura?: string;
 }
 
 /** Launch catalogue — the "Originals" that drive the volume (§2). */

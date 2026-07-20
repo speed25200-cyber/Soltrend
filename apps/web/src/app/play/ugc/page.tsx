@@ -38,6 +38,7 @@ function UgcInner() {
     template: game.template,
     tier: 2,
     accent: (game.theme.accent as GameMeta['accent']) ?? 'violet',
+    aura: game.theme.aura,
   };
 
   return (

@@ -2,23 +2,40 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ReactNode } from 'react';
+import { ReactNode, useEffect } from 'react';
 import { ConnectButton } from './ConnectButton';
 import { BalanceWidget } from './BalanceWidget';
 import { AgeGate } from './AgeGate';
 import { GeoNotice } from './GeoNotice';
+import { WinFx } from './WinFx';
+import { LevelChip } from './LevelChip';
+import { JackpotPill } from './JackpotPill';
+import { useCasino } from '@/lib/store';
+import { setSoundOn } from '@/lib/sound';
 
 const NAV = [
   { href: '/', label: 'Lobby', icon: LobbyIcon },
   { href: '/discover', label: 'Discover', icon: DiscoverIcon },
   { href: '/studio', label: 'Create', icon: CreateIcon },
+  { href: '/rewards', label: 'Rewards', icon: RewardIcon },
   { href: '/leaderboard', label: 'Ranks', icon: RankIcon },
   { href: '/profile', label: 'Profile', icon: ProfileIcon },
 ];
+const BOTTOM = NAV.filter((n) => n.href !== '/leaderboard');
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const isActive = (href: string) => (href === '/' ? pathname === '/' : pathname.startsWith(href));
+
+  const soundOn = useCasino((s) => s.soundOn);
+  const setReferredBy = useCasino((s) => s.setReferredBy);
+  useEffect(() => {
+    setSoundOn(soundOn);
+  }, [soundOn]);
+  useEffect(() => {
+    const ref = new URLSearchParams(window.location.search).get('ref');
+    if (ref) setReferredBy(ref);
+  }, [setReferredBy]);
 
   return (
     <div className="min-h-dvh">
@@ -33,7 +50,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Link>
 
           <nav className="ml-4 hidden items-center gap-1 md:flex">
-            {NAV.slice(0, 4).map((n) => (
+            {NAV.slice(0, 5).map((n) => (
               <Link
                 key={n.href}
                 href={n.href}
@@ -47,6 +64,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           </nav>
 
           <div className="ml-auto flex items-center gap-2.5">
+            <JackpotPill />
+            <LevelChip />
             <BalanceWidget />
             <ConnectButton />
           </div>
@@ -61,7 +80,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* Bottom nav (mobile-first) */}
       <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-white/[0.06] bg-void-950/85 backdrop-blur-xl md:hidden">
         <div className="mx-auto grid max-w-lg grid-cols-5">
-          {NAV.map((n) => {
+          {BOTTOM.map((n) => {
             const active = isActive(n.href);
             const Icon = n.icon;
             return (
@@ -84,7 +103,17 @@ export function AppShell({ children }: { children: ReactNode }) {
       </nav>
 
       <AgeGate />
+      <WinFx />
     </div>
+  );
+}
+
+function RewardIcon({ active }: IconP) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+      <rect x="3" y="8" width="18" height="4" rx="1" stroke={c(active)} strokeWidth="2" />
+      <path d="M5 12v8h14v-8M12 8v12M12 8S9 3 6.5 4.5 8 8 12 8zM12 8s3-5 5.5-3.5S16 8 12 8z" stroke={c(active)} strokeWidth="2" strokeLinejoin="round" />
+    </svg>
   );
 }
 

@@ -5,6 +5,7 @@ import { ReactNode } from 'react';
 import { FairnessBar } from './FairnessBar';
 import { GameMeta, ACCENT_HEX } from '@/lib/catalog';
 import { Icon } from './Icon';
+import { auraCss } from '@/lib/auras';
 
 /**
  * Standard game screen: a large "stage" (the play canvas) beside a control
@@ -49,7 +50,10 @@ export function GameLayout({
             className="glass relative min-h-[380px] overflow-hidden p-5"
             style={{ boxShadow: `inset 0 1px 0 0 rgba(255,255,255,0.05), 0 0 60px -30px ${hex}` }}
           >
-            {stage}
+            {meta.aura && (
+              <div className="pointer-events-none absolute inset-0" style={{ background: auraCss(meta.aura) }} />
+            )}
+            <div className="relative z-10 h-full">{stage}</div>
           </div>
           {footer}
         </div>

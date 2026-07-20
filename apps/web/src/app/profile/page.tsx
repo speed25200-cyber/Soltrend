@@ -7,12 +7,18 @@ import { useCasino } from '@/lib/store';
 import { SectionHead } from '@/components/SectionHead';
 import { ConnectButton } from '@/components/ConnectButton';
 import { Icon } from '@/components/Icon';
-import { fmtSol, fmtMult, shortAddr, timeAgo } from '@/lib/format';
+import { SolMark } from '@/components/BalanceWidget';
+import { fmtSol, fmtMult, fmtCompact, shortAddr, timeAgo } from '@/lib/format';
+import { creatorEarnings } from '@/lib/store';
+import { vipFromWagered, levelFromXp } from '@/lib/progression';
 
 export default function ProfilePage() {
   const { connected, publicKey } = useWallet();
   const history = useCasino((s) => s.history);
   const balance = useCasino((s) => s.balance);
+  const progress = useCasino((s) => s.progress);
+  const vip = vipFromWagered(progress.wageredTotal);
+  const level = levelFromXp(progress.xp);
 
   const stats = useMemo(() => {
     const wagered = history.reduce((s, h) => s + h.bet, 0);
@@ -39,9 +45,11 @@ export default function ProfilePage() {
         </span>
         <div className="flex-1">
           <div className="font-display text-xl font-bold text-white">{shortAddr(publicKey?.toBase58() ?? '', 6)}</div>
-          <div className="text-sm text-slate-500">Balance ◎{fmtSol(balance)}</div>
+          <div className="text-sm text-slate-500">Balance ◎{fmtSol(balance)} · Level {level.level}</div>
         </div>
-        <span className="chip !border-gold/30 !text-gold">Tier · Bronze</span>
+        <span className="chip" style={{ borderColor: `${vip.tier.color}55`, color: vip.tier.color }}>
+          <Icon name={vip.tier.icon} size={12} /> {vip.tier.name} VIP
+        </span>
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -49,6 +57,13 @@ export default function ProfilePage() {
         <StatTile label="Wagered" value={`◎${fmtSol(stats.wagered, 2)}`} />
         <StatTile label="Net P/L" value={`${stats.net >= 0 ? '+' : ''}${fmtSol(stats.net, 3)}`} tone={stats.net >= 0 ? 'win' : 'loss'} />
         <StatTile label="Biggest win" value={`◎${fmtSol(stats.biggest, 3)}`} />
+      </div>
+
+      <CreatorDashboard />
+
+      <div className="grid gap-6 md:grid-cols-2">
+        <ReferralPanel code={progress.referralCode} />
+        <SettingsPanel />
       </div>
 
       <ResponsibleGaming />
@@ -207,6 +222,136 @@ function LimitField({
           Set
         </button>
       </div>
+    </div>
+  );
+}
+
+function CreatorDashboard() {
+  const ugc = useCasino((s) => s.ugc);
+  const claimedRoyalties = useCasino((s) => s.progress.claimedRoyalties);
+  const claimRoyalties = useCasino((s) => s.claimRoyalties);
+  const mine = ugc.filter((g) => g.mine);
+  const earnings = creatorEarnings(ugc);
+  const claimable = Math.max(0, Math.round((earnings - claimedRoyalties) * 10000) / 10000);
+  const totalVolume = mine.reduce((s, g) => s + g.volume, 0);
+  const [flash, setFlash] = useState('');
+
+  return (
+    <div className="glass p-6">
+      <div className="flex items-center gap-2">
+        <span className="grid h-8 w-8 place-items-center rounded-lg bg-neon-magenta/15 text-neon-magenta">
+          <Icon name="pencil" size={16} />
+        </span>
+        <div>
+          <h3 className="font-display font-bold text-white">Creator dashboard</h3>
+          <p className="text-xs text-slate-500">Royalties from games you designed (30% of the house edge).</p>
+        </div>
+      </div>
+
+      {mine.length === 0 ? (
+        <div className="mt-4 rounded-xl border border-white/[0.06] bg-void-900/50 p-5 text-center text-sm text-slate-500">
+          You haven’t published a game yet.{' '}
+          <Link href="/studio" className="text-neon-violet">Open the Studio →</Link>
+        </div>
+      ) : (
+        <>
+          <div className="mt-4 grid grid-cols-3 gap-3">
+            <MiniStat label="Games" value={String(mine.length)} />
+            <MiniStat label="Volume" value={`◎${fmtCompact(totalVolume)}`} />
+            <MiniStat label="Royalties" value={`◎${fmtSol(earnings, 3)}`} accent />
+          </div>
+          <div className="mt-3 divide-y divide-white/[0.05] rounded-xl border border-white/[0.06]">
+            {mine.map((g) => (
+              <Link key={g.id} href={`/play/ugc?id=${g.id}`} className="flex items-center gap-3 p-3 text-sm hover:bg-white/[0.02]">
+                <Icon name={g.theme.icon} size={18} />
+                <span className="flex-1 truncate font-semibold text-white">{g.name}</span>
+                <span className="font-mono text-xs text-slate-400">◎{fmtCompact(g.volume)} vol</span>
+                <span className="font-mono text-xs text-gold">◎{fmtSol(g.volume * g.edge * 0.3, 3)}</span>
+              </Link>
+            ))}
+          </div>
+          <div className="mt-4 flex items-center gap-3">
+            <button
+              className="btn-primary flex-1"
+              disabled={claimable <= 0}
+              onClick={() => {
+                const c = claimRoyalties();
+                if (c > 0) setFlash(`Claimed ◎${fmtSol(c, 3)} to balance`);
+              }}
+            >
+              {claimable > 0 ? `Claim ◎${fmtSol(claimable, 3)}` : 'Nothing to claim'}
+            </button>
+          </div>
+          {flash && <p className="mt-2 text-center text-xs text-win">{flash}</p>}
+          <p className="mt-3 text-[0.68rem] leading-relaxed text-slate-600">
+            Claims require KYC on mainnet (enforced on-chain). This is a demo payout of accrued design royalties.
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ReferralPanel({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+  const link = typeof window !== 'undefined' ? `${window.location.origin}${process.env.NEXT_PUBLIC_BASE_PATH || ''}/?ref=${code}` : `?ref=${code}`;
+  return (
+    <div className="glass p-6">
+      <div className="flex items-center gap-2">
+        <span className="grid h-8 w-8 place-items-center rounded-lg bg-neon-cyan/15 text-neon-cyan">
+          <Icon name="orbit" size={16} />
+        </span>
+        <div>
+          <h3 className="font-display font-bold text-white">Refer & earn</h3>
+          <p className="text-xs text-slate-500">You get a cut of the house edge from players you bring.</p>
+        </div>
+      </div>
+      <div className="mt-4">
+        <div className="label-eyebrow">Your code</div>
+        <div className="mt-1 font-display text-2xl font-bold text-white">{code}</div>
+      </div>
+      <button
+        className="btn-ghost mt-3 w-full"
+        onClick={() => {
+          navigator.clipboard?.writeText(link);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        }}
+      >
+        {copied ? 'Link copied!' : 'Copy referral link'}
+      </button>
+    </div>
+  );
+}
+
+function SettingsPanel() {
+  const soundOn = useCasino((s) => s.soundOn);
+  const setSoundOn = useCasino((s) => s.setSoundOn);
+  return (
+    <div className="glass p-6">
+      <h3 className="font-display font-bold text-white">Settings</h3>
+      <label className="mt-4 flex cursor-pointer items-center justify-between">
+        <div>
+          <div className="text-sm font-semibold text-slate-200">Sound effects</div>
+          <div className="text-xs text-slate-500">Generative UI + win sounds</div>
+        </div>
+        <button
+          onClick={() => setSoundOn(!soundOn)}
+          className={`relative h-7 w-12 rounded-full transition ${soundOn ? 'bg-neon-violet' : 'bg-void-700'}`}
+          aria-pressed={soundOn}
+        >
+          <span className={`absolute top-1 h-5 w-5 rounded-full bg-white transition-all ${soundOn ? 'left-6' : 'left-1'}`} />
+        </button>
+      </label>
+    </div>
+  );
+}
+
+function MiniStat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div className="rounded-xl border border-white/[0.06] bg-void-900/50 p-3">
+      <div className="label-eyebrow">{label}</div>
+      <div className={`font-mono text-base font-bold ${accent ? 'text-gold' : 'text-white'}`}>{value}</div>
     </div>
   );
 }

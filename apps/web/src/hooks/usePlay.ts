@@ -5,6 +5,8 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { useCasino } from '@/lib/store';
 import type { BetRecord } from '@/lib/store';
 import type { Template } from '@/lib/games';
+import { sfx } from '@/lib/sound';
+import { burstJackpot, burstWin } from '@/lib/fx';
 
 export interface BetGuard {
   ok: boolean;
@@ -30,6 +32,7 @@ export function usePlay() {
   const sessionLossToday = useCasino((s) => s.sessionLossToday);
   const nextNonce = useCasino((s) => s.nextNonce);
   const settleBet = useCasino((s) => s.settleBet);
+  const recordProgress = useCasino((s) => s.recordProgress);
 
   const guard = useCallback(
     (bet: number): BetGuard => {
@@ -47,7 +50,10 @@ export function usePlay() {
   );
 
   /** Increment the nonce and return the seed snapshot for this bet/round. */
-  const reserveSeeds = useCallback((): SeedsSnapshot => nextNonce(), [nextNonce]);
+  const reserveSeeds = useCallback((): SeedsSnapshot => {
+    sfx.bet();
+    return nextNonce();
+  }, [nextNonce]);
 
   /** Commit a finished bet to the ledger (atomic debit/credit + history). */
   const settle = useCallback(
@@ -74,8 +80,22 @@ export function usePlay() {
         seeds: args.seeds,
       };
       settleBet(rec);
+
+      // Progression + feedback (the community + feel layer).
+      const events = recordProgress({ bet: args.bet, win: args.win, payout: args.payout, key: args.game });
+      if (args.win && args.payout > args.bet) {
+        sfx.win(args.multiplier);
+        burstWin(args.multiplier);
+      } else if (!args.win) {
+        sfx.loss();
+      }
+      if (events.jackpotWon > 0) {
+        sfx.jackpot();
+        burstJackpot(events.jackpotWon);
+      }
+      if (events.leveledUp) window.setTimeout(() => sfx.levelUp(), 260);
     },
-    [settleBet],
+    [settleBet, recordProgress],
   );
 
   return { connected, balance, guard, reserveSeeds, settle };
