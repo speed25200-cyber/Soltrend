@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { SectionHead } from '@/components/SectionHead';
@@ -32,6 +33,7 @@ export default function LivePage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <SectionHead eyebrow="Live · Crash" title="Crash — 3D" sub="Fly the rocket, cash out before it blows. Solo runs in your browser; Live rooms are one shared round for everyone, server-authoritative and provably fair." />
+        <Link href="/duel" className="btn-ghost mb-1"><Icon name="target" size={14} /> 1v1 Duel</Link>
       </div>
       <div className="flex w-full max-w-xs gap-1 rounded-xl bg-void-900/80 p-1">
         <TabBtn active={mode === 'solo'} onClick={() => setMode('solo')} icon="bolt" label="Solo · 3D" />

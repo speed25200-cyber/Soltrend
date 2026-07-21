@@ -124,3 +124,33 @@ describe('provably-fair settlement', () => {
     ).toThrow();
   });
 });
+
+describe('PvP duel resolution', () => {
+  it('is reproducible and fair with equal antes (threshold 0.5)', async () => {
+    const { resolveDuel, duelPayout, commit } = await import('../src/realtime/duel');
+    const seed = 'a'.repeat(64);
+    const r1 = resolveDuel(seed, 'match1', 7, 0.1, 0.1);
+    const r2 = resolveDuel(seed, 'match1', 7, 0.1, 0.1);
+    expect(r1).toEqual(r2); // deterministic from (seed, matchSeed, nonce)
+    expect(r1.threshold).toBeCloseTo(0.5);
+    expect([0, 1]).toContain(r1.winner);
+    // winner takes the pot minus the 2% rake
+    expect(duelPayout(0.1, 0.1)).toBeCloseTo(0.2 * 0.98);
+    expect(commit(seed)).toHaveLength(64);
+  });
+
+  it('weights the win threshold by ante so EV stays neutral before rake', async () => {
+    const { resolveDuel } = await import('../src/realtime/duel');
+    const r = resolveDuel('b'.repeat(64), 'm', 3, 0.3, 0.1); // 3:1 stake
+    expect(r.threshold).toBeCloseTo(0.75); // bigger ante → bigger win chance
+  });
+
+  it('is close to a fair coin over many equal-ante draws', async () => {
+    const { resolveDuel } = await import('../src/realtime/duel');
+    let winsA = 0;
+    const N = 4000;
+    for (let i = 1; i <= N; i++) if (resolveDuel('c'.repeat(64), 'bulk', i, 1, 1).winner === 0) winsA++;
+    expect(winsA / N).toBeGreaterThan(0.45);
+    expect(winsA / N).toBeLessThan(0.55);
+  });
+});
