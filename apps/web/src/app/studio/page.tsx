@@ -18,11 +18,26 @@ type Mode = 'world' | 'node' | 'classic' | 'art';
  */
 export default function StudioPage() {
   const [mode, setMode] = useState<Mode>('world');
+  const [showTip, setShowTip] = useState(false);
 
   useEffect(() => {
     const m = new URLSearchParams(window.location.search).get('mode');
     if (m === 'node' || m === 'world' || m === 'art' || m === 'classic') setMode(m);
+    try {
+      setShowTip(!window.localStorage.getItem('soltrend-studio-tip'));
+    } catch {
+      /* ignore */
+    }
   }, []);
+
+  const dismissTip = () => {
+    setShowTip(false);
+    try {
+      window.localStorage.setItem('soltrend-studio-tip', '1');
+    } catch {
+      /* ignore */
+    }
+  };
 
   const pick = (m: Mode) => {
     setMode(m);
@@ -38,8 +53,24 @@ export default function StudioPage() {
       <SectionHead
         eyebrow="Create"
         title="Build a game"
-        sub="Design a 3D world or wire a node mechanic — provably fair, vault-safe, published to the community in a tap."
+        sub="Design a 3D world, wire a node mechanic or reskin a classic — provably fair, vault-safe, published in a tap. Draw your own symbols in the Symbols tab."
       />
+
+      {showTip && (
+        <div className="glass relative flex flex-col gap-2 p-4 text-sm">
+          <button onClick={dismissTip} className="absolute right-3 top-3 text-slate-500 hover:text-white" aria-label="Dismiss">
+            <Icon name="close" size={14} />
+          </button>
+          <p className="font-display font-bold text-white">New here? Pick a mode:</p>
+          <ul className="grid gap-1 text-xs text-slate-400 sm:grid-cols-2">
+            <li><b className="text-slate-200">3D World</b> — a spatial board players reveal, with decor + optional logic.</li>
+            <li><b className="text-slate-200">Node game</b> — invent a mechanic from a prompt, a feeling, or node-by-node.</li>
+            <li><b className="text-slate-200">Classic</b> — reskin + retune the Towers climb, then ship it.</li>
+            <li><b className="text-slate-200">Symbols</b> — draw pixel art for slot/scratch games (an asset tool, not a game).</li>
+          </ul>
+          <p className="text-xs text-slate-500">Every builder autosaves a draft. Published a game? Edit, duplicate or unpublish it from your <span className="text-neon-violet">Profile → Creator dashboard</span>.</p>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <ModeCard
