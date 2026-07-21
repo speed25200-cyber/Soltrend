@@ -39,6 +39,12 @@ games with no code, and earn from them. This tracks the vision and what's shippe
 - **Creator pages** — a maker's catalog + aggregate stats + remix reach.
 - **Top creators** + **novelty-ranked "genuinely new"** sections on Discover.
 
+**Multiplayer**
+- **Live Crash rooms** + shared **3D plaza** (presence).
+- **PvP duel** (1v1, stake-weighted, commit-reveal) and **shared jackpot**
+  (community-pot raffle) on `/duel` — server-authoritative, unit-tested,
+  graceful offline.
+
 **Feel**
 - Animated scenes incl. a real 3-reel slot, sound packs, win effects,
   procedural palettes, 3D atmospheres.
@@ -52,14 +58,14 @@ games with no code, and earn from them. This tracks the vision and what's shippe
 
 ## Planned (the rest of the vision)
 
-**Needs hosted infrastructure** (the client app is a static export; these are
-scaffolded but can't run until the API is deployed):
-1. **LLM game creation** — a true "describe → game" model + an AI balance/tuning
+**Needs hosted infrastructure** (the client app is a static export; the gateways
+are built + unit-tested but only run once the API is deployed):
+1. **Multiplayer templates** — **PvP duel** and **shared jackpot** gateways ship
+   today (`/duel`), degrading gracefully offline. **Live game-show host mode**
+   and **co-op** remain to build on the same pattern.
+2. **LLM game creation** — a true "describe → game" model + an AI balance/tuning
    assistant. The offline keyword assistant ships today; the LLM upgrade needs a
    hosted model.
-2. **Multiplayer templates** — PvP duel builder, shared-jackpot / co-op games,
-   live game-show host mode. The NestJS realtime gateways (crash rooms, plaza)
-   exist; the game-builder templates ride on top once the API is hosted.
 3. **Revenue-share market payouts** — on-chain settlement of asset-sale royalties
    (the browsable market + install tracking ship today, client-side).
 

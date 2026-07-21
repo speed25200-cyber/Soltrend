@@ -48,6 +48,29 @@ others as ship avatars gliding around a shared 3D space (`usePlaza` +
 `PlazaScene`). Movement is cosmetic (no funds). Offline it degrades to a solo
 plaza with ambient ships; hosting the API fills it with real players.
 
+### PvP duel (`/duel`)
+
+**`DuelGateway`** (`/duel` namespace) is 1v1 matchmaking. A player emits `queue`
+with an ante; the server pairs them with the next waiting player, commits
+`sha256(serverSeed)`, then after a short reveal window emits `duel-result` with
+the winner and the revealed seed. The winner is a single uniform draw split by
+stake-weighted threshold (`anteA / (anteA+anteB)`), so equal antes are a fair
+coin and EV stays neutral before the 2% rake; winner takes the pot minus rake. A
+disconnect mid-match forfeits to the opponent. Client: `useDuel` + the `/duel`
+page (Duel tab).
+
+### Shared jackpot (`/jackpot`)
+
+**`JackpotGateway`** (`/jackpot` namespace) is a community-pot raffle. Players
+`enter` a growing pot during an open window; at close, a provably-fair draw walks
+the stake-weighted entry list to pick a winner (win chance == pot share), who
+takes the pot minus a 3% rake. Commit-reveal per round. Client: `useJackpot` +
+the Jackpot tab on `/duel`.
+
+Both duel and jackpot resolution are covered by unit tests in
+`apps/api/test/settlement.spec.ts` (reproducibility, stake-weighted odds,
+distribution).
+
 ## Going live
 
 1. **Deploy the API** (`apps/api`) to any Node host — Render, Fly.io, Railway, or
