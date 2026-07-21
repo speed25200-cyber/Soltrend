@@ -1,5 +1,6 @@
 import type { Template } from './games';
 import type { IconName } from '@/components/Icon';
+import type { PresentationId } from './presentation';
 
 export interface GameMeta {
   slug: string;
@@ -11,6 +12,8 @@ export interface GameMeta {
   accent: 'violet' | 'cyan' | 'gold' | 'pink' | 'win' | 'loss';
   hot?: boolean;
   aura?: string;
+  presentation?: PresentationId;
+  seedKey?: string;
 }
 
 /** Launch catalogue — the "Originals" that drive the volume (§2). */

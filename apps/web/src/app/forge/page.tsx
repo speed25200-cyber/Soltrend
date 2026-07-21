@@ -12,6 +12,8 @@ import { GraphGame } from '@/components/games/GraphGame';
 import { simulateGraph, normaliseEdge, starterGraph, FORGE_TEMPLATES, type ForgeGraph } from '@/lib/forge/model';
 import { clampEdge } from '@/lib/games';
 import { AURAS } from '@/lib/auras';
+import { PRESENTATIONS, paletteFromSeed, type PresentationId } from '@/lib/presentation';
+import { SceneStage } from '@/components/scenes/SceneStage';
 import { ACCENT_HEX, type GameMeta } from '@/lib/catalog';
 import { fmtMult, shortAddr } from '@/lib/format';
 import { sfx } from '@/lib/sound';
@@ -30,6 +32,8 @@ export default function ForgePage() {
   const [icon, setIcon] = useState<IconName>('orbit');
   const [accent, setAccent] = useState('violet');
   const [aura, setAura] = useState('nebula');
+  const [presentation, setPresentation] = useState<PresentationId>('orb');
+  const [previewRound, setPreviewRound] = useState(1);
   const [target, setTarget] = useState(2);
   const [testing, setTesting] = useState(false);
   const [published, setPublished] = useState<{ id: string } | null>(null);
@@ -45,6 +49,8 @@ export default function ForgePage() {
     tier: 2,
     accent: accent as GameMeta['accent'],
     aura,
+    presentation,
+    seedKey: name || 'forge-preview',
   };
 
   const normalise = () => {
@@ -62,7 +68,7 @@ export default function ForgePage() {
       creator: publicKey ? shortAddr(publicKey.toBase58()) : 'anon',
       edge: clampEdge(sim.edge),
       params: { graph: JSON.stringify(graph) },
-      theme: { accent, icon, aura, tagline: tagline.trim() || undefined },
+      theme: { accent, icon, aura, tagline: tagline.trim() || undefined, presentation },
     });
     sfx.jackpot();
     burstWin(12);
@@ -170,6 +176,28 @@ export default function ForgePage() {
                   {AURAS.map((a) => (
                     <button key={a.id} onClick={() => setAura(a.id)} className={`h-7 w-7 rounded-lg border border-white/10 ${aura === a.id ? 'ring-2 ring-white' : ''}`} style={{ background: a.css, backgroundColor: '#0d1024' }} title={a.label} />
                   ))}
+                </div>
+              </div>
+
+              <div>
+                <span className="text-xs text-slate-500">Presentation · how the result reveals</span>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {PRESENTATIONS.map((pr) => (
+                    <button
+                      key={pr.id}
+                      title={pr.hint}
+                      onClick={() => { setPresentation(pr.id); setPreviewRound((r) => r + 1); }}
+                      className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${presentation === pr.id ? 'bg-neon-violet/20 text-white ring-1 ring-neon-violet/50' : 'bg-void-900/60 text-slate-400 hover:text-white'}`}
+                    >
+                      {pr.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-2 rounded-xl border border-white/[0.06] bg-void-950/60 p-2">
+                  <div className="h-36 overflow-hidden">
+                    <SceneStage compact presentation={presentation} mult={2.4} win rolling={false} palette={paletteFromSeed(name || 'forge-preview', accentHex(accent))} round={previewRound} />
+                  </div>
+                  <button className="btn-ghost mt-1 w-full !py-1.5 text-xs" onClick={() => setPreviewRound((r) => r + 1)}>Replay preview</button>
                 </div>
               </div>
             </div>

@@ -1,18 +1,19 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { motion } from 'framer-motion';
+import { useMemo, useRef, useState } from 'react';
 import { GameLayout } from '@/components/GameLayout';
 import { BetAmount } from '@/components/BetControls';
 import { BetButton } from './BetButton';
 import { AutoBet } from './AutoBet';
 import { ModeTabs } from './ModeTabs';
+import { SceneStage } from '@/components/scenes/SceneStage';
 import { usePlay } from '@/hooks/usePlay';
 import { useCasino } from '@/lib/store';
-import { round2, DEFAULT_EDGE } from '@/lib/games';
+import { round2 } from '@/lib/games';
 import { floatStream } from '@/lib/provably-fair';
 import { runGraph, type ForgeGraph } from '@/lib/forge/model';
-import { fmtMult } from '@/lib/format';
+import { paletteFromSeed, type PresentationId } from '@/lib/presentation';
+import { ACCENT_HEX } from '@/lib/catalog';
 import type { GameConfig } from './types';
 
 /** Runtime for a node-graph ("Forge") game — same interpreter as the editor. */
@@ -32,7 +33,25 @@ export function GraphGame({ meta, gameId, gameName, params }: GameConfig) {
   const [bet, setBet] = useState(0.1);
   const [mult, setMult] = useState<number | null>(null);
   const [win, setWin] = useState<boolean | null>(null);
+  const [rolling, setRolling] = useState(false);
+  const [round, setRound] = useState(0);
   const [mode, setMode] = useState<'manual' | 'auto'>('manual');
+  const revealTimer = useRef<number>();
+
+  const presentation: PresentationId = (meta.presentation as PresentationId) || 'pulse';
+  const accentHex = ACCENT_HEX[(meta.accent as keyof typeof ACCENT_HEX)] ?? '#a855f7';
+  const palette = useMemo(() => paletteFromSeed(meta.seedKey || meta.name, accentHex), [meta.seedKey, meta.name, accentHex]);
+
+  const commit = (amount: number, m: number, didWin: boolean, payout: number, seeds: any, quiet: boolean) => {
+    setMult(m);
+    setWin(didWin);
+    setRound((r) => r + 1);
+    settle(
+      { game: gameName ?? meta.name, template: 'graph', bet: amount, multiplier: m, payout, win: didWin, meta: { mult: m }, seeds },
+      { quiet },
+    );
+    if (gameId) bumpUgc(gameId, amount);
+  };
 
   const playRound = (amount: number, quiet: boolean) => {
     if (!graph) return { win: false, payout: 0 };
@@ -41,22 +60,18 @@ export function GraphGame({ meta, gameId, gameName, params }: GameConfig) {
     const m = round2(runGraph(graph, () => stream.next()));
     const didWin = m >= 1;
     const payout = didWin ? round2(amount * m) : 0;
-    setMult(m);
-    setWin(didWin);
-    settle(
-      {
-        game: gameName ?? meta.name,
-        template: 'graph',
-        bet: amount,
-        multiplier: m,
-        payout,
-        win: didWin,
-        meta: { mult: m },
-        seeds,
-      },
-      { quiet },
-    );
-    if (gameId) bumpUgc(gameId, amount);
+    if (quiet) {
+      commit(amount, m, didWin, payout, seeds, true);
+    } else {
+      // Suspense reveal for the scene.
+      window.clearTimeout(revealTimer.current);
+      setRolling(true);
+      setWin(null);
+      revealTimer.current = window.setTimeout(() => {
+        setRolling(false);
+        commit(amount, m, didWin, payout, seeds, false);
+      }, 650);
+    }
     return { win: didWin, payout };
   };
 
@@ -71,35 +86,14 @@ export function GraphGame({ meta, gameId, gameName, params }: GameConfig) {
   return (
     <GameLayout
       meta={meta}
-      stage={
-        <div className="grid h-full place-items-center">
-          <div className="text-center">
-            <motion.div
-              key={mult ?? 'idle'}
-              initial={{ scale: 0.6, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: 'spring', stiffness: 280, damping: 18 }}
-              className={`font-display text-7xl font-bold tabular-nums md:text-8xl ${
-                win === null ? 'text-slate-400' : win ? 'text-win' : 'text-loss'
-              }`}
-              style={{ textShadow: win ? '0 0 50px rgba(16,245,160,0.55)' : win === false ? '0 0 50px rgba(255,59,107,0.45)' : 'none' }}
-            >
-              {mult === null ? '—' : fmtMult(mult)}
-            </motion.div>
-            <div className="mt-2 h-6 font-semibold">
-              {win === true && <span className="text-win">Custom game paid {fmtMult(mult!)}</span>}
-              {win === false && <span className="text-loss">No win this round</span>}
-            </div>
-          </div>
-        </div>
-      }
+      stage={<SceneStage presentation={presentation} mult={mult} win={win} rolling={rolling} palette={palette} round={round} />}
       controls={
         <div className="space-y-4">
           <ModeTabs mode={mode} setMode={setMode} />
           {mode === 'manual' ? (
             <>
-              <BetAmount value={bet} onChange={setBet} />
-              <BetButton guard={g} onClick={() => playRound(bet, false)}>
+              <BetAmount value={bet} onChange={setBet} disabled={rolling} />
+              <BetButton guard={g} onClick={() => playRound(bet, false)} busy={rolling}>
                 Play ◎{bet}
               </BetButton>
             </>

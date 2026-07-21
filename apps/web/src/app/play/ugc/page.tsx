@@ -39,6 +39,8 @@ function UgcInner() {
     tier: 2,
     accent: (game.theme.accent as GameMeta['accent']) ?? 'violet',
     aura: game.theme.aura,
+    presentation: game.theme.presentation as GameMeta['presentation'],
+    seedKey: game.specHash || game.id,
   };
 
   return (
