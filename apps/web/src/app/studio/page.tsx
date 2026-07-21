@@ -6,9 +6,10 @@ import { Icon, type IconName } from '@/components/Icon';
 import { WorldBuilder } from '@/components/create/WorldBuilder';
 import { NodeBuilder } from '@/components/create/NodeBuilder';
 import { SpriteEditor } from '@/components/create/SpriteEditor';
+import { ClassicsBuilder } from '@/components/create/ClassicsBuilder';
 import { sfx } from '@/lib/sound';
 
-type Mode = 'world' | 'node' | 'art';
+type Mode = 'world' | 'node' | 'classic' | 'art';
 
 /**
  * The single creation surface — 3D World and Node game builders merged behind one
@@ -20,7 +21,7 @@ export default function StudioPage() {
 
   useEffect(() => {
     const m = new URLSearchParams(window.location.search).get('mode');
-    if (m === 'node' || m === 'world' || m === 'art') setMode(m);
+    if (m === 'node' || m === 'world' || m === 'art' || m === 'classic') setMode(m);
   }, []);
 
   const pick = (m: Mode) => {
@@ -40,7 +41,7 @@ export default function StudioPage() {
         sub="Design a 3D world or wire a node mechanic — provably fair, vault-safe, published to the community in a tap."
       />
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <ModeCard
           active={mode === 'world'}
           onClick={() => pick('world')}
@@ -58,6 +59,14 @@ export default function StudioPage() {
           accent="#a855f7"
         />
         <ModeCard
+          active={mode === 'classic'}
+          onClick={() => pick('classic')}
+          icon="target"
+          title="Classic"
+          blurb="Reskin the Towers dungeon-climb — pick a difficulty and a look, then ship it."
+          accent="#10f5a0"
+        />
+        <ModeCard
           active={mode === 'art'}
           onClick={() => pick('art')}
           icon="star"
@@ -67,7 +76,7 @@ export default function StudioPage() {
         />
       </div>
 
-      {mode === 'world' ? <WorldBuilder /> : mode === 'node' ? <NodeBuilder /> : <SpriteEditor />}
+      {mode === 'world' ? <WorldBuilder /> : mode === 'node' ? <NodeBuilder /> : mode === 'classic' ? <ClassicsBuilder /> : <SpriteEditor />}
     </div>
   );
 }
