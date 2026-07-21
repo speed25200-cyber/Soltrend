@@ -15,14 +15,24 @@ games with no code, and earn from them. This tracks the vision and what's shippe
   decor props, ship skins, optional node "logic core" (edge-neutral bonus).
 
 **Genres unlocked**
-- Dice, Coinflip, Limbo, Crash, Mines/board, Wheel, Risk tower, Best-of-N,
-  **Slot machine**, **Scratch card**, plus arbitrary node mechanics.
+- Dice, Coinflip, Limbo, Crash, Mines/board, Wheel, **Towers (interactive
+  dungeon-climb)**, Best-of-N, **Slot machine**, **Scratch card**, plus
+  arbitrary node mechanics.
 
 **Ease + variety**
 - **Generator** — pick a "feeling" → 3 structurally distinct, playable games.
 - **Novelty score** — payout-distribution distance blocks clone spam.
 - **Reusable modules** — save a mechanic, drop it into any game.
 - Surprise-me, name generator, style presets, remix.
+
+**Creator art**
+- **Pixel sprite editor** — draw your own slot/scratch symbols (12/16/24
+  grids), saved to a personal library, rendered inline in your games.
+- **Shareable symbol packs** — export/import a library as a code (no server).
+
+**Community + discovery**
+- **Creator pages** — a maker's catalog + aggregate stats + remix reach.
+- **Top creators** discovery on the Discover feed.
 
 **Feel**
 - Animated scenes incl. a real 3-reel slot, sound packs, win effects,
@@ -37,24 +47,22 @@ games with no code, and earn from them. This tracks the vision and what's shippe
 
 ## Planned (the rest of the vision)
 
-1. **Sprite / symbol editor** — a pixel/vector editor so creators draw their own
-   slot symbols, gems, characters; symbols become tradeable NFTs and render in
-   their games. *The biggest visual-imagination lever.*
-2. **Community module + asset marketplace** — publish/sell/remix modules, skins,
-   scenes, sound packs (revenue-share). A second creator economy.
-3. **Interactive path / level primitive** — creators draw a dungeon (rooms =
-   nodes, choices = edges, each with risk/reward); players navigate and cash out.
-4. **Cross-round state (progression node)** — persist streaks/levels/collections
+1. **Asset marketplace** — publish/sell/remix symbol packs, modules, skins,
+   scenes, sound packs (revenue-share). Sharing codes exist; the browsable,
+   monetised market is next. A second creator economy.
+2. **Creator-themeable Towers** — let the studio emit the Towers template so
+   creators reskin/retune the dungeon-climb, not just play the Original.
+3. **Cross-round state (progression node)** — persist streaks/levels/collections
    across rounds for sunk-cost progression loops (runtime state, RG-guarded).
-5. **Per-game quests / battle pass** — creators define missions + unlockables in
+4. **Per-game quests / battle pass** — creators define missions + unlockables in
    their game; players grind them.
-6. **AI creation** — "describe your game" → generated playable game; an AI
+5. **AI creation** — "describe your game" → generated playable game; an AI
    balance/tuning assistant (needs a hosted model).
-7. **Multiplayer templates** — PvP duel builder, shared-jackpot / co-op games,
+6. **Multiplayer templates** — PvP duel builder, shared-jackpot / co-op games,
    live game-show host mode (needs the hosted realtime API).
-8. **Creator studio pages + discovery** — a creator's catalog, followers, stats;
-   novelty-ranked "genuinely new" feed; "The Floor" spatial discovery.
-9. **Collectibles / provably-fair loot drops** — a collection meta that drives
+7. **Novelty-ranked "genuinely new" feed + "The Floor"** — surface original
+   games (payout-distribution distance) and spatial discovery.
+8. **Collectibles / provably-fair loot drops** — a collection meta that drives
    return visits.
 
 ## Guardrails
