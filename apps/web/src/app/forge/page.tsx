@@ -10,6 +10,7 @@ import { Icon, STUDIO_ICONS, type IconName } from '@/components/Icon';
 import { ForgeEditor } from '@/components/forge/ForgeEditor';
 import { GraphGame } from '@/components/games/GraphGame';
 import { simulateGraph, normaliseEdge, starterGraph, FORGE_TEMPLATES, type ForgeGraph } from '@/lib/forge/model';
+import { generateDistinct, noveltyScore, FEELINGS, type Feeling, type Candidate } from '@/lib/forge/generator';
 import { clampEdge } from '@/lib/games';
 import { AURAS } from '@/lib/auras';
 import {
@@ -81,6 +82,27 @@ export default function ForgePage() {
   };
   const [testing, setTesting] = useState(false);
   const [published, setPublished] = useState<{ id: string } | null>(null);
+
+  // Generator: pick a feeling → three structurally distinct, novel candidates.
+  const [feeling, setFeeling] = useState<Feeling>('tense');
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [generating, setGenerating] = useState(false);
+  const generate = (f: Feeling) => {
+    setFeeling(f);
+    setGenerating(true);
+    // let the button paint before the (sync) Monte-Carlo runs
+    setTimeout(() => {
+      setCandidates(generateDistinct(f, 3, []));
+      setGenerating(false);
+      sfx.click();
+    }, 20);
+  };
+  const loadCandidate = (c: Candidate) => {
+    setGraph(c.graph);
+    setName(randomName());
+    applyPreset(STYLE_PRESETS[(Math.random() * STYLE_PRESETS.length) | 0].style);
+    sfx.packWin(soundPack, 3);
+  };
 
   // Visual remix — preload a published game's graph + look via ?remix=<id>.
   useEffect(() => {
@@ -163,8 +185,48 @@ export default function ForgePage() {
             </p>
           </div>
 
+          {/* Generator — pick a feeling, get three distinct games */}
+          <div className="glass space-y-3 p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="label-eyebrow">Generate a game · pick a feeling</span>
+              <span className="ml-auto text-[0.62rem] text-slate-600">distinct + novelty-scored</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {FEELINGS.map((f) => (
+                <button key={f.id} title={f.hint} onClick={() => generate(f.id)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${feeling === f.id ? 'bg-neon-violet/20 text-white' : 'bg-white/5 text-slate-400 hover:text-white'}`}>
+                  {f.label}
+                </button>
+              ))}
+              <button className="btn-primary ml-auto !py-1.5 text-xs" onClick={() => generate(feeling)} disabled={generating}>
+                <Icon name="spark" size={13} /> {generating ? 'Generating…' : 'Generate 3'}
+              </button>
+            </div>
+            {candidates.length > 0 && (
+              <div className="grid gap-2 sm:grid-cols-3">
+                {candidates.map((c, i) => {
+                  const nov = noveltyScore(c.sim, candidates.filter((x) => x !== c).map((x) => x.sim));
+                  return (
+                    <button key={i} onClick={() => loadCandidate(c)} className="rounded-xl border border-white/[0.07] bg-void-950/50 p-3 text-left transition hover:border-neon-violet/50">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-bold text-white">{c.archetype}</span>
+                        <span className="rounded px-1.5 py-0.5 text-[0.58rem] font-bold" style={{ background: `${nov > 0.7 ? '#10f5a0' : '#a855f7'}22`, color: nov > 0.7 ? '#10f5a0' : '#a855f7' }}>{Math.round(nov * 100)}% new</span>
+                      </div>
+                      <div className="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-0.5 font-mono text-[0.62rem] text-slate-400">
+                        <span>edge {(c.edge * 100).toFixed(1)}%</span>
+                        <span>hit {(c.sim.hitRate * 100).toFixed(0)}%</span>
+                        <span>max {c.sim.maxMult.toFixed(1)}×</span>
+                        <span>vol {c.sim.volatility.toFixed(1)}</span>
+                      </div>
+                      <div className="mt-2 text-[0.6rem] font-semibold text-neon-violet">Load →</div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           <div className="glass flex flex-wrap items-center gap-2 p-3">
-            <button className="btn-primary !py-1.5 text-xs" onClick={surprise}>
+            <button className="btn-ghost !py-1.5 text-xs" onClick={surprise}>
               <Icon name="spark" size={13} /> Surprise me
             </button>
             <span className="label-eyebrow mx-1">or template</span>
