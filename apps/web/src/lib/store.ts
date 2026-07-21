@@ -150,6 +150,10 @@ interface CasinoState {
   jackpotWins: JackpotWin[];
   bankrollStakes: Record<string, number>;
   bankrollYield: number;
+  /** Cosmetic per-game "journey" — rounds this player has played on each game.
+   *  Drives collection tiers + emblems. Purely cosmetic: never affects odds,
+   *  payouts or the bankroll (vault-safety is untouched). */
+  journeys: Record<string, number>;
 
   setAgeVerified: (v: boolean) => void;
   setSoundOn: (v: boolean) => void;
@@ -309,6 +313,7 @@ export const useCasino = create<CasinoState>()(
       jackpotWins: [],
       bankrollStakes: {},
       bankrollYield: 0,
+      journeys: {},
 
       setAgeVerified: (v) => set({ ageVerified: v }),
       setSoundOn: (v) => set({ soundOn: v }),
@@ -505,6 +510,8 @@ export const useCasino = create<CasinoState>()(
           }
           return {
             bankrollYield,
+            // Cosmetic journey progress — one round played on this game.
+            journeys: { ...s.journeys, [id]: (s.journeys[id] ?? 0) + 1 },
             ugc: s.ugc.map((g) =>
               g.id === id ? { ...g, volume: round4(g.volume + wagered), plays: g.plays + 1 } : g,
             ),
@@ -561,6 +568,7 @@ export const useCasino = create<CasinoState>()(
         jackpotWins: s.jackpotWins,
         bankrollStakes: s.bankrollStakes,
         bankrollYield: s.bankrollYield,
+        journeys: s.journeys,
       }),
     },
   ),

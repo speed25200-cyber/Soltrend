@@ -8,6 +8,7 @@ import { SectionHead } from '@/components/SectionHead';
 import { ConnectButton } from '@/components/ConnectButton';
 import { Icon } from '@/components/Icon';
 import { SolMark } from '@/components/BalanceWidget';
+import { Collection } from '@/components/Collection';
 import { fmtSol, fmtMult, fmtCompact, shortAddr, timeAgo } from '@/lib/format';
 import { creatorEarnings } from '@/lib/store';
 import { vipFromWagered, levelFromXp } from '@/lib/progression';
@@ -60,6 +61,11 @@ export default function ProfilePage() {
       </div>
 
       <CreatorDashboard />
+
+      <div>
+        <SectionHead eyebrow="Collection" title="Games you've explored" />
+        <Collection />
+      </div>
 
       <div className="grid gap-6 md:grid-cols-2">
         <ReferralPanel code={progress.referralCode} />

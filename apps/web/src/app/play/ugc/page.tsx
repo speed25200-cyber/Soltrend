@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { useCasino } from '@/lib/store';
 import { GameScreen } from '@/components/games/GameScreen';
 import { GameStakePanel } from '@/components/GameStakePanel';
+import { JourneyChip } from '@/components/Collection';
 import { maxBetFor } from '@/lib/economics';
 import type { GameMeta } from '@/lib/catalog';
 
@@ -65,6 +66,7 @@ function UgcInner() {
             </Link>
           )}
           {remixCount > 0 && <span className="chip">{remixCount} remix{remixCount === 1 ? '' : 'es'} · original earns royalties</span>}
+          <JourneyChip gameId={game.id} />
         </div>
         <GameScreen
           config={{ meta, edge: game.edge, gameId: game.id, gameName: game.name, params: game.params, maxBet: maxBetFor(game.tvl ?? 0, game.maxWin ?? 100) }}
