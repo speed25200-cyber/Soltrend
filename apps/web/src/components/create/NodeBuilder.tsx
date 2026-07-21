@@ -66,7 +66,8 @@ export function NodeBuilder() {
     setSymbolIds((ids) =>
       ids.includes(id) ? ids.filter((x) => x !== id) : ids.length >= SYMBOLS_PER_GAME ? ids : [...ids, id],
     );
-  const isSlot = presentation === 'reel';
+  // Reel (slot) and cards (scratch) presentations render creator-drawn symbols.
+  const usesSymbols = presentation === 'reel' || presentation === 'cards';
 
   const applyPreset = (s: (typeof STYLE_PRESETS)[number]['style']) => {
     setPresentation(s.presentation);
@@ -163,7 +164,7 @@ export function NodeBuilder() {
     soundPack,
     winEffect,
     seedKey: name || 'forge-preview',
-    symbols: isSlot && symbols.length >= 2 ? symbols : undefined,
+    symbols: usesSymbols && symbols.length >= 2 ? symbols : undefined,
   };
 
   const normalise = () => {
@@ -192,7 +193,7 @@ export function NodeBuilder() {
         background,
         soundPack,
         winEffect,
-        symbols: isSlot && symbols.length >= 2 ? symbols : undefined,
+        symbols: usesSymbols && symbols.length >= 2 ? symbols : undefined,
       },
     });
     sfx.jackpot();
@@ -388,7 +389,7 @@ export function NodeBuilder() {
                 </div>
               </div>
 
-              {isSlot && (
+              {usesSymbols && (
                 <div>
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-slate-500">Reel symbols · your own pixel art</span>

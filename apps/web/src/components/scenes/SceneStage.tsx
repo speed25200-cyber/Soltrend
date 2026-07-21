@@ -234,9 +234,11 @@ function WheelScene({ mult, win, rolling, palette, round }: SceneProps) {
 }
 
 /* ------------------------------------------------------------------- Cards */
-function Cards({ mult, win, rolling, palette, round }: SceneProps) {
+function Cards({ mult, win, rolling, palette, round, symbols }: SceneProps) {
   const c = winColor(win, palette);
   const revealed = !rolling && mult !== null;
+  const custom = symbols && symbols.length >= 2 ? symbols : undefined;
+  const face = custom ? custom[round % custom.length] : undefined;
   return (
     <div className="text-center">
       <div className="mx-auto h-44 w-32" style={{ perspective: 800 }}>
@@ -250,7 +252,8 @@ function Cards({ mult, win, rolling, palette, round }: SceneProps) {
           <div className="absolute inset-0 grid place-items-center rounded-2xl border border-white/10" style={{ backfaceVisibility: 'hidden', background: `linear-gradient(160deg, ${palette.primary}, ${palette.secondary})` }}>
             <div className="h-10 w-10 rounded-full border-2 border-white/40" />
           </div>
-          <div className="absolute inset-0 grid place-items-center rounded-2xl border-2 bg-void-900" style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)', borderColor: `${c}88` }}>
+          <div className="absolute inset-0 grid place-content-center place-items-center gap-1 rounded-2xl border-2 bg-void-900" style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)', borderColor: `${c}88` }}>
+            {face && <SpriteGlyph sprite={face} size={44} />}
             <span className="font-display text-2xl font-bold" style={{ color: c }}>{mult === null ? '' : fmtMult(mult)}</span>
           </div>
         </motion.div>
