@@ -191,3 +191,31 @@ describe('shared jackpot draw', () => {
     expect(r.pot).toBe(0);
   });
 });
+
+describe('game-show elimination', () => {
+  it('produces a reproducible full elimination order (a permutation)', async () => {
+    const { eliminationOrder, showdownPayout } = await import('../src/realtime/showdown');
+    const seed = 'd'.repeat(64);
+    const o1 = eliminationOrder(seed, 'r', 5, 6);
+    const o2 = eliminationOrder(seed, 'r', 5, 6);
+    expect(o1).toEqual(o2);
+    expect([...o1].sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 4, 5]); // every seat exactly once
+    // pot = buyIn * players, minus 4% rake
+    expect(showdownPayout(0.1, 6)).toBeCloseTo(0.6 * 0.96);
+  });
+
+  it('gives every seat an equal ~1/N chance of winning (last in order)', async () => {
+    const { eliminationOrder } = await import('../src/realtime/showdown');
+    const N = 5;
+    const wins = new Array(N).fill(0);
+    const T = 5000;
+    for (let i = 1; i <= T; i++) {
+      const order = eliminationOrder('g'.repeat(64), 'bulk', i, N);
+      wins[order[order.length - 1]]++; // winner is the last seat standing
+    }
+    for (const w of wins) {
+      expect(w / T).toBeGreaterThan(0.16); // ~0.20 each
+      expect(w / T).toBeLessThan(0.24);
+    }
+  });
+});
