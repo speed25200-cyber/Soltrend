@@ -51,7 +51,10 @@ export default function DiscoverPage() {
 
   return (
     <div className="space-y-10">
-      <SectionHead eyebrow="Discover" title="Made by the community" sub="Trending games, fresh drops and the creators behind them" />
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <SectionHead eyebrow="Discover" title="Made by the community" sub="Trending games, fresh drops and the creators behind them" />
+        <Link href="/floor" className="btn-ghost mb-1"><Icon name="orbit" size={14} /> The Floor</Link>
+      </div>
 
       {gotw && (
         <Link
