@@ -1,18 +1,42 @@
 'use client';
 
+import { useMemo } from 'react';
 import Link from 'next/link';
-import { useCasino } from '@/lib/store';
+import { useCasino, type UgcGame } from '@/lib/store';
 import { UgcCard } from '@/components/UgcRow';
 import { SectionHead } from '@/components/SectionHead';
 import { Icon } from '@/components/Icon';
 import { ACCENT_HEX } from '@/lib/catalog';
 import { fmtCompact } from '@/lib/format';
+import { simulateGraph, type ForgeGraph, type GraphSim } from '@/lib/forge/model';
+import { noveltyScore } from '@/lib/forge/generator';
 
 export default function DiscoverPage() {
   const ugc = useCasino((s) => s.ugc);
   const trending = [...ugc].sort((a, b) => b.volume - a.volume);
   const fresh = [...ugc].sort((a, b) => b.createdAt - a.createdAt);
   const gotw = trending.find((g) => g.featured) ?? trending[0];
+
+  // "Genuinely new" — rank node games by how far their payout distribution sits
+  // from every other game's. Simulated once per game (memoised on the id set).
+  const novel = useMemo(() => {
+    const graphGames: { game: UgcGame; sim: GraphSim }[] = [];
+    for (const g of ugc) {
+      if (g.template !== 'graph' || !g.params?.graph) continue;
+      try {
+        const sim = simulateGraph(JSON.parse(String(g.params.graph)) as ForgeGraph, 5000);
+        if (sim.ok) graphGames.push({ game: g, sim });
+      } catch {
+        /* skip malformed */
+      }
+    }
+    if (graphGames.length < 3) return [] as { game: UgcGame; score: number }[];
+    return graphGames
+      .map(({ game, sim }, i) => ({ game, score: noveltyScore(sim, graphGames.filter((_, j) => j !== i).map((o) => o.sim)) }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 6);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ugc.map((g) => g.id).join(',')]);
 
   // Top creators by total wagered across their catalog.
   const byCreator = new Map<string, { volume: number; games: number }>();
@@ -66,6 +90,22 @@ export default function DiscoverPage() {
           ))}
         </div>
       </section>
+
+      {novel.length > 0 && (
+        <section>
+          <SectionHead eyebrow="Original" title="Genuinely new" sub="Node games whose payout shape is unlike anything else here" />
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+            {novel.map(({ game, score }) => (
+              <div key={game.id} className="relative">
+                <span className="absolute -top-1.5 right-1 z-10 chip !border-neon-cyan/40 !bg-neon-cyan/10 !text-neon-cyan">
+                  <Icon name="spark" size={10} /> {Math.round(score * 100)}% new
+                </span>
+                <UgcCard game={game} />
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {creators.length > 0 && (
         <section>
