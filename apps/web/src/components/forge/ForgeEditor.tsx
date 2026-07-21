@@ -14,10 +14,12 @@ const inDotTop = (idx: number) => HEADER + IN_GAP / 2 + idx * IN_GAP - 7;
 const PALETTE: NodeKind[] = ['rng', 'const', 'math', 'branch', 'curve', 'randint', 'map', 'chance', 'segments', 'payout'];
 
 export function ForgeEditor({ graph, onChange }: { graph: ForgeGraph; onChange: (g: ForgeGraph) => void }) {
-  const wrapRef = useRef<HTMLDivElement>(null);
+  const worldRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ id: string; dx: number; dy: number } | null>(null);
   const [pending, setPending] = useState<string | null>(null); // output source awaiting an input target
   const [selected, setSelected] = useState<string | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const clampZoom = (z: number) => Math.max(0.45, Math.min(1.3, Math.round(z * 100) / 100));
 
   const update = (nodes: ForgeNode[]) => onChange({ nodes });
   const patch = (id: string, fn: (n: ForgeNode) => ForgeNode) => update(graph.nodes.map((n) => (n.id === id ? fn(n) : n)));
@@ -26,8 +28,17 @@ export function ForgeEditor({ graph, onChange }: { graph: ForgeGraph; onChange: 
     const def = NODE_DEFS[kind];
     const params: Record<string, number | string> = {};
     def.params.forEach((p) => (params[p.key] = p.default));
-    const n: ForgeNode = { id: newId(), kind, x: 40 + (graph.nodes.length % 4) * 30, y: 40 + (graph.nodes.length % 5) * 24, params, inputs: {} };
+    const n: ForgeNode = { id: newId(), kind, x: 40 + (graph.nodes.length % 4) * 26, y: 30 + (graph.nodes.length % 6) * 22, params, inputs: {} };
     update([...graph.nodes, n]);
+    setSelected(n.id);
+  };
+
+  const duplicateNode = (id: string) => {
+    const src = graph.nodes.find((n) => n.id === id);
+    if (!src) return;
+    const copy: ForgeNode = { ...src, id: newId(), x: src.x + 28, y: src.y + 28, params: { ...src.params }, inputs: {} };
+    update([...graph.nodes, copy]);
+    setSelected(copy.id);
   };
 
   const removeNode = (id: string) => {
@@ -39,18 +50,22 @@ export function ForgeEditor({ graph, onChange }: { graph: ForgeGraph; onChange: 
     setSelected(null);
   };
 
+  // World-space coordinates from a pointer event (accounts for scroll + zoom).
+  const worldPos = (clientX: number, clientY: number) => {
+    const rect = worldRef.current!.getBoundingClientRect();
+    return { x: (clientX - rect.left) / zoom, y: (clientY - rect.top) / zoom };
+  };
+
   const onPointerDownHeader = (e: React.PointerEvent, n: ForgeNode) => {
-    const rect = wrapRef.current!.getBoundingClientRect();
-    drag.current = { id: n.id, dx: e.clientX - rect.left - n.x, dy: e.clientY - rect.top - n.y };
+    const p = worldPos(e.clientX, e.clientY);
+    drag.current = { id: n.id, dx: p.x - n.x, dy: p.y - n.y };
     setSelected(n.id);
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
   };
   const onPointerMove = (e: React.PointerEvent) => {
     if (!drag.current) return;
-    const rect = wrapRef.current!.getBoundingClientRect();
-    const x = Math.max(0, Math.min(rect.width - NODE_W, e.clientX - rect.left - drag.current.dx));
-    const y = Math.max(0, e.clientY - rect.top - drag.current.dy);
-    patch(drag.current.id, (n) => ({ ...n, x, y }));
+    const p = worldPos(e.clientX, e.clientY);
+    patch(drag.current.id, (n) => ({ ...n, x: Math.max(0, p.x - drag.current!.dx), y: Math.max(0, p.y - drag.current!.dy) }));
   };
   const onPointerUp = () => (drag.current = null);
 
@@ -80,6 +95,11 @@ export function ForgeEditor({ graph, onChange }: { graph: ForgeGraph; onChange: 
     });
   }
 
+  const maxX = graph.nodes.reduce((m, n) => Math.max(m, n.x), 0);
+  const maxY = graph.nodes.reduce((m, n) => Math.max(m, n.y), 0);
+  const worldW = Math.max(760, maxX + NODE_W + 120);
+  const worldH = Math.max(460, maxY + 240);
+
   return (
     <div>
       {/* palette */}
@@ -92,23 +112,30 @@ export function ForgeEditor({ graph, onChange }: { graph: ForgeGraph; onChange: 
         {pending && <span className="chip !border-neon-violet/50 !text-neon-violet">Click an input port to connect · click source again to cancel</span>}
       </div>
 
-      <div
-        ref={wrapRef}
-        className="relative h-[460px] w-full overflow-hidden rounded-2xl border border-white/[0.07] bg-void-950/60"
-        style={{ backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.05) 1px, transparent 1px)', backgroundSize: '22px 22px' }}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerLeave={onPointerUp}
-      >
-        {/* wires */}
-        <svg className="pointer-events-none absolute inset-0 h-full w-full">
-          {wires.map((w, i) => (
-            <path key={i} d={w.d} fill="none" stroke={w.color} strokeWidth={2} strokeOpacity={0.7} />
-          ))}
-        </svg>
+      <div className="relative">
+        <div
+          className="relative h-[380px] w-full touch-pan-x touch-pan-y overflow-auto rounded-2xl border border-white/[0.07] bg-void-950/60 sm:h-[460px]"
+          style={{ backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.05) 1px, transparent 1px)', backgroundSize: '22px 22px' }}
+        >
+          {/* sized wrapper so scrolling matches the scaled world */}
+          <div style={{ width: worldW * zoom, height: worldH * zoom }}>
+            <div
+              ref={worldRef}
+              className="relative origin-top-left"
+              style={{ width: worldW, height: worldH, transform: `scale(${zoom})` }}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              onPointerLeave={onPointerUp}
+            >
+              {/* wires */}
+              <svg className="pointer-events-none absolute inset-0" style={{ width: worldW, height: worldH }}>
+                {wires.map((w, i) => (
+                  <path key={i} d={w.d} fill="none" stroke={w.color} strokeWidth={2} strokeOpacity={0.7} />
+                ))}
+              </svg>
 
-        {/* nodes */}
-        {graph.nodes.map((n) => {
+              {/* nodes */}
+              {graph.nodes.map((n) => {
           const def = NODE_DEFS[n.kind];
           const sel = selected === n.id;
           return (
@@ -143,15 +170,20 @@ export function ForgeEditor({ graph, onChange }: { graph: ForgeGraph; onChange: 
               {/* header (drag handle) */}
               <div
                 onPointerDown={(e) => onPointerDownHeader(e, n)}
-                className="flex cursor-grab items-center justify-between rounded-t-xl px-2.5 active:cursor-grabbing"
-                style={{ height: HEADER, background: `${def.color}22` }}
+                className="flex cursor-grab select-none items-center justify-between rounded-t-xl px-2.5 active:cursor-grabbing"
+                style={{ height: HEADER, background: `${def.color}22`, touchAction: 'none' }}
               >
                 <span className="flex items-center gap-1.5 text-xs font-bold text-white">
                   <span className="h-2 w-2 rounded-full" style={{ background: def.color }} /> {def.label}
                 </span>
-                <button onClick={() => removeNode(n.id)} className="text-slate-500 hover:text-loss" title="Delete">
-                  <Icon name="close" size={12} />
-                </button>
+                <span className="flex items-center gap-1.5">
+                  <button onClick={() => duplicateNode(n.id)} className="text-slate-500 hover:text-white" title="Duplicate">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" strokeWidth="2" /><path d="M4 16V6a2 2 0 012-2h10" stroke="currentColor" strokeWidth="2" /></svg>
+                  </button>
+                  <button onClick={() => removeNode(n.id)} className="text-slate-500 hover:text-loss" title="Delete">
+                    <Icon name="close" size={12} />
+                  </button>
+                </span>
               </div>
 
               {/* input labels (aligned with dots) */}
@@ -204,8 +236,20 @@ export function ForgeEditor({ graph, onChange }: { graph: ForgeGraph; onChange: 
               )}
             </div>
           );
-        })}
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* zoom controls */}
+        <div className="absolute bottom-3 right-3 flex items-center gap-1 rounded-xl border border-white/10 bg-void-900/90 p-1 backdrop-blur">
+          <button className="grid h-7 w-7 place-items-center rounded-lg text-lg text-slate-300 hover:bg-white/10" onClick={() => setZoom((z) => clampZoom(z - 0.15))} aria-label="Zoom out">−</button>
+          <span className="w-9 text-center font-mono text-xs text-slate-400">{Math.round(zoom * 100)}%</span>
+          <button className="grid h-7 w-7 place-items-center rounded-lg text-lg text-slate-300 hover:bg-white/10" onClick={() => setZoom((z) => clampZoom(z + 0.15))} aria-label="Zoom in">+</button>
+        </div>
       </div>
     </div>
   );
 }
+
+

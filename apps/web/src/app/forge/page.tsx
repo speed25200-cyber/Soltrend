@@ -62,6 +62,23 @@ export default function ForgePage() {
     setPreviewRound((r) => r + 1);
     sfx.packWin(s.soundPack, 3);
   };
+
+  const ADJ = ['Neon', 'Cosmic', 'Golden', 'Savage', 'Lucky', 'Turbo', 'Mystic', 'Frozen', 'Blazing', 'Quantum', 'Royal', 'Degen'];
+  const NOUN = ['Overdrive', 'Rush', 'Vault', 'Strike', 'Bloom', 'Vortex', 'Bandit', 'Mirage', 'Surge', 'Oracle', 'Frenzy', 'Cascade'];
+  const randomName = () => `${ADJ[(Math.random() * ADJ.length) | 0]} ${NOUN[(Math.random() * NOUN.length) | 0]}`;
+
+  // "Surprise me" — a fully-formed, unique game in one tap: random mechanic +
+  // auto-balanced edge + random style + name. Great on mobile.
+  const surprise = () => {
+    const pickable = FORGE_TEMPLATES.filter((t) => t.id !== 'blank');
+    const g = pickable[(Math.random() * pickable.length) | 0].build();
+    const pay = g.nodes.find((n) => n.kind === 'payout');
+    const scale = normaliseEdge(g, 0.01 + Math.random() * 0.03);
+    if (pay) pay.params.scale = scale;
+    setGraph(g);
+    applyPreset(STYLE_PRESETS[(Math.random() * STYLE_PRESETS.length) | 0].style);
+    setName(randomName());
+  };
   const [testing, setTesting] = useState(false);
   const [published, setPublished] = useState<{ id: string } | null>(null);
 
@@ -147,7 +164,10 @@ export default function ForgePage() {
           </div>
 
           <div className="glass flex flex-wrap items-center gap-2 p-3">
-            <span className="label-eyebrow mr-1">Load template</span>
+            <button className="btn-primary !py-1.5 text-xs" onClick={surprise}>
+              <Icon name="spark" size={13} /> Surprise me
+            </button>
+            <span className="label-eyebrow mx-1">or template</span>
             {FORGE_TEMPLATES.map((t) => (
               <button key={t.id} className="chip hover:border-neon-violet/50" title={t.hint} onClick={() => { setGraph(t.build()); sfx.click(); }}>
                 {t.label}
@@ -210,7 +230,12 @@ export default function ForgePage() {
           <div className="glass p-5">
             <span className="label-eyebrow">Brand it</span>
             <div className="mt-3 space-y-3">
-              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Game name" maxLength={28} className="input-num !font-sans" />
+              <div className="flex gap-2">
+                <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Game name" maxLength={28} className="input-num !font-sans flex-1" />
+                <button className="btn-ghost !px-3" title="Generate a name" onClick={() => setName(randomName())}>
+                  <Icon name="spark" size={16} />
+                </button>
+              </div>
               <input value={tagline} onChange={(e) => setTagline(e.target.value)} placeholder="Tagline" maxLength={44} className="input-num !font-sans text-sm" />
               <div className="flex flex-wrap gap-1.5">
                 {STUDIO_ICONS.map((e) => (
