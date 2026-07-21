@@ -114,7 +114,7 @@ export default function WorldsPage() {
     const game = publishUgc({
       name: name.trim(), template: 'board',
       creator: publicKey ? shortAddr(publicKey.toBase58()) : 'anon',
-      edge: stats.edge, params: worldToParams(spec),
+      edge: stats.edge, maxWin: Math.max(1, Math.round(stats.maxMult)), params: worldToParams(spec),
       theme: { accent, icon, aura: 'nebula', tagline: tagline.trim() || undefined, background, soundPack, winEffect },
     });
     sfx.jackpot();

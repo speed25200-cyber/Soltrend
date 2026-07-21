@@ -69,6 +69,8 @@ export interface UgcGame {
   specHash?: string;
   /** Bankroll TVL — SOL staked to back this game (pays winners, earns edge yield). */
   tvl?: number;
+  /** Top multiplier this game can pay — sets the bankroll-relative max bet. */
+  maxWin?: number;
 }
 
 export interface RgLimits {
@@ -229,6 +231,7 @@ export const seededUgc = (): UgcGame[] => [
     plays: 51204,
     rating: 4.8,
     tvl: 324,
+    maxWin: 2,
     createdAt: Date.now() - 86400000 * 5,
     featured: true,
   },
@@ -245,6 +248,7 @@ export const seededUgc = (): UgcGame[] => [
     plays: 38210,
     rating: 4.6,
     tvl: 187,
+    maxWin: 100,
     createdAt: Date.now() - 86400000 * 3,
   },
   {
@@ -260,6 +264,7 @@ export const seededUgc = (): UgcGame[] => [
     plays: 24012,
     rating: 4.9,
     tvl: 96,
+    maxWin: 50,
     createdAt: Date.now() - 86400000 * 9,
   },
 ];

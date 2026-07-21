@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useCasino } from '@/lib/store';
 import { GameScreen } from '@/components/games/GameScreen';
+import { GameStakePanel } from '@/components/GameStakePanel';
 import type { GameMeta } from '@/lib/catalog';
 
 export default function UgcPlayPage() {
@@ -47,8 +48,15 @@ function UgcInner() {
   };
 
   return (
-    <GameScreen
-      config={{ meta, edge: game.edge, gameId: game.id, gameName: game.name, params: game.params }}
-    />
+    <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
+      <div className="min-w-0">
+        <GameScreen
+          config={{ meta, edge: game.edge, gameId: game.id, gameName: game.name, params: game.params }}
+        />
+      </div>
+      <div className="lg:sticky lg:top-24 lg:self-start">
+        <GameStakePanel gameId={game.id} />
+      </div>
+    </div>
   );
 }

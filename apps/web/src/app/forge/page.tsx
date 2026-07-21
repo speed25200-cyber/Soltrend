@@ -159,6 +159,7 @@ export default function ForgePage() {
       template: 'graph',
       creator: publicKey ? shortAddr(publicKey.toBase58()) : 'anon',
       edge: clampEdge(sim.edge),
+      maxWin: Math.max(1, Math.round(sim.maxMult)),
       params: { graph: JSON.stringify(graph) },
       theme: { accent, icon, aura, tagline: tagline.trim() || undefined, presentation, background, soundPack, winEffect },
     });
