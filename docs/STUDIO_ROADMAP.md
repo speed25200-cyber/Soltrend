@@ -72,10 +72,11 @@ are built + unit-tested but only run once the API is deployed):
    assistant. The offline keyword assistant ships today; the LLM upgrade needs a
    hosted model.
 
-The **on-chain asset revenue-share** now exists: `house_vault::buy_asset` settles
-a marketplace sale — 5% platform fee, the rest accrues to the seller's creator
-vault (claimed via the KYC-gated royalty path). Wiring the client's free installs
-to paid, wallet-signed purchases is the remaining integration step.
+The **on-chain asset revenue-share** is fully wired: `house_vault::buy_asset`
+settles a marketplace sale (5% platform, rest to the seller's creator vault), and
+the client sends the wallet-signed purchase when a program id is configured
+(`NEXT_PUBLIC_HOUSE_VAULT_PROGRAM`), falling back to free installs otherwise.
+Deploying the program (see `docs/DEPLOY.md`) is all that's left to make it live.
 
 **Deliberately deferred for safety / scope:**
 4. **Cross-round state (progression node)** — persisting value across rounds
