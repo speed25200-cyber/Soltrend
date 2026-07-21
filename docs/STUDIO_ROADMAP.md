@@ -54,6 +54,8 @@ games with no code, and earn from them. This tracks the vision and what's shippe
 - Per-game community bankroll + staking (pro-rata shares), staker-favoured edge
   split (60/20/15/5), bankroll-relative bet cap, creator bond.
 - **Remix royalty lineage** — originals earn 15% of their remixes' royalties.
+- **On-chain asset sales** — `buy_asset` splits a marketplace purchase (5%
+  platform, rest to the seller's creator vault); no house exposure.
 - On-chain: `house_vault` program with commit-reveal, authority-gated + native
   trustless settlement, per-pool kill-switch.
 
@@ -68,8 +70,11 @@ are built + unit-tested but only run once the API is deployed):
 2. **LLM game creation** — a true "describe → game" model + an AI balance/tuning
    assistant. The offline keyword assistant ships today; the LLM upgrade needs a
    hosted model.
-3. **Revenue-share market payouts** — on-chain settlement of asset-sale royalties
-   (the browsable market + install tracking ship today, client-side).
+
+The **on-chain asset revenue-share** now exists: `house_vault::buy_asset` settles
+a marketplace sale — 5% platform fee, the rest accrues to the seller's creator
+vault (claimed via the KYC-gated royalty path). Wiring the client's free installs
+to paid, wallet-signed purchases is the remaining integration step.
 
 **Deliberately deferred for safety / scope:**
 4. **Cross-round state (progression node)** — persisting value across rounds

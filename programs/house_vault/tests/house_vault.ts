@@ -216,6 +216,33 @@ describe('house_vault', () => {
     assert.equal(cv.accrued.toNumber(), 0);
   });
 
+  it('buys a marketplace asset — 5% platform fee, rest accrues to the seller', async () => {
+    const assetId = Array.from(Buffer.alloc(32, 7));
+    const price = 1_000_000; // lamports
+    const before = (await program.account.creatorVault.fetch(creatorVault)).accrued.toNumber();
+    await program.methods
+      .buyAsset(assetId, new anchor.BN(price))
+      .accounts({ config, treasury, creatorVault, owner: creator.publicKey, seller: creator.publicKey, buyer: admin.publicKey, systemProgram: SystemProgram.programId })
+      .rpc();
+    const cv = await program.account.creatorVault.fetch(creatorVault);
+    // 5% fee → 95% royalty to the seller
+    assert.equal(cv.accrued.toNumber() - before, price - Math.floor((price * 500) / 10000));
+  });
+
+  it('rejects buying your own asset (no wash-trading royalties)', async () => {
+    const assetId = Array.from(Buffer.alloc(32, 9));
+    try {
+      await program.methods
+        .buyAsset(assetId, new anchor.BN(1000))
+        .accounts({ config, treasury, creatorVault, owner: creator.publicKey, seller: creator.publicKey, buyer: creator.publicKey, systemProgram: SystemProgram.programId })
+        .signers([creator])
+        .rpc();
+      assert.fail('should block self-purchase');
+    } catch (e) {
+      assert.include(e.toString(), 'SelfPurchase');
+    }
+  });
+
   it('unstakes pro-rata value back to the staker', async () => {
     const pos = await program.account.stakePosition.fetch(position);
     await program.methods

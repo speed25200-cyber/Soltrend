@@ -35,6 +35,9 @@ const VIRT: u128 = 1_000_000;
 /// A player may reclaim an unsettled bet after this many slots (~40 min), so a
 /// withholding settlement authority can never trap player funds.
 const SETTLE_TIMEOUT_SLOTS: u64 = 5_400;
+/// Platform fee on a marketplace asset sale (symbol pack / module), in bps. The
+/// creator (seller) keeps the remainder — the asset creator economy.
+const ASSET_FEE_BPS: u64 = 500; // 5%
 
 #[program]
 pub mod house_vault {
@@ -522,6 +525,47 @@ pub mod house_vault {
         ctx.accounts.config.paused = paused;
         Ok(())
     }
+
+    /// Buy a marketplace asset (symbol pack / module). The buyer pays `price`
+    /// lamports into the treasury; the platform keeps `ASSET_FEE_BPS`, the rest
+    /// accrues to the seller's creator vault (claimable like a game royalty).
+    /// A pure value transfer — no bankroll, no house exposure.
+    pub fn buy_asset(ctx: Context<BuyAsset>, asset_id: [u8; 32], price: u64) -> Result<()> {
+        require!(!ctx.accounts.config.paused, CasinoError::Paused);
+        require!(price > 0, CasinoError::ZeroAmount);
+        // The seller cannot buy from themselves (no wash-trading royalties).
+        require!(ctx.accounts.buyer.key() != ctx.accounts.creator_vault.owner, CasinoError::SelfPurchase);
+
+        // Move the funds into the treasury PDA via a system transfer.
+        anchor_lang::system_program::transfer(
+            CpiContext::new(
+                ctx.accounts.system_program.to_account_info(),
+                anchor_lang::system_program::Transfer {
+                    from: ctx.accounts.buyer.to_account_info(),
+                    to: ctx.accounts.treasury.to_account_info(),
+                },
+            ),
+            price,
+        )?;
+
+        // Split: platform fee to the treasury, remainder accrues to the seller.
+        let fee = (price as u128 * ASSET_FEE_BPS as u128 / BPS_DENOM as u128) as u64;
+        let royalty = price.saturating_sub(fee);
+        let treasury = &mut ctx.accounts.treasury;
+        treasury.platform_accrued = treasury.platform_accrued.saturating_add(fee);
+        let cv = &mut ctx.accounts.creator_vault;
+        cv.accrued = cv.accrued.saturating_add(royalty);
+
+        emit!(AssetPurchased {
+            asset_id,
+            buyer: ctx.accounts.buyer.key(),
+            seller: cv.owner,
+            price,
+            royalty,
+            platform_fee: fee,
+        });
+        Ok(())
+    }
 }
 
 /* ----------------------------------------------- native fairness (on-chain) */
@@ -791,6 +835,25 @@ pub struct ClaimRoyalties<'info> {
 }
 
 #[derive(Accounts)]
+pub struct BuyAsset<'info> {
+    #[account(seeds = [b"config"], bump, has_one = treasury)]
+    pub config: Account<'info, Config>,
+    #[account(mut, seeds = [b"treasury"], bump = treasury.bump)]
+    pub treasury: Account<'info, Treasury>,
+    /// The seller's creator vault — the sale royalty accrues here.
+    #[account(mut, seeds = [b"creator", seller.key().as_ref()], bump, has_one = owner)]
+    pub creator_vault: Account<'info, CreatorVault>,
+    /// CHECK: matched against creator_vault.owner via `has_one = owner`.
+    #[account(address = creator_vault.owner)]
+    pub owner: UncheckedAccount<'info>,
+    /// CHECK: the seller pubkey used to derive the creator vault PDA.
+    pub seller: UncheckedAccount<'info>,
+    #[account(mut)]
+    pub buyer: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
 pub struct ClaimProtocol<'info> {
     #[account(seeds = [b"config"], bump, has_one = admin, has_one = treasury)]
     pub config: Account<'info, Config>,
@@ -968,6 +1031,16 @@ pub struct Unstaked {
 }
 
 #[event]
+pub struct AssetPurchased {
+    pub asset_id: [u8; 32],
+    pub buyer: Pubkey,
+    pub seller: Pubkey,
+    pub price: u64,
+    pub royalty: u64,
+    pub platform_fee: u64,
+}
+
+#[event]
 pub struct RoyaltiesClaimed {
     pub creator: Pubkey,
     pub amount: u64,
@@ -1023,4 +1096,6 @@ pub enum CasinoError {
     NothingToClaim,
     #[msg("Program is paused")]
     Paused,
+    #[msg("Cannot buy your own asset")]
+    SelfPurchase,
 }

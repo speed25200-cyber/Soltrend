@@ -104,6 +104,15 @@ spec an external auditor should verify before mainnet.
   open bets still settle. Verify the admin/creator authorisation and that a paused
   pool cannot accept new liability.
 - **Geo / KYC / RG** — enforced at the app + compliance layer.
+- **Asset sales (`buy_asset`).** A pure value transfer for the marketplace: the
+  buyer system-transfers `price` lamports into the treasury PDA; the platform
+  keeps `ASSET_FEE_BPS` (5%) and the remainder accrues to the **seller's**
+  `CreatorVault.accrued` (claimed via the existing KYC-gated `claim_royalties`).
+  No bankroll, no house variance. Guards: program-pause honoured, `price > 0`,
+  and `buyer != creator_vault.owner` (no wash-trading royalties). **Auditor:**
+  confirm the fee/royalty split is exhaustive (`fee + royalty == price`) and that
+  the treasury lamport balance always covers `platform_accrued + Σ creator
+  accrued` before any claim can drain it.
 
 ## Test coverage
 
