@@ -14,6 +14,7 @@ import { PlazaGateway } from './realtime/plaza.gateway';
 import { DuelGateway } from './realtime/duel.gateway';
 import { JackpotGateway } from './realtime/jackpot.gateway';
 import { ShowdownGateway } from './realtime/showdown.gateway';
+import { HeistGateway } from './realtime/heist.gateway';
 
 /**
  * Single module → all services are shared singletons, so the fair, games,
@@ -21,6 +22,6 @@ import { ShowdownGateway } from './realtime/showdown.gateway';
  */
 @Module({
   controllers: [AppController, FairController, GamesController, MetricsController, ComplianceController],
-  providers: [SessionStore, FairService, GamesService, MetricsService, ComplianceService, RealtimeGateway, PlazaGateway, DuelGateway, JackpotGateway, ShowdownGateway],
+  providers: [SessionStore, FairService, GamesService, MetricsService, ComplianceService, RealtimeGateway, PlazaGateway, DuelGateway, JackpotGateway, ShowdownGateway, HeistGateway],
 })
 export class AppModule {}

@@ -8,30 +8,34 @@ import { BetAmount } from '@/components/BetControls';
 import { useDuel } from '@/hooks/useDuel';
 import { useJackpot } from '@/hooks/useJackpot';
 import { useShowdown } from '@/hooks/useShowdown';
+import { useHeist } from '@/hooks/useHeist';
 import { usePlay } from '@/hooks/usePlay';
 import { useShipSkin } from '@/hooks/useShipSkin';
-import { shortAddr } from '@/lib/format';
+import { shortAddr, fmtMult } from '@/lib/format';
 import { sfx } from '@/lib/sound';
 import { burstWin } from '@/lib/fx';
 import type { IconName } from '@/components/Icon';
 
-const SUBS: Record<'duel' | 'jackpot' | 'showdown', { title: string; sub: string }> = {
+type Mode = 'duel' | 'jackpot' | 'showdown' | 'heist';
+const SUBS: Record<Mode, { title: string; sub: string }> = {
   duel: { title: '1v1 Duel', sub: 'Queue with an ante, get matched, and let a provably-fair coin decide it. Winner takes the pot minus a small rake — server-authoritative, commit-reveal verifiable.' },
   jackpot: { title: 'Shared Jackpot', sub: 'Everyone enters one growing community pot; a provably-fair weighted draw picks the winner. Your win chance equals your share of the pot.' },
   showdown: { title: 'Game Show', sub: 'Buy in for the table stake and survive the elimination — contestants drop one at a time until one provably-fair winner takes the pot.' },
+  heist: { title: 'Co-op Heist', sub: 'Ride one shared multiplier with the crew and grab your loot before the bust. A crew vault pays a bonus only if everyone makes it out — pull for each other.' },
 };
 
 export default function DuelPage() {
-  const [mode, setMode] = useState<'duel' | 'jackpot' | 'showdown'>('duel');
+  const [mode, setMode] = useState<Mode>('duel');
   return (
     <div className="space-y-6">
       <SectionHead eyebrow="PvP · Multiplayer" title={SUBS[mode].title} sub={SUBS[mode].sub} />
-      <div className="mx-auto flex w-full max-w-md gap-1 rounded-xl bg-void-900/80 p-1">
+      <div className="mx-auto grid w-full max-w-md grid-cols-4 gap-1 rounded-xl bg-void-900/80 p-1">
         <TabBtn active={mode === 'duel'} onClick={() => setMode('duel')} icon="target" label="Duel" />
         <TabBtn active={mode === 'jackpot'} onClick={() => setMode('jackpot')} icon="crown" label="Jackpot" />
-        <TabBtn active={mode === 'showdown'} onClick={() => setMode('showdown')} icon="sparkle" label="Game Show" />
+        <TabBtn active={mode === 'showdown'} onClick={() => setMode('showdown')} icon="sparkle" label="Show" />
+        <TabBtn active={mode === 'heist'} onClick={() => setMode('heist')} icon="bolt" label="Heist" />
       </div>
-      {mode === 'duel' ? <DuelRoom /> : mode === 'jackpot' ? <JackpotRoom /> : <ShowdownRoom />}
+      {mode === 'duel' ? <DuelRoom /> : mode === 'jackpot' ? <JackpotRoom /> : mode === 'showdown' ? <ShowdownRoom /> : <HeistRoom />}
     </div>
   );
 }
@@ -333,13 +337,106 @@ function ShowdownRoom() {
   );
 }
 
-function OfflinePanel({ kind = 'duel' }: { kind?: 'duel' | 'jackpot' | 'showdown' }) {
+function HeistRoom() {
+  const { state, join, grab, enabled } = useHeist();
+  const { publicKey } = useWallet();
+  const { guard, settle } = usePlay();
+  const [ship] = useShipSkin();
+  const [ante, setAnte] = useState(0.1);
+  const settledRef = useRef<number | null>(null);
+  const wallet = publicKey ? shortAddr(publicKey.toBase58()) : 'you';
+  const me = state.crew.find((m) => m.wallet === wallet);
+
+  useEffect(() => {
+    if (state.phase !== 'result' || settledRef.current === state.runId || !me) return;
+    settledRef.current = state.runId;
+    const won = (me.won ?? 0) > 0;
+    settle(
+      {
+        game: 'Co-op Heist',
+        template: 'limbo',
+        bet: me.ante,
+        multiplier: me.ante > 0 ? (me.won ?? 0) / me.ante : 0,
+        payout: me.won ?? 0,
+        win: won,
+        meta: { runId: state.runId, lockedM: me.lockedM ?? 0, allGrabbed: state.allGrabbed },
+        seeds: { serverSeed: state.serverSeed ?? '', serverSeedHash: state.hash ?? '', clientSeed: '', nonce: state.runId },
+      },
+      { quiet: true },
+    );
+    if (won) { sfx.win((me.won ?? 0) / me.ante); burstWin((me.won ?? 0) / me.ante); } else { sfx.loss(); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.phase, state.runId]);
+
+  if (!enabled) return <OfflinePanel kind="heist" />;
+
+  const onJoin = () => {
+    const g = guard(ante);
+    if (!g.ok) return;
+    join(ante, wallet, ship.id);
+  };
+  const grabbed = me?.lockedM != null;
+  const busted = state.phase === 'result' && me && (me.won ?? 0) === 0;
+
+  return (
+    <div className="mx-auto grid max-w-2xl gap-4">
+      <div className="glass grid place-items-center gap-1 p-6 text-center">
+        <span className="label-eyebrow">{state.phase === 'running' ? 'Loot multiplier' : state.phase === 'result' ? 'Busted at' : 'Crew gathering'}</span>
+        <span className={`font-display text-5xl font-bold ${state.phase === 'result' ? 'text-loss' : 'text-win'}`}>
+          {fmtMult(state.phase === 'result' ? state.bust ?? 0 : state.multiplier)}
+        </span>
+        <span className="text-xs text-slate-500">
+          {state.phase === 'gather' ? `Sets off in ${Math.ceil(state.gatherInMs / 1000)}s · ` : ''}
+          {state.crew.length} in the crew · {Math.round(state.vaultCut * 100)}% feeds the vault
+        </span>
+      </div>
+
+      {state.phase === 'result' && (
+        <div className={`glass grid place-items-center gap-2 p-6 text-center ${(me?.won ?? 0) > 0 ? 'ring-1 ring-win/50' : ''}`}>
+          <h3 className="font-display text-lg font-bold text-white">
+            {busted ? 'You didn’t grab in time' : (me?.won ?? 0) > 0 ? `You banked ◎${me?.won}` : 'Heist over'}
+          </h3>
+          {state.allGrabbed && <p className="text-sm text-win">Whole crew made it — vault bonus of ◎{state.vault} split!</p>}
+          {state.serverSeed && <code className="max-w-full truncate rounded bg-void-950/60 px-2 py-1 text-[10px] text-slate-500">seed {state.serverSeed.slice(0, 24)}…</code>}
+        </div>
+      )}
+
+      {state.phase === 'gather' && (
+        <div className="glass space-y-3 p-6">
+          <BetAmount value={ante} onChange={setAnte} />
+          <button className="btn-primary w-full" onClick={onJoin} disabled={!state.connected || !!me}>
+            {me ? `You're in for ◎${me.ante}` : `Join the crew · ◎${ante}`}
+          </button>
+        </div>
+      )}
+
+      {state.phase === 'running' && me && (
+        <button className="btn-primary btn-win w-full !py-4 text-lg" onClick={grab} disabled={grabbed}>
+          {grabbed ? `Loot locked at ${fmtMult(me.lockedM ?? 1)}` : `Grab loot · ${fmtMult(state.multiplier)}`}
+        </button>
+      )}
+
+      {state.crew.length > 0 && (
+        <div className="glass grid grid-cols-2 gap-2 p-4 sm:grid-cols-3">
+          {state.crew.map((m) => (
+            <div key={m.wallet} className="flex items-center justify-between rounded-lg px-2 py-1.5 text-sm">
+              <span className={m.wallet === wallet ? 'font-semibold text-win' : 'text-slate-300'}>{m.wallet}</span>
+              <span className="font-mono text-xs text-slate-400">{m.lockedM != null ? fmtMult(m.lockedM) : state.phase === 'result' ? '✕' : '…'}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OfflinePanel({ kind = 'duel' }: { kind?: 'duel' | 'jackpot' | 'showdown' | 'heist' }) {
   return (
     <div className="glass mx-auto max-w-2xl space-y-4 p-8 text-center">
-      <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-neon-violet/15 text-neon-violet"><Icon name={kind === 'jackpot' ? 'crown' : kind === 'showdown' ? 'sparkle' : 'target'} size={26} /></span>
-      <h3 className="font-display text-lg font-bold text-white">{kind === 'jackpot' ? 'Shared jackpot' : kind === 'showdown' ? 'The game show' : 'Duels'} need a hosted server</h3>
+      <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-neon-violet/15 text-neon-violet"><Icon name={kind === 'jackpot' ? 'crown' : kind === 'showdown' ? 'sparkle' : kind === 'heist' ? 'bolt' : 'target'} size={26} /></span>
+      <h3 className="font-display text-lg font-bold text-white">{kind === 'jackpot' ? 'Shared jackpot' : kind === 'showdown' ? 'The game show' : kind === 'heist' ? 'The co-op heist' : 'Duels'} need a hosted server</h3>
       <p className="mx-auto max-w-lg text-sm text-slate-400">
-        {kind === 'jackpot' ? 'The shared pot and its provably-fair draw' : kind === 'showdown' ? 'The live elimination and its provably-fair order' : 'PvP matchmaking and the commit-reveal settle'} run on a hosted Node process a static host can&apos;t provide. The gateway is built and ready in{' '}
+        {kind === 'jackpot' ? 'The shared pot and its provably-fair draw' : kind === 'showdown' ? 'The live elimination and its provably-fair order' : kind === 'heist' ? 'The shared multiplier and the crew vault' : 'PvP matchmaking and the commit-reveal settle'} run on a hosted Node process a static host can&apos;t provide. The gateway is built and ready in{' '}
         <code className="rounded bg-void-900 px-1.5 py-0.5 text-xs text-slate-300">apps/api</code>.
       </p>
       <div className="rounded-xl border border-white/10 bg-void-950/60 p-4 text-left text-xs text-slate-400">

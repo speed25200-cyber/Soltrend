@@ -219,3 +219,29 @@ describe('game-show elimination', () => {
     }
   });
 });
+
+describe('co-op heist', () => {
+  it('splits antes into stake + crew vault and pays the bonus only when all grab', async () => {
+    const { stakeOf, crewVault, heistPayout, VAULT_CUT } = await import('../src/realtime/heist');
+    expect(VAULT_CUT).toBe(0.05);
+    expect(stakeOf(1)).toBeCloseTo(0.95);
+    const antes = [1, 1, 2];
+    expect(crewVault(antes)).toBeCloseTo(4 * 0.05); // 0.2 pooled
+    const vault = crewVault(antes);
+    // all grabbed → survivor gets stake*m plus an equal vault share
+    expect(heistPayout(1, 2, true, vault, 3)).toBeCloseTo(0.95 * 2 + vault / 3);
+    // not everyone grabbed → no vault bonus
+    expect(heistPayout(1, 2, false, vault, 2)).toBeCloseTo(0.95 * 2);
+    // busted (lockedM 0) → nothing
+    expect(heistPayout(1, 0, true, vault, 3)).toBe(0);
+  });
+
+  it('the crew vault is player redistribution, never house exposure', async () => {
+    const { stakeOf, crewVault } = await import('../src/realtime/heist');
+    const antes = [0.1, 0.2, 0.3, 0.4];
+    const totalStake = antes.reduce((s, a) => s + stakeOf(a), 0);
+    const vault = crewVault(antes);
+    // stakes + vault reconstruct the total antes exactly (nothing minted)
+    expect(totalStake + vault).toBeCloseTo(antes.reduce((s, a) => s + a, 0), 5);
+  });
+});
