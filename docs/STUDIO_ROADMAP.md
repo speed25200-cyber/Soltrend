@@ -39,6 +39,8 @@ games with no code, and earn from them. This tracks the vision and what's shippe
 - **Creator pages** — a maker's catalog + aggregate stats + remix reach.
 - **Top creators** + **novelty-ranked "genuinely new"** sections on Discover.
 - **The Floor** — a spatial 3D discovery view of the community's games.
+- **Collection / journeys** — cosmetic per-game tiers + a collection wall
+  (Explorer→Diamond), purely decorative and vault-safe.
 
 **Multiplayer**
 - **Live Crash rooms** + shared **3D plaza** (presence).
@@ -81,13 +83,18 @@ the client sends the wallet-signed purchase when a program id is configured
 (`NEXT_PUBLIC_HOUSE_VAULT_PROGRAM`), falling back to free installs otherwise.
 Deploying the program (see `docs/DEPLOY.md`) is all that's left to make it live.
 
-**Deliberately deferred for safety / scope:**
-4. **Cross-round state (progression node)** — persisting value across rounds
-   breaks the per-round independence the vault-safety simulator relies on; needs
-   a bounded design that keeps every round provably capped before it ships.
-5. **Per-game quests / battle pass** and **collectibles / loot drops** —
-   engagement metas. The platform already has XP/VIP, missions and achievements;
-   any per-game layer must stay cosmetic and behind the RG limits below.
+**Cross-round progression** ships in its vault-safe form: cosmetic per-game
+**journeys** (a collection meta — rounds played climb decorative Explorer→Diamond
+tiers, shown on the profile + play screen) that never touch odds, payouts or the
+bankroll, so per-round independence and the vault-safety simulator are unaffected.
+
+**Deliberately NOT built (a principled boundary):**
+- A **payout-affecting** progression node (streak bonuses that raise the ceiling)
+  would break per-round vault-safety and needs a bounded, provably-capped design
+  decision before it could ship. The cosmetic journey above is the safe version.
+- **Quests / battle-pass / loot drops** as *new spend incentives* — the platform
+  already has XP/VIP, missions and achievements; adding grind-to-win loops on a
+  gambling product cuts against the responsible-gaming guardrail below.
 
 ## Guardrails
 
