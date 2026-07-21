@@ -1,7 +1,8 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { NODE_DEFS, newId, type ForgeGraph, type ForgeNode, type NodeKind } from '@/lib/forge/model';
+import { listModules, saveModule, deleteModule, instantiate, type ForgeModule } from '@/lib/forge/modules';
 import { Icon } from '@/components/Icon';
 
 const NODE_W = 168;
@@ -20,6 +21,19 @@ export function ForgeEditor({ graph, onChange }: { graph: ForgeGraph; onChange: 
   const [selected, setSelected] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
   const clampZoom = (z: number) => Math.max(0.45, Math.min(1.3, Math.round(z * 100) / 100));
+  const [modules, setModules] = useState<ForgeModule[]>([]);
+  useEffect(() => setModules(listModules()), []);
+
+  // Save the current mechanic (everything but the Payout) as a reusable module.
+  const saveAsModule = () => {
+    const nodes = graph.nodes.filter((n) => n.kind !== 'payout');
+    if (nodes.length === 0) return;
+    const name = typeof window !== 'undefined' ? window.prompt('Name this module', 'My mechanic') : null;
+    if (!name) return;
+    setModules(saveModule(name, nodes));
+  };
+  const insertModule = (mod: ForgeModule) => update([...graph.nodes, ...instantiate(mod.nodes)]);
+  const removeModule = (id: string) => setModules(deleteModule(id));
 
   const update = (nodes: ForgeNode[]) => onChange({ nodes });
   const patch = (id: string, fn: (n: ForgeNode) => ForgeNode) => update(graph.nodes.map((n) => (n.id === id ? fn(n) : n)));
@@ -110,6 +124,20 @@ export function ForgeEditor({ graph, onChange }: { graph: ForgeGraph; onChange: 
           </button>
         ))}
         {pending && <span className="chip !border-neon-violet/50 !text-neon-violet">Click an input port to connect · click source again to cancel</span>}
+      </div>
+
+      {/* Reusable modules — save a mechanic, drop it into any game */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <button onClick={saveAsModule} className="chip hover:border-neon-cyan/50 !text-[0.7rem]" title="Save the current mechanic (all but Payout) as a reusable module">
+          <Icon name="spark" size={11} /> Save as module
+        </button>
+        {modules.length > 0 && <span className="label-eyebrow mx-1">modules</span>}
+        {modules.map((m) => (
+          <span key={m.id} className="chip group !gap-1 !text-[0.7rem]">
+            <button onClick={() => insertModule(m)} className="hover:text-neon-cyan" title="Insert this module">{m.name}</button>
+            <button onClick={() => removeModule(m.id)} className="text-slate-600 hover:text-loss" title="Delete module"><Icon name="close" size={9} /></button>
+          </span>
+        ))}
       </div>
 
       <div className="relative">
