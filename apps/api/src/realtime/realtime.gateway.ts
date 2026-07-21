@@ -9,6 +9,7 @@ import {
   OnGatewayConnection,
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
+import { OnModuleDestroy } from '@nestjs/common';
 import type { Server, Socket } from 'socket.io';
 import { crashPoint, commit, liveMultiplier } from './crash';
 
@@ -32,6 +33,7 @@ interface Round {
   nonce: number;
   crashPoint: number;
   startedAt: number; // ms epoch of running-phase start
+  bettingEndsAt: number; // ms epoch when the betting window closes
   players: Map<string, Player>;
 }
 
@@ -51,14 +53,25 @@ const EDGE = 0.02;
  * play-money for the demo; a production deploy would debit/credit the vault.
  */
 @WebSocketGateway({ cors: { origin: '*' }, namespace: '/live' })
-export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
+export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect, OnModuleDestroy {
   @WebSocketServer() server!: Server;
   private round!: Round;
   private roundCounter = 0;
   private history: { id: number; crashPoint: number }[] = [];
+  // Retained timer handles so the whole engine can be torn down (no leaks /
+  // zombie chains on shutdown, hot-reload or test teardown).
+  private betTimer?: ReturnType<typeof setTimeout>;
+  private runInterval?: ReturnType<typeof setInterval>;
+  private resultTimer?: ReturnType<typeof setTimeout>;
 
   afterInit() {
     this.startBetting();
+  }
+
+  onModuleDestroy() {
+    if (this.betTimer) clearTimeout(this.betTimer);
+    if (this.runInterval) clearInterval(this.runInterval);
+    if (this.resultTimer) clearTimeout(this.resultTimer);
   }
 
   handleConnection(client: Socket) {
@@ -108,24 +121,31 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       nonce: this.roundCounter,
       crashPoint: crashPoint(serverSeed, roundSeed, this.roundCounter, EDGE),
       startedAt: 0,
+      bettingEndsAt: Date.now() + BETTING_MS,
       players: new Map(),
     };
     this.broadcast();
-    setTimeout(() => this.startRunning(), BETTING_MS);
+    this.betTimer = setTimeout(() => this.startRunning(), BETTING_MS);
   }
 
   private startRunning() {
     this.round.phase = 'running';
     this.round.startedAt = Date.now();
     this.broadcast();
-    const tick = setInterval(() => {
-      const m = liveMultiplier(Date.now() - this.round.startedAt);
-      if (m >= this.round.crashPoint) {
-        clearInterval(tick);
+    // Capture THIS round so a stale interval can never act on a newer one.
+    const r = this.round;
+    this.runInterval = setInterval(() => {
+      if (this.round !== r || r.phase !== 'running') {
+        if (this.runInterval) clearInterval(this.runInterval);
+        return;
+      }
+      const m = liveMultiplier(Date.now() - r.startedAt);
+      if (m >= r.crashPoint) {
+        clearInterval(this.runInterval);
         this.bust();
         return;
       }
-      this.server.emit('tick', { roundId: this.round.id, multiplier: Math.min(m, this.round.crashPoint) });
+      this.server.emit('tick', { roundId: r.id, multiplier: Math.min(m, r.crashPoint) });
     }, TICK_MS);
   }
 
@@ -144,7 +164,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       nonce: this.round.nonce,
       players: this.playerList(),
     });
-    setTimeout(() => this.startBetting(), RESULT_MS);
+    this.resultTimer = setTimeout(() => this.startBetting(), RESULT_MS);
   }
 
   /* -------------------------------------------------------------------- emit */
@@ -162,7 +182,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
       crashPoint: r.phase === 'result' ? r.crashPoint : null,
       serverSeed: includeSeedOnResult && r.phase === 'result' ? r.serverSeed : null,
       multiplier: r.phase === 'running' ? liveMultiplier(Date.now() - r.startedAt) : 1,
-      bettingEndsIn: r.phase === 'betting' ? BETTING_MS : 0,
+      bettingEndsIn: r.phase === 'betting' ? Math.max(0, r.bettingEndsAt - Date.now()) : 0,
       players: this.playerList(),
     };
   }
