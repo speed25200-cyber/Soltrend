@@ -15,6 +15,7 @@ import { setSoundOn } from '@/lib/sound';
 
 const NAV = [
   { href: '/', label: 'Lobby', icon: LobbyIcon },
+  { href: '/live', label: 'Live', icon: LiveIcon },
   { href: '/discover', label: 'Discover', icon: DiscoverIcon },
   { href: '/studio', label: 'Create', icon: CreateIcon },
   { href: '/rewards', label: 'Rewards', icon: RewardIcon },
@@ -50,7 +51,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Link>
 
           <nav className="ml-4 hidden items-center gap-1 md:flex">
-            {NAV.slice(0, 5).map((n) => (
+            {NAV.slice(0, 6).map((n) => (
               <Link
                 key={n.href}
                 href={n.href}
@@ -79,7 +80,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {/* Bottom nav (mobile-first) */}
       <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-white/[0.06] bg-void-950/85 backdrop-blur-xl md:hidden">
-        <div className="mx-auto grid max-w-lg grid-cols-5">
+        <div className="mx-auto grid max-w-lg grid-cols-6">
           {BOTTOM.map((n) => {
             const active = isActive(n.href);
             const Icon = n.icon;
@@ -137,6 +138,14 @@ function LobbyIcon({ active }: IconP) {
       <rect x="13" y="3" width="8" height="8" rx="2" stroke={c(active)} strokeWidth="2" />
       <rect x="3" y="13" width="8" height="8" rx="2" stroke={c(active)} strokeWidth="2" />
       <rect x="13" y="13" width="8" height="8" rx="2" stroke={c(active)} strokeWidth="2" />
+    </svg>
+  );
+}
+function LiveIcon({ active }: IconP) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="3" fill={c(active)} />
+      <path d="M6.3 6.3a8 8 0 000 11.4M17.7 6.3a8 8 0 010 11.4" stroke={c(active)} strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
 }
