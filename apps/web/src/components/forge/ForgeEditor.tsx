@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { NODE_DEFS, newId, type ForgeGraph, type ForgeNode, type NodeKind } from '@/lib/forge/model';
-import { listModules, saveModule, deleteModule, instantiate, type ForgeModule } from '@/lib/forge/modules';
+import { listModules, saveModule, deleteModule, instantiate, encodeModule, decodeModule, type ForgeModule } from '@/lib/forge/modules';
+import { publishModule } from '@/lib/market';
 import { Icon } from '@/components/Icon';
 
 const NODE_W = 168;
@@ -34,6 +35,23 @@ export function ForgeEditor({ graph, onChange }: { graph: ForgeGraph; onChange: 
   };
   const insertModule = (mod: ForgeModule) => update([...graph.nodes, ...instantiate(mod.nodes)]);
   const removeModule = (id: string) => setModules(deleteModule(id));
+  const [modMsg, setModMsg] = useState('');
+  const importModule = () => {
+    const code = typeof window !== 'undefined' ? window.prompt('Paste a module code') : null;
+    if (!code) return;
+    const mod = decodeModule(code);
+    if (!mod) { setModMsg('Invalid module code'); return; }
+    setModules(saveModule(mod.name, mod.nodes));
+    setModMsg(`Imported "${mod.name}"`);
+  };
+  const shareModule = async (mod: ForgeModule) => {
+    const code = encodeModule(mod.name, mod.nodes);
+    try { await navigator.clipboard.writeText(code); setModMsg('Module code copied'); } catch { setModMsg(code); }
+  };
+  const publishToMarket = (mod: ForgeModule) => {
+    publishModule(mod.name, 'you', encodeModule(mod.name, mod.nodes), mod.nodes.length);
+    setModMsg(`Published "${mod.name}" to the marketplace`);
+  };
 
   const update = (nodes: ForgeNode[]) => onChange({ nodes });
   const patch = (id: string, fn: (n: ForgeNode) => ForgeNode) => update(graph.nodes.map((n) => (n.id === id ? fn(n) : n)));
@@ -131,13 +149,19 @@ export function ForgeEditor({ graph, onChange }: { graph: ForgeGraph; onChange: 
         <button onClick={saveAsModule} className="chip hover:border-neon-cyan/50 !text-[0.7rem]" title="Save the current mechanic (all but Payout) as a reusable module">
           <Icon name="spark" size={11} /> Save as module
         </button>
+        <button onClick={importModule} className="chip hover:border-neon-cyan/50 !text-[0.7rem]" title="Import a module from a shared code">
+          Import
+        </button>
         {modules.length > 0 && <span className="label-eyebrow mx-1">modules</span>}
         {modules.map((m) => (
-          <span key={m.id} className="chip group !gap-1 !text-[0.7rem]">
+          <span key={m.id} className="chip group !gap-1.5 !text-[0.7rem]">
             <button onClick={() => insertModule(m)} className="hover:text-neon-cyan" title="Insert this module">{m.name}</button>
+            <button onClick={() => shareModule(m)} className="text-slate-600 hover:text-neon-cyan" title="Copy share code"><Icon name="spark" size={9} /></button>
+            <button onClick={() => publishToMarket(m)} className="text-slate-600 hover:text-neon-violet" title="Publish to marketplace"><Icon name="star" size={9} /></button>
             <button onClick={() => removeModule(m.id)} className="text-slate-600 hover:text-loss" title="Delete module"><Icon name="close" size={9} /></button>
           </span>
         ))}
+        {modMsg && <span className="text-[0.68rem] text-slate-500">{modMsg}</span>}
       </div>
 
       <div className="relative">

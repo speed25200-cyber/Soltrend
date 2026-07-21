@@ -90,6 +90,48 @@ export function bumpInstall(id: string): Record<string, number> {
   return counts;
 }
 
+/* --------------------------------------------------------------- modules */
+
+export interface MarketModule {
+  id: string;
+  name: string;
+  author: string;
+  code: string; // encoded module (MOD1.…)
+  nodeCount: number;
+}
+
+const MOD_KEY = 'soltrend-module-market';
+
+export function listPublishedModules(): MarketModule[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(MOD_KEY);
+    const arr = raw ? (JSON.parse(raw) as MarketModule[]) : [];
+    return Array.isArray(arr) ? arr : [];
+  } catch {
+    return [];
+  }
+}
+
+export function publishModule(name: string, author: string, code: string, nodeCount: number): MarketModule[] {
+  const m: MarketModule = { id: 'm' + Math.random().toString(36).slice(2, 9), name: name.trim().slice(0, 40) || 'Untitled module', author: author || 'anon', code, nodeCount };
+  const all = [m, ...listPublishedModules()].slice(0, 60);
+  write(MOD_KEY, all);
+  return all;
+}
+
+export function unpublishModule(id: string): MarketModule[] {
+  const all = listPublishedModules().filter((m) => m.id !== id);
+  write(MOD_KEY, all);
+  return all;
+}
+
+/** Community modules, ranked by install count. */
+export function allModules(): MarketModule[] {
+  const counts = installCounts();
+  return listPublishedModules().sort((a, b) => (counts[b.id] ?? 0) - (counts[a.id] ?? 0));
+}
+
 function write(key: string, value: unknown) {
   if (typeof window === 'undefined') return;
   try {

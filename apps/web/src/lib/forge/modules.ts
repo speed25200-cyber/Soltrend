@@ -52,6 +52,33 @@ export function deleteModule(id: string): ForgeModule[] {
   return all;
 }
 
+/* -------------------------------------------------------------- sharing */
+// Modules serialise to a compact base64 code so mechanics can be traded — the
+// logic half of the asset marketplace. Fresh ids are minted on import.
+
+const MOD_PREFIX = 'MOD1.';
+const b64e = (s: string) =>
+  typeof window === 'undefined' ? Buffer.from(s, 'utf8').toString('base64') : window.btoa(unescape(encodeURIComponent(s)));
+const b64d = (s: string) =>
+  typeof window === 'undefined' ? Buffer.from(s, 'base64').toString('utf8') : decodeURIComponent(escape(window.atob(s)));
+
+export function encodeModule(name: string, nodes: ForgeNode[]): string {
+  return MOD_PREFIX + b64e(JSON.stringify({ name, nodes }));
+}
+
+/** Decode a module code back into {name, nodes}, or null on junk. */
+export function decodeModule(code: string): { name: string; nodes: ForgeNode[] } | null {
+  try {
+    const body = code.trim().startsWith(MOD_PREFIX) ? code.trim().slice(MOD_PREFIX.length) : code.trim();
+    const o = JSON.parse(b64d(body)) as { name?: string; nodes?: ForgeNode[] };
+    if (!o || !Array.isArray(o.nodes) || o.nodes.length === 0) return null;
+    if (!o.nodes.every((n) => n && typeof n.kind === 'string' && typeof n.id === 'string' && n.params && n.inputs)) return null;
+    return { name: String(o.name ?? 'module').slice(0, 40), nodes: o.nodes };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Clone a saved cluster with fresh node ids, remapping internal wiring so the
  * copy is self-consistent; positions are offset so it doesn't land on top of the

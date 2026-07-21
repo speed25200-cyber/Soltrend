@@ -5,21 +5,39 @@ import Link from 'next/link';
 import { SectionHead } from '@/components/SectionHead';
 import { Icon } from '@/components/Icon';
 import { SpriteGlyph } from '@/components/create/SpriteGlyph';
-import { allPacks, bumpInstall, installCounts, unpublishPack, type MarketPack } from '@/lib/market';
+import { allPacks, allModules, bumpInstall, installCounts, unpublishPack, unpublishModule, type MarketPack, type MarketModule } from '@/lib/market';
 import { decodePack, listSprites, saveSprite } from '@/lib/sprites';
+import { decodeModule, listModules, saveModule } from '@/lib/forge/modules';
 
 export default function MarketPage() {
   const [packs, setPacks] = useState<MarketPack[]>([]);
+  const [modules, setModules] = useState<MarketModule[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [owned, setOwned] = useState(0);
+  const [ownedMods, setOwnedMods] = useState(0);
   const [msg, setMsg] = useState('');
 
   const refresh = () => {
     setPacks(allPacks());
+    setModules(allModules());
     setCounts(installCounts());
     setOwned(listSprites().length);
+    setOwnedMods(listModules().length);
   };
   useEffect(refresh, []);
+
+  const installMod = (m: MarketModule) => {
+    const mod = decodeModule(m.code);
+    if (!mod) return;
+    saveModule(mod.name, mod.nodes);
+    setCounts(bumpInstall(m.id));
+    setOwnedMods(listModules().length);
+    setMsg(`Installed module "${mod.name}" — find it in the node editor's modules bar`);
+  };
+  const removeMod = (m: MarketModule) => {
+    setModules(unpublishModule(m.id));
+    refresh();
+  };
 
   const install = (p: MarketPack) => {
     const sprites = decodePack(p.code);
@@ -60,7 +78,28 @@ export default function MarketPage() {
         ))}
       </div>
 
+      {modules.length > 0 && (
+        <section className="space-y-3">
+          <SectionHead eyebrow="Logic" title="Node modules" sub="Drop-in mechanics for node games — install, then find them in the editor's modules bar" />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {modules.map((m) => (
+              <div key={m.id} className="glass flex items-center justify-between gap-3 p-4">
+                <div className="min-w-0">
+                  <h3 className="truncate font-display font-bold text-white">{m.name}</h3>
+                  <p className="text-xs text-slate-500">by {m.author} · {m.nodeCount} nodes{(counts[m.id] ?? 0) > 0 ? ` · ${counts[m.id]} installs` : ''}</p>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <button onClick={() => installMod(m)} className="btn-primary !py-2 text-sm">Install</button>
+                  <button onClick={() => removeMod(m)} className="btn-ghost !py-2 text-sm" title="Unpublish">Remove</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       <div className="glass flex flex-col items-center gap-2 p-6 text-center">
+        <p className="text-xs text-slate-500">{ownedMods} module{ownedMods === 1 ? '' : 's'} in your editor</p>
         <p className="font-display text-lg font-bold text-white">Made your own symbols?</p>
         <p className="max-w-md text-sm text-slate-400">Publish a pack from the Symbols editor to share it with the community.</p>
         <Link href="/studio?mode=art" className="btn-primary">Open the Studio</Link>
