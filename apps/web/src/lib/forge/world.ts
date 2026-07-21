@@ -33,17 +33,51 @@ export const CAMERAS: { id: CameraId; label: string }[] = [
   { id: 'cinematic', label: 'Cinematic' },
 ];
 
+export type PropType = 'crystal' | 'ring' | 'pillar' | 'arch' | 'totem' | 'orb';
+
+export const PROP_TYPES: { id: PropType; label: string }[] = [
+  { id: 'crystal', label: 'Crystal' },
+  { id: 'ring', label: 'Ring' },
+  { id: 'pillar', label: 'Pillar' },
+  { id: 'arch', label: 'Arch' },
+  { id: 'totem', label: 'Totem' },
+  { id: 'orb', label: 'Orb' },
+];
+
+/** A decorative 3D object placed around the board — cosmetic only, no math impact. */
+export interface WorldProp {
+  id: string;
+  type: PropType;
+  angle: number;   // 0..360 around the board
+  radius: number;  // distance from centre
+  height: number;  // vertical offset
+  scale: number;
+  color: string;
+}
+
 export interface WorldSpec {
   board: BoardSpec;
   logic: ForgeGraph | null;
   environment: EnvironmentId;
   camera: CameraId;
+  props: WorldProp[];
   /** runtime scale that normalises the logic core to mean ≈ 1 (edge-neutral) */
   logicScale: number;
 }
 
 export const defaultWorld = (board: BoardSpec): WorldSpec => ({
-  board, logic: null, environment: 'nebula', camera: 'orbit', logicScale: 1,
+  board, logic: null, environment: 'nebula', camera: 'orbit', props: [], logicScale: 1,
+});
+
+let propCounter = 0;
+export const newProp = (type: PropType, color: string): WorldProp => ({
+  id: `p${(propCounter++).toString(36)}`,
+  type,
+  angle: (propCounter * 47) % 360,
+  radius: 4.2,
+  height: 0,
+  scale: 1,
+  color,
 });
 
 /** Fit the logic core so its average output is ~1× — pure variance, no edge. */
@@ -93,6 +127,7 @@ export function worldToParams(spec: WorldSpec): Record<string, number | string> 
     logicScale: spec.logicScale,
   };
   if (spec.logic) p.logic = JSON.stringify(spec.logic);
+  if (spec.props.length) p.props = JSON.stringify(spec.props);
   return p;
 }
 
@@ -105,9 +140,13 @@ export function worldFromParams(params?: Record<string, number | string>): World
   if (params?.logic) {
     try { logic = JSON.parse(String(params.logic)) as ForgeGraph; } catch { logic = null; }
   }
+  let props: WorldProp[] = [];
+  if (params?.props) {
+    try { props = JSON.parse(String(params.props)) as WorldProp[]; } catch { props = []; }
+  }
   const env = (params?.environment as EnvironmentId) || 'nebula';
   const cam = (params?.camera as CameraId) || 'orbit';
-  return { board, logic, environment: env, camera: cam, logicScale: Number(params?.logicScale) || 1 };
+  return { board, logic, environment: env, camera: cam, props, logicScale: Number(params?.logicScale) || 1 };
 }
 
 export const envDef = (id: EnvironmentId) => ENVIRONMENTS.find((e) => e.id === id) ?? ENVIRONMENTS[1];

@@ -13,8 +13,8 @@ import {
   clampSpec, cellCount, BOARD_SKINS, BOARD_FX, BOARD_TEMPLATES, type BoardSkin, type BoardFx,
 } from '@/lib/forge/board';
 import {
-  defaultWorld, worldStats, worldToParams, worldFromParams, normaliseLogic,
-  ENVIRONMENTS, CAMERAS, type WorldSpec, type EnvironmentId, type CameraId,
+  defaultWorld, worldStats, worldToParams, worldFromParams, normaliseLogic, newProp,
+  ENVIRONMENTS, CAMERAS, PROP_TYPES, type WorldSpec, type EnvironmentId, type CameraId, type PropType, type WorldProp,
 } from '@/lib/forge/world';
 import { starterGraph, simulateGraph } from '@/lib/forge/model';
 import { BACKGROUNDS, SOUND_PACKS, WIN_EFFECTS, type BackgroundId, type SoundPackId, type WinEffectId } from '@/lib/presentation';
@@ -70,6 +70,10 @@ export default function WorldsPage() {
     sfx.click();
   };
   const detachLogic = () => { setSpecRaw((s) => ({ ...s, logic: null, logicScale: 1 })); sfx.click(); };
+
+  const addProp = (type: PropType) => { setSpecRaw((s) => ({ ...s, props: [...s.props, newProp(type, BOARD_SKINS[s.board.skin].gem)] })); sfx.click(); };
+  const updateProp = (id: string, patch: Partial<WorldProp>) => setSpecRaw((s) => ({ ...s, props: s.props.map((p) => (p.id === id ? { ...p, ...patch } : p)) }));
+  const removeProp = (id: string) => setSpecRaw((s) => ({ ...s, props: s.props.filter((p) => p.id !== id) }));
   const editLogic = (graph: WorldSpec['logic']) => {
     if (!graph) return;
     setSpecRaw((s) => ({ ...s, logic: graph, logicScale: normaliseLogic(graph) }));
@@ -165,6 +169,42 @@ export default function WorldsPage() {
               <PickRow label="Reveal effect" items={BOARD_FX} value={spec.board.fx} onPick={(v) => { setBoard({ fx: v as BoardFx }); sfx.click(); }} />
               <PickRow label="Environment" items={ENVIRONMENTS} value={spec.environment} onPick={(v) => { setWorld({ environment: v as EnvironmentId }); sfx.click(); }} />
               <PickRow label="Camera" items={CAMERAS} value={spec.camera} onPick={(v) => { setWorld({ camera: v as CameraId }); sfx.click(); }} />
+
+              {/* Decor — editable 3D props */}
+              <div className="border-t border-white/[0.06] pt-3">
+                <div className="flex items-center justify-between">
+                  <span className="label-eyebrow">Decor · 3D props</span>
+                  <span className="text-[0.62rem] text-slate-500">{spec.props.length} placed</span>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {PROP_TYPES.map((t) => (
+                    <button key={t.id} onClick={() => addProp(t.id)} className="chip hover:border-neon-cyan/50 !text-[0.66rem]"><Icon name="spark" size={11} /> {t.label}</button>
+                  ))}
+                </div>
+                {spec.props.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {spec.props.map((p) => (
+                      <div key={p.id} className="rounded-xl border border-white/[0.06] bg-void-950/50 p-2.5">
+                        <div className="mb-1.5 flex items-center justify-between">
+                          <span className="flex items-center gap-1.5 text-xs font-semibold capitalize text-white">
+                            <span className="h-2.5 w-2.5 rounded-full" style={{ background: p.color }} /> {p.type}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <input type="color" value={p.color} onChange={(e) => updateProp(p.id, { color: e.target.value })} className="h-5 w-5 cursor-pointer rounded border-0 bg-transparent p-0" title="Colour" />
+                            <button onClick={() => removeProp(p.id)} className="text-slate-500 hover:text-loss" title="Remove"><Icon name="close" size={12} /></button>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                          <MiniSlider label="Angle" value={p.angle} min={0} max={360} step={5} onChange={(v) => updateProp(p.id, { angle: v })} />
+                          <MiniSlider label="Distance" value={p.radius} min={2.5} max={9} step={0.1} onChange={(v) => updateProp(p.id, { radius: v })} />
+                          <MiniSlider label="Height" value={p.height} min={-0.2} max={4} step={0.1} onChange={(v) => updateProp(p.id, { height: v })} />
+                          <MiniSlider label="Scale" value={p.scale} min={0.3} max={2.5} step={0.1} onChange={(v) => updateProp(p.id, { scale: v })} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           ) : (
             <div className="glass space-y-3 p-4">
@@ -275,6 +315,15 @@ function Slider({ label, value, min, max, onChange, accent }: { label: string; v
       <div className="flex items-center justify-between"><span className="label-eyebrow">{label}</span><span className="font-mono text-sm font-bold" style={{ color: accent || '#fff' }}>{value}</span></div>
       <input type="range" min={min} max={max} value={value} onChange={(e) => onChange(parseInt(e.target.value))} className="mt-2 w-full accent-neon-violet" style={accent ? { accentColor: accent } : undefined} />
     </div>
+  );
+}
+
+function MiniSlider({ label, value, min, max, step, onChange }: { label: string; value: number; min: number; max: number; step: number; onChange: (v: number) => void }) {
+  return (
+    <label className="block">
+      <span className="text-[0.58rem] uppercase tracking-wide text-slate-500">{label}</span>
+      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(parseFloat(e.target.value))} className="w-full accent-neon-cyan" />
+    </label>
   );
 }
 

@@ -6,7 +6,7 @@ import { OrbitControls, RoundedBox, Stars, Sparkles } from '@react-three/drei';
 import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import type { WorldSpec } from '@/lib/forge/world';
-import { envDef } from '@/lib/forge/world';
+import { envDef, type WorldProp } from '@/lib/forge/world';
 import { BOARD_SKINS, type BoardSkin } from '@/lib/forge/board';
 
 export interface World3DProps {
@@ -143,6 +143,43 @@ function Atmosphere({ env, skin }: { env: WorldSpec['environment']; skin: (typeo
   );
 }
 
+/** A placed decorative object — cosmetic, gently animated. */
+function Prop({ prop }: { prop: WorldProp }) {
+  const ref = useRef<THREE.Group>(null);
+  const a = (prop.angle * Math.PI) / 180;
+  const x = Math.cos(a) * prop.radius;
+  const z = Math.sin(a) * prop.radius;
+  useFrame((state) => {
+    if (!ref.current) return;
+    const t = state.clock.elapsedTime;
+    ref.current.rotation.y = t * 0.3 + prop.angle;
+    ref.current.position.y = prop.height + Math.sin(t * 1.1 + prop.angle) * 0.08;
+  });
+  const mat = { color: prop.color, emissive: prop.color, emissiveIntensity: 0.9, metalness: 0.4, roughness: 0.25 };
+  const geo = () => {
+    switch (prop.type) {
+      case 'ring': return <mesh rotation={[Math.PI / 2.4, 0, 0]}><torusGeometry args={[0.7, 0.09, 14, 40]} /><meshStandardMaterial {...mat} /></mesh>;
+      case 'pillar': return <mesh position={[0, 0.9, 0]}><cylinderGeometry args={[0.16, 0.22, 2.2, 12]} /><meshStandardMaterial {...mat} /></mesh>;
+      case 'arch': return <mesh rotation={[0, 0, 0]} position={[0, 0.7, 0]}><torusGeometry args={[0.8, 0.12, 12, 24, Math.PI]} /><meshStandardMaterial {...mat} /></mesh>;
+      case 'totem': return (
+        <group>
+          <mesh position={[0, 0.3, 0]}><boxGeometry args={[0.5, 0.5, 0.5]} /><meshStandardMaterial {...mat} /></mesh>
+          <mesh position={[0, 0.85, 0]}><boxGeometry args={[0.38, 0.5, 0.38]} /><meshStandardMaterial {...mat} /></mesh>
+          <mesh position={[0, 1.3, 0]}><octahedronGeometry args={[0.28, 0]} /><meshStandardMaterial {...mat} emissiveIntensity={1.4} /></mesh>
+        </group>
+      );
+      case 'orb': return (
+        <group position={[0, 0.7, 0]}>
+          <mesh><sphereGeometry args={[0.4, 20, 20]} /><meshStandardMaterial {...mat} emissiveIntensity={1.3} /></mesh>
+          <mesh rotation={[Math.PI / 2.2, 0, 0]}><torusGeometry args={[0.62, 0.04, 10, 30]} /><meshStandardMaterial color={prop.color} emissive={prop.color} emissiveIntensity={1.2} /></mesh>
+        </group>
+      );
+      default: return <mesh position={[0, 0.7, 0]} scale={[1, 1.7, 1]}><octahedronGeometry args={[0.42, 0]} /><meshStandardMaterial {...mat} flatShading emissiveIntensity={1.2} /></mesh>;
+    }
+  };
+  return <group ref={ref} position={[x, 0, z]} scale={prop.scale}>{geo()}</group>;
+}
+
 function Scene({ spec, revealed, bombSet, showBombs, playing, hitIndex, onReveal, heat }: World3DProps) {
   const env = envDef(spec.environment);
   const skin = BOARD_SKINS[spec.board.skin];
@@ -157,6 +194,7 @@ function Scene({ spec, revealed, bombSet, showBombs, playing, hitIndex, onReveal
       <ambientLight intensity={env.ambient} />
       <Rig spec={spec} heat={heat} />
       <Atmosphere env={spec.environment} skin={skin} />
+      {spec.props.map((p) => <Prop key={p.id} prop={p} />)}
 
       {/* ground */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.2, 0]} receiveShadow>
