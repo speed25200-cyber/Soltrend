@@ -4,7 +4,9 @@ import { useEffect, useRef, useState } from 'react';
 import { SpriteGlyph } from './SpriteGlyph';
 import {
   clearSprite,
+  decodePack,
   deleteSprite,
+  encodePack,
   isDrawn,
   listSprites,
   newSprite,
@@ -46,6 +48,31 @@ export function SpriteEditor() {
   const remove = (id: string) => {
     setLibrary(deleteSprite(id));
     if (sprite.id === id) setSprite(newSprite());
+  };
+
+  const [shareMsg, setShareMsg] = useState('');
+  const shareLibrary = async () => {
+    if (!library.length) return;
+    const code = encodePack(library);
+    try {
+      await navigator.clipboard.writeText(code);
+      setShareMsg('Pack code copied to clipboard');
+    } catch {
+      setShareMsg(code);
+    }
+  };
+  const importPack = () => {
+    const code = window.prompt('Paste a symbol pack code');
+    if (!code) return;
+    const incoming = decodePack(code);
+    if (!incoming.length) {
+      setShareMsg('That code was empty or invalid');
+      return;
+    }
+    let next = library;
+    for (const s of incoming) next = saveSprite(s);
+    setLibrary(next);
+    setShareMsg(`Imported ${incoming.length} symbol${incoming.length === 1 ? '' : 's'}`);
   };
 
   const cell = Math.max(9, Math.floor(288 / sprite.grid));
@@ -142,12 +169,21 @@ export function SpriteEditor() {
 
       {/* --------------------------------------------------------- library */}
       <div className="glass space-y-3 p-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <h3 className="text-sm font-semibold text-slate-200">Your symbols</h3>
-          <button onClick={() => setSprite(newSprite(sprite.grid))} className="btn-ghost text-xs">
-            New
-          </button>
+          <div className="flex gap-2">
+            <button onClick={importPack} className="btn-ghost text-xs" title="Paste a shared pack">
+              Import
+            </button>
+            <button onClick={shareLibrary} disabled={!library.length} className="btn-ghost text-xs disabled:opacity-40" title="Copy a shareable code for all your symbols">
+              Share pack
+            </button>
+            <button onClick={() => setSprite(newSprite(sprite.grid))} className="btn-ghost text-xs">
+              New
+            </button>
+          </div>
         </div>
+        {shareMsg && <p className="break-all rounded-lg border border-white/[0.06] bg-void-950/50 p-2 text-[11px] text-slate-400">{shareMsg}</p>}
         {library.length === 0 ? (
           <p className="py-8 text-center text-sm text-slate-500">
             No symbols yet. Draw one and save it — then use it in your slot and scratch games.

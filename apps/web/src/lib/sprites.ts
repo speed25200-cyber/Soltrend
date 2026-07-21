@@ -108,6 +108,38 @@ function persist(all: Sprite[]) {
   }
 }
 
+/* ---------------------------------------------------------------- sharing */
+// Symbols are tiny, so a shareable "pack" is just base64 of the JSON. This lets
+// creators trade symbol packs by pasting a code — no server, the seed of an
+// asset marketplace. Fresh ids are minted on import so packs never collide.
+
+const PREFIX = 'SYM1.';
+
+const b64encode = (s: string) =>
+  typeof window === 'undefined' ? Buffer.from(s, 'utf8').toString('base64') : window.btoa(unescape(encodeURIComponent(s)));
+const b64decode = (s: string) =>
+  typeof window === 'undefined' ? Buffer.from(s, 'base64').toString('utf8') : decodeURIComponent(escape(window.atob(s)));
+
+/** Encode one or more sprites into a shareable code. */
+export function encodePack(sprites: Sprite[]): string {
+  const slim = sprites.map(({ name, grid, palette, data }) => ({ name, grid, palette, data }));
+  return PREFIX + b64encode(JSON.stringify(slim));
+}
+
+/** Decode a share code back into sprites, minting fresh ids. Returns [] on junk. */
+export function decodePack(code: string): Sprite[] {
+  try {
+    const body = code.trim().startsWith(PREFIX) ? code.trim().slice(PREFIX.length) : code.trim();
+    const arr = JSON.parse(b64decode(body)) as Partial<Sprite>[];
+    if (!Array.isArray(arr)) return [];
+    return arr
+      .map((o) => ({ id: newId(), name: String(o.name ?? 'symbol'), grid: Number(o.grid), palette: o.palette as string[], data: String(o.data) }))
+      .filter(validSprite);
+  } catch {
+    return [];
+  }
+}
+
 /** Defensive shape check for anything read from storage or a published game. */
 export function validSprite(s: unknown): s is Sprite {
   if (!s || typeof s !== 'object') return false;
