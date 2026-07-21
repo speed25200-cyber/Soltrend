@@ -6,6 +6,7 @@ import { SectionHead } from '@/components/SectionHead';
 import { Icon } from '@/components/Icon';
 import { BetAmount } from '@/components/BetControls';
 import { useDuel } from '@/hooks/useDuel';
+import { useJackpot } from '@/hooks/useJackpot';
 import { usePlay } from '@/hooks/usePlay';
 import { useShipSkin } from '@/hooks/useShipSkin';
 import { shortAddr } from '@/lib/format';
@@ -13,15 +14,32 @@ import { sfx } from '@/lib/sound';
 import { burstWin } from '@/lib/fx';
 
 export default function DuelPage() {
+  const [mode, setMode] = useState<'duel' | 'jackpot'>('duel');
   return (
     <div className="space-y-6">
       <SectionHead
-        eyebrow="PvP · Duel"
-        title="1v1 Duel"
-        sub="Queue with an ante, get matched, and let a provably-fair coin decide it. Winner takes the pot minus a small rake — server-authoritative, commit-reveal verifiable."
+        eyebrow="PvP · Multiplayer"
+        title={mode === 'duel' ? '1v1 Duel' : 'Shared Jackpot'}
+        sub={
+          mode === 'duel'
+            ? 'Queue with an ante, get matched, and let a provably-fair coin decide it. Winner takes the pot minus a small rake — server-authoritative, commit-reveal verifiable.'
+            : 'Everyone enters one growing community pot; a provably-fair weighted draw picks the winner. Your win chance equals your share of the pot.'
+        }
       />
-      <DuelRoom />
+      <div className="mx-auto flex w-full max-w-xs gap-1 rounded-xl bg-void-900/80 p-1">
+        <TabBtn active={mode === 'duel'} onClick={() => setMode('duel')} icon="target" label="1v1 Duel" />
+        <TabBtn active={mode === 'jackpot'} onClick={() => setMode('jackpot')} icon="crown" label="Jackpot" />
+      </div>
+      {mode === 'duel' ? <DuelRoom /> : <JackpotRoom />}
     </div>
+  );
+}
+
+function TabBtn({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: 'target' | 'crown'; label: string }) {
+  return (
+    <button onClick={onClick} className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-semibold transition ${active ? 'bg-neon-violet/20 text-white' : 'text-slate-400 hover:text-white'}`}>
+      <Icon name={icon} size={15} /> {label}
+    </button>
   );
 }
 
@@ -142,13 +160,99 @@ function Fighter({ name, ante, tint }: { name: string; ante: number; tint: strin
   );
 }
 
-function OfflinePanel() {
+function JackpotRoom() {
+  const { state, enter, enabled } = useJackpot();
+  const { publicKey } = useWallet();
+  const { guard, settle } = usePlay();
+  const [ship] = useShipSkin();
+  const [amount, setAmount] = useState(0.1);
+  const settledRef = useRef<number | null>(null);
+  const wallet = publicKey ? shortAddr(publicKey.toBase58()) : 'you';
+  const mine = state.entries.find((e) => e.wallet === wallet);
+
+  // Settle once per resolved round, only if I had entered.
+  useEffect(() => {
+    if (state.phase !== 'result' || settledRef.current === state.roundId) return;
+    settledRef.current = state.roundId;
+    if (!mine) return;
+    const won = state.winnerWallet === wallet;
+    settle(
+      {
+        game: 'Shared Jackpot',
+        template: 'wheel',
+        bet: mine.amount,
+        multiplier: won ? state.payout / mine.amount : 0,
+        payout: won ? state.payout : 0,
+        win: won,
+        meta: { roundId: state.roundId, pot: state.pot },
+        seeds: { serverSeed: state.serverSeed ?? '', serverSeedHash: state.hash ?? '', clientSeed: '', nonce: state.roundId },
+      },
+      { quiet: true },
+    );
+    if (won) { sfx.jackpot(); burstWin(state.payout / mine.amount); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.phase, state.roundId]);
+
+  if (!enabled) return <OfflinePanel kind="jackpot" />;
+
+  const onEnter = () => {
+    const g = guard(amount);
+    if (!g.ok) return;
+    enter(amount, wallet, ship.id);
+  };
+
+  return (
+    <div className="mx-auto grid max-w-2xl gap-4">
+      <div className="glass grid place-items-center gap-1 p-6 text-center">
+        <span className="label-eyebrow">Community pot</span>
+        <span className="font-display text-4xl font-bold text-gold">◎{state.pot.toFixed(2)}</span>
+        <span className="text-xs text-slate-500">
+          {state.phase === 'open' ? `Draw in ${Math.ceil(state.endsInMs / 1000)}s` : 'Drawing…'} · {state.entries.length} players
+        </span>
+      </div>
+
+      {state.phase === 'result' && state.winnerWallet && (
+        <div className={`glass grid place-items-center gap-2 p-6 text-center ${state.winnerWallet === wallet ? 'ring-1 ring-win/50' : ''}`}>
+          <span className="grid h-12 w-12 place-items-center rounded-2xl bg-gold/15 text-gold"><Icon name="crown" size={24} /></span>
+          <h3 className="font-display text-lg font-bold text-white">
+            {state.winnerWallet === wallet ? `You won ◎${state.payout}` : `${state.winnerWallet} won ◎${state.payout}`}
+          </h3>
+          {state.serverSeed && <code className="max-w-full truncate rounded bg-void-950/60 px-2 py-1 text-[10px] text-slate-500">seed {state.serverSeed.slice(0, 20)}… · draw {state.draw?.toFixed(4)}</code>}
+        </div>
+      )}
+
+      {state.phase === 'open' && (
+        <div className="glass space-y-3 p-6">
+          <BetAmount value={amount} onChange={setAmount} />
+          <button className="btn-primary w-full" onClick={onEnter} disabled={!state.connected}>
+            {mine ? `Add ◎${amount} · you're in for ◎${mine.amount}` : `Enter · ◎${amount}`}
+          </button>
+          {mine && <p className="text-center text-xs text-slate-500">Your win chance: {mine.chance}%</p>}
+        </div>
+      )}
+
+      {state.entries.length > 0 && (
+        <div className="glass space-y-2 p-4">
+          <span className="label-eyebrow">In the pot</span>
+          {state.entries.slice(0, 8).map((e) => (
+            <div key={e.wallet} className="flex items-center justify-between text-sm">
+              <span className={e.wallet === wallet ? 'font-semibold text-win' : 'text-slate-300'}>{e.wallet}</span>
+              <span className="font-mono text-slate-400">◎{e.amount} · {e.chance}%</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OfflinePanel({ kind = 'duel' }: { kind?: 'duel' | 'jackpot' }) {
   return (
     <div className="glass mx-auto max-w-2xl space-y-4 p-8 text-center">
-      <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-neon-violet/15 text-neon-violet"><Icon name="target" size={26} /></span>
-      <h3 className="font-display text-lg font-bold text-white">Duels need a hosted server</h3>
+      <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-neon-violet/15 text-neon-violet"><Icon name={kind === 'jackpot' ? 'crown' : 'target'} size={26} /></span>
+      <h3 className="font-display text-lg font-bold text-white">{kind === 'jackpot' ? 'Shared jackpot' : 'Duels'} need a hosted server</h3>
       <p className="mx-auto max-w-lg text-sm text-slate-400">
-        PvP matchmaking is server-authoritative — pairing and the commit-reveal settle run on a hosted Node process a static host can&apos;t provide. The gateway is built and ready in{' '}
+        {kind === 'jackpot' ? 'The shared pot and its provably-fair draw' : 'PvP matchmaking and the commit-reveal settle'} run on a hosted Node process a static host can&apos;t provide. The gateway is built and ready in{' '}
         <code className="rounded bg-void-900 px-1.5 py-0.5 text-xs text-slate-300">apps/api</code>.
       </p>
       <div className="rounded-xl border border-white/10 bg-void-950/60 p-4 text-left text-xs text-slate-400">

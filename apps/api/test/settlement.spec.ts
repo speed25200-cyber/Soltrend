@@ -154,3 +154,40 @@ describe('PvP duel resolution', () => {
     expect(winsA / N).toBeLessThan(0.55);
   });
 });
+
+describe('shared jackpot draw', () => {
+  it('picks a winner reproducibly and weights by stake', async () => {
+    const { drawWinner, jackpotPayout } = await import('../src/realtime/jackpot');
+    const entries = [
+      { wallet: 'a', amount: 1 },
+      { wallet: 'b', amount: 3 },
+    ];
+    const seed = 'e'.repeat(64);
+    const r1 = drawWinner(seed, 'r', 2, entries);
+    const r2 = drawWinner(seed, 'r', 2, entries);
+    expect(r1).toEqual(r2);
+    expect(r1.pot).toBe(4);
+    expect([0, 1]).toContain(r1.winner);
+    expect(jackpotPayout(4)).toBeCloseTo(4 * 0.97);
+  });
+
+  it('win frequency tracks pot share (b has ~75%)', async () => {
+    const { drawWinner } = await import('../src/realtime/jackpot');
+    const entries = [
+      { wallet: 'a', amount: 1 },
+      { wallet: 'b', amount: 3 },
+    ];
+    let bWins = 0;
+    const N = 4000;
+    for (let i = 1; i <= N; i++) if (drawWinner('f'.repeat(64), 'bulk', i, entries).winner === 1) bWins++;
+    expect(bWins / N).toBeGreaterThan(0.7);
+    expect(bWins / N).toBeLessThan(0.8);
+  });
+
+  it('handles an empty pot without crashing', async () => {
+    const { drawWinner } = await import('../src/realtime/jackpot');
+    const r = drawWinner('a'.repeat(64), 'r', 1, []);
+    expect(r.winner).toBe(-1);
+    expect(r.pot).toBe(0);
+  });
+});
