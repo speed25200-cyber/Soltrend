@@ -41,6 +41,10 @@ describe('house_vault', () => {
     [Buffer.from('stake'), pool.toBuffer(), staker.publicKey.toBuffer()],
     program.programId,
   );
+  const [creatorPosition] = PublicKey.findProgramAddressSync(
+    [Buffer.from('stake'), pool.toBuffer(), creator.publicKey.toBuffer()],
+    program.programId,
+  );
 
   const betPda = (nonce: number) => {
     const n = Buffer.alloc(8);
@@ -59,7 +63,9 @@ describe('house_vault', () => {
       .initConfig(
         100,
         500,
-        new anchor.BN(1000 * LAMPORTS_PER_SOL),
+        new anchor.BN(1000 * LAMPORTS_PER_SOL), // max payout
+        new anchor.BN(5 * LAMPORTS_PER_SOL), // max bet (per-bet ceiling)
+        new anchor.BN(1 * LAMPORTS_PER_SOL), // min creator bond
         { bankrollBps: 6000, creatorBps: 2000, platformBps: 1500, insuranceBps: 500 },
         admin.publicKey,
       )
@@ -82,10 +88,29 @@ describe('house_vault', () => {
       .signers([creator])
       .rpc();
     await program.methods
-      .registerGame(specHash, 200, 0)
-      .accounts({ config, game, pool, creator: creator.publicKey, systemProgram: SystemProgram.programId })
+      .registerGame(specHash, 200, 0, new anchor.BN(2 * LAMPORTS_PER_SOL)) // 2 SOL creator bond
+      .accounts({ config, game, pool, position: creatorPosition, creator: creator.publicKey, systemProgram: SystemProgram.programId })
       .signers([creator])
       .rpc();
+    const cp = await program.account.stakePosition.fetch(creatorPosition);
+    assert.isAbove(Number(cp.shares.toString()), 0); // creator is the first staker
+  });
+
+  it('rejects a game whose creator bond is below the minimum', async () => {
+    const h2 = Array.from({ length: 32 }, () => 5);
+    const [g2] = PublicKey.findProgramAddressSync([Buffer.from('game'), creator.publicKey.toBuffer(), Buffer.from(h2)], program.programId);
+    const [p2] = PublicKey.findProgramAddressSync([Buffer.from('pool'), g2.toBuffer()], program.programId);
+    const [pos2] = PublicKey.findProgramAddressSync([Buffer.from('stake'), p2.toBuffer(), creator.publicKey.toBuffer()], program.programId);
+    try {
+      await program.methods
+        .registerGame(h2, 200, 0, new anchor.BN(0.1 * LAMPORTS_PER_SOL)) // below 1 SOL min bond
+        .accounts({ config, game: g2, pool: p2, position: pos2, creator: creator.publicKey, systemProgram: SystemProgram.programId })
+        .signers([creator])
+        .rpc();
+      assert.fail('should reject a small bond');
+    } catch (e) {
+      assert.include(e.toString(), 'BondTooSmall');
+    }
   });
 
   it('stakes into the pool and mints shares', async () => {

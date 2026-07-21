@@ -34,8 +34,15 @@ spec an external auditor should verify before mainnet.
    twice (the Bet account is `close`d), and that a compromised authority is bounded
    to `bet.max_payout` per bet (it cannot mint beyond the reserved liability).
 
-3. **Edge band.** `register_game` clamps `edge_bps ∈ [min_edge_bps, max_edge_bps]`,
-   and `max_edge_bps ≤ 2000` (20%) is enforced at `init_config`.
+3. **Edge band + creator bond.** `register_game` clamps
+   `edge_bps ∈ [min_edge_bps, max_edge_bps]` (`max_edge_bps ≤ 2000` at init) and
+   requires a creator `bond ≥ config.min_bond_lamports`, which atomically seeds the
+   pool and makes the creator the first staker (skin-in-the-game; no empty/spam
+   pools). Verify the first-deposit share mint (`shares == bond`) and that the
+   bond transfer + position init can't be skipped. Also: `open_bet` enforces an
+   absolute per-bet ceiling `bet_amount ≤ config.max_bet_lamports` — a
+   defence-in-depth bound on the blast radius if the settlement authority key is
+   compromised.
 
 4. **Pro-rata shares (ERC-4626 style) + inflation defence.** `stake` mints
    `shares = amount · (total_shares + VIRT) / (pool_value + VIRT)`; `unstake`

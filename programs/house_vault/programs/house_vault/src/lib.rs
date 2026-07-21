@@ -46,6 +46,8 @@ pub mod house_vault {
         min_edge_bps: u16,
         max_edge_bps: u16,
         max_payout_lamports: u64,
+        max_bet_lamports: u64,
+        min_bond_lamports: u64,
         split: RevenueSplit,
         settlement_authority: Pubkey,
     ) -> Result<()> {
@@ -60,6 +62,8 @@ pub mod house_vault {
         cfg.min_edge_bps = min_edge_bps;
         cfg.max_edge_bps = max_edge_bps;
         cfg.max_payout_lamports = max_payout_lamports;
+        cfg.max_bet_lamports = max_bet_lamports;
+        cfg.min_bond_lamports = min_bond_lamports;
         cfg.split = split;
         cfg.paused = false;
 
@@ -70,19 +74,25 @@ pub mod house_vault {
         Ok(())
     }
 
-    /// Register a UGC game + create its (empty) bankroll pool. Edge is clamped to
-    /// the global band; `spec_hash` is the SHA-256 of the off-chain GameSpec.
+    /// Register a UGC game + seed its bankroll pool with the creator's BOND.
+    ///
+    /// The bond (`≥ config.min_bond_lamports`) is skin-in-the-game: it makes the
+    /// creator the first staker (so the pool is never empty / spammy) and aligns
+    /// incentives — a creator profits from their own game's edge and loses first
+    /// if it's badly designed. Edge is clamped to the global band.
     pub fn register_game(
         ctx: Context<RegisterGame>,
         spec_hash: [u8; 32],
         edge_bps: u16,
         template: u8,
+        bond: u64,
     ) -> Result<()> {
         let cfg = &ctx.accounts.config;
         require!(
             edge_bps >= cfg.min_edge_bps && edge_bps <= cfg.max_edge_bps,
             CasinoError::EdgeOutOfBand
         );
+        require!(bond >= cfg.min_bond_lamports && bond > 0, CasinoError::BondTooSmall);
 
         let game = &mut ctx.accounts.game;
         game.creator = ctx.accounts.creator.key();
@@ -97,6 +107,25 @@ pub mod house_vault {
         pool.total_shares = 0;
         pool.locked = 0;
         pool.bump = ctx.bumps.pool;
+
+        // The creator's bond funds the pool → they become the first staker.
+        system_program::transfer(
+            CpiContext::new(
+                ctx.accounts.system_program.to_account_info(),
+                system_program::Transfer {
+                    from: ctx.accounts.creator.to_account_info(),
+                    to: ctx.accounts.pool.to_account_info(),
+                },
+            ),
+            bond,
+        )?;
+        // First deposit into an empty pool → shares == bond (VIRT offset cancels).
+        let pool = &mut ctx.accounts.pool;
+        pool.total_shares = bond as u128;
+        let pos = &mut ctx.accounts.position;
+        pos.pool = pool.key();
+        pos.owner = ctx.accounts.creator.key();
+        pos.shares = bond as u128;
         Ok(())
     }
 
@@ -207,6 +236,9 @@ pub mod house_vault {
         require!(!cfg.paused, CasinoError::Paused);
         require!(bet_amount > 0, CasinoError::ZeroAmount);
         require!(max_payout > 0, CasinoError::ZeroAmount);
+        // Defence-in-depth: an absolute per-bet ceiling bounds the damage if the
+        // settlement authority key is ever compromised.
+        require!(bet_amount <= cfg.max_bet_lamports, CasinoError::BetTooLarge);
 
         let pool_ai = ctx.accounts.pool.to_account_info();
         let rent = Rent::get()?.minimum_balance(pool_ai.data_len());
@@ -427,6 +459,14 @@ pub struct RegisterGame<'info> {
         bump
     )]
     pub pool: Account<'info, GamePool>,
+    #[account(
+        init,
+        payer = creator,
+        space = 8 + StakePosition::SIZE,
+        seeds = [b"stake", pool.key().as_ref(), creator.key().as_ref()],
+        bump
+    )]
+    pub position: Account<'info, StakePosition>,
     #[account(mut)]
     pub creator: Signer<'info>,
     pub system_program: Program<'info, System>,
@@ -594,11 +634,13 @@ pub struct Config {
     pub min_edge_bps: u16,
     pub max_edge_bps: u16,
     pub max_payout_lamports: u64,
+    pub max_bet_lamports: u64,
+    pub min_bond_lamports: u64,
     pub split: RevenueSplit,
     pub paused: bool,
 }
 impl Config {
-    pub const SIZE: usize = 32 + 32 + 32 + 2 + 2 + 8 + RevenueSplit::SIZE + 1;
+    pub const SIZE: usize = 32 + 32 + 32 + 2 + 2 + 8 + 8 + 8 + RevenueSplit::SIZE + 1;
 }
 
 /// Split of the house edge. Must sum to 10_000 bps. Staker-favoured: only the
@@ -751,6 +793,10 @@ pub enum CasinoError {
     InvalidSplit,
     #[msg("Game edge is outside the allowed band")]
     EdgeOutOfBand,
+    #[msg("Creator bond is below the minimum")]
+    BondTooSmall,
+    #[msg("Bet exceeds the absolute per-bet ceiling")]
+    BetTooLarge,
     #[msg("Payout exceeds the per-bet cap")]
     PayoutTooLarge,
     #[msg("Payout exceeds the pool's bankroll cap (1/RUIN_K)")]
