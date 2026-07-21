@@ -179,6 +179,10 @@ interface CasinoState {
 
   setRg: (patch: Partial<RgLimits>) => void;
   publishUgc: (g: Omit<UgcGame, 'id' | 'createdAt' | 'volume' | 'players' | 'plays' | 'rating'>) => UgcGame;
+  /** Edit one of MY published games in place (name, theme, params, edge, maxWin). */
+  updateUgc: (id: string, patch: Partial<Pick<UgcGame, 'name' | 'theme' | 'params' | 'edge' | 'maxWin'>>) => void;
+  /** Unpublish (delete) one of MY games. */
+  deleteUgc: (id: string) => void;
   bumpUgc: (id: string, wagered: number) => void;
 
   /** Stake SOL into a game's bankroll to earn a share of its edge yield. */
@@ -497,6 +501,25 @@ export const useCasino = create<CasinoState>()(
         });
         return game;
       },
+      updateUgc: (id, patch) =>
+        set((s) => ({
+          ugc: s.ugc.map((g) => {
+            if (g.id !== id || !g.mine) return g;
+            const next = { ...g, ...patch, theme: patch.theme ?? g.theme };
+            // Refresh the fairness/spec hash if the mechanic-defining fields changed.
+            next.specHash = sha256Hex(JSON.stringify({ t: next.template, e: next.edge, p: next.params, n: next.name }));
+            return next;
+          }),
+        })),
+      deleteUgc: (id) =>
+        set((s) => {
+          if (!s.ugc.find((g) => g.id === id)?.mine) return {};
+          const stakes = { ...s.bankrollStakes };
+          delete stakes[id];
+          const journeys = { ...s.journeys };
+          delete journeys[id];
+          return { ugc: s.ugc.filter((g) => g.id !== id), bankrollStakes: stakes, journeys };
+        }),
       bumpUgc: (id, wagered) =>
         set((s) => {
           const game = s.ugc.find((g) => g.id === id);

@@ -10,6 +10,8 @@ import { JourneyChip } from '@/components/Collection';
 import { maxBetFor } from '@/lib/economics';
 import type { GameMeta } from '@/lib/catalog';
 
+const STUDIO_MODE: Record<string, string> = { graph: 'node', board: 'world', towers: 'classic' };
+
 export default function UgcPlayPage() {
   return (
     <Suspense fallback={<div className="glass p-16 text-center text-slate-500">Loading…</div>}>
@@ -67,6 +69,11 @@ function UgcInner() {
           )}
           {remixCount > 0 && <span className="chip">{remixCount} remix{remixCount === 1 ? '' : 'es'} · original earns royalties</span>}
           <JourneyChip gameId={game.id} />
+          {STUDIO_MODE[game.template] && (
+            <Link href={`/studio?mode=${STUDIO_MODE[game.template]}&remix=${game.id}`} className="chip hover:border-neon-violet/50" title="Fork this game in the studio">
+              Remix →
+            </Link>
+          )}
         </div>
         <GameScreen
           config={{ meta, edge: game.edge, gameId: game.id, gameName: game.name, params: game.params, maxBet: maxBetFor(game.tvl ?? 0, game.maxWin ?? 100) }}

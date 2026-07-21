@@ -21,6 +21,8 @@ import { ACCENT_HEX, type GameMeta } from '@/lib/catalog';
 import { shortAddr } from '@/lib/format';
 import { sfx } from '@/lib/sound';
 import { burstWin } from '@/lib/fx';
+import { useDraft } from '@/hooks/useDraft';
+import { draftAge } from '@/lib/drafts';
 
 const World3D = dynamic(() => import('@/components/worlds/World3D'), {
   ssr: false,
@@ -51,6 +53,8 @@ export function WorldBuilder() {
   const [testing, setTesting] = useState(false);
   const [published, setPublished] = useState<{ id: string } | null>(null);
   const [remixParent, setRemixParent] = useState<string | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
+  const updateUgc = useCasino((s) => s.updateUgc);
 
   const skin = BOARD_SKINS[spec.board.skin];
   const stats = useMemo(() => worldStats(spec, target / 100), [spec, target]);
@@ -79,15 +83,19 @@ export function WorldBuilder() {
     setSpecRaw((s) => ({ ...s, logic: graph, logicScale: normaliseLogic(graph) }));
   };
 
-  // Remix a published world via ?remix=<id>.
+  // Remix (?remix=, a fork) or edit-in-place your own world (?edit=).
+  const [qParam] = useState(() => (typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams()));
   useEffect(() => {
-    const id = new URLSearchParams(window.location.search).get('remix');
+    const editParam = qParam.get('edit');
+    const id = editParam || qParam.get('remix');
     if (!id) return;
     const src = ugc.find((game) => game.id === id);
     if (!src || src.template !== 'board') return;
     setSpecRaw(worldFromParams(src.params));
-    setRemixParent(src.id);
-    setName(`${src.name} remix`);
+    const editing = !!editParam && !!src.mine;
+    if (editing) setEditId(src.id);
+    else setRemixParent(src.id);
+    setName(editing ? src.name : `${src.name} remix`);
     setTagline(src.theme.tagline || '');
     setIcon((src.theme.icon as IconName) || 'gem');
     setAccent((src.theme.accent as GameMeta['accent']) || 'cyan');
@@ -96,6 +104,29 @@ export function WorldBuilder() {
     if (src.theme.winEffect) setWinEffect(src.theme.winEffect as WinEffectId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Autosave a draft of new-from-scratch worlds.
+  const draftActive = !editId && !qParam.get('edit') && !qParam.get('remix');
+  const draftSnap = useMemo(
+    () => ({ spec, target, name, tagline, icon, accent, background, soundPack, winEffect }),
+    [spec, target, name, tagline, icon, accent, background, soundPack, winEffect],
+  );
+  const draft = useDraft('world', draftSnap, draftActive);
+  const restoreDraft = () => {
+    const d = draft.pending?.data as typeof draftSnap | undefined;
+    if (!d) return;
+    setSpecRaw(d.spec);
+    setTarget(d.target);
+    setName(d.name);
+    setTagline(d.tagline);
+    setIcon(d.icon);
+    setAccent(d.accent);
+    setBackground(d.background);
+    setSoundPack(d.soundPack);
+    setWinEffect(d.winEffect);
+    draft.dismiss();
+    sfx.click();
+  };
 
   const meta: GameMeta = {
     slug: 'world-preview', name: name || 'Untitled world', icon,
@@ -112,12 +143,26 @@ export function WorldBuilder() {
   const canPublish = stats.ok && connected && name.trim().length >= 3;
   const publish = () => {
     if (!canPublish) return;
-    const game = publishUgc({
-      name: name.trim(), template: 'board',
-      creator: publicKey ? shortAddr(publicKey.toBase58()) : 'anon',
-      edge: stats.edge, maxWin: Math.max(1, Math.round(stats.maxMult)), parentId: remixParent ?? undefined, params: worldToParams(spec),
+    const shared = {
+      name: name.trim(),
+      edge: stats.edge,
+      maxWin: Math.max(1, Math.round(stats.maxMult)),
+      params: worldToParams(spec),
       theme: { accent, icon, aura: 'nebula', tagline: tagline.trim() || undefined, background, soundPack, winEffect },
+    };
+    if (editId) {
+      updateUgc(editId, shared);
+      sfx.jackpot();
+      setPublished({ id: editId });
+      return;
+    }
+    const game = publishUgc({
+      ...shared,
+      template: 'board',
+      creator: publicKey ? shortAddr(publicKey.toBase58()) : 'anon',
+      parentId: remixParent ?? undefined,
     });
+    draft.clear();
     sfx.jackpot();
     burstWin(12);
     setPublished({ id: game.id });
@@ -125,6 +170,19 @@ export function WorldBuilder() {
 
   return (
     <div className="space-y-4">
+      {editId && (
+        <div className="flex items-center gap-2 rounded-xl border border-neon-cyan/30 bg-neon-cyan/10 px-3 py-2 text-xs text-neon-cyan">
+          <Icon name="pencil" size={13} /> Editing a published world — changes go live when you save.
+        </div>
+      )}
+      {draft.pending && draftActive && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-neon-violet/30 bg-neon-violet/10 px-3 py-2 text-xs text-slate-200">
+          <Icon name="spark" size={13} className="text-neon-violet" />
+          <span>You have an unsaved world draft from {draftAge(draft.pending.savedAt, Date.now())}.</span>
+          <button onClick={restoreDraft} className="btn-ghost !py-1 text-xs">Restore</button>
+          <button onClick={draft.clear} className="text-slate-500 hover:text-loss">Discard</button>
+        </div>
+      )}
       <p className="text-sm text-slate-400">Design a playable 3D world — a board players reveal in space, with an optional node-graph logic core. Provably fair, vault-safe.</p>
       <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
         {/* Creator */}
@@ -281,13 +339,13 @@ export function WorldBuilder() {
           <div className="glass p-5">
             {published ? (
               <div className="text-center">
-                <p className="text-sm font-semibold text-win">Published to the community</p>
+                <p className="text-sm font-semibold text-win">{editId ? 'Changes saved' : 'Published to the community'}</p>
                 <Link href={`/play/ugc?id=${published.id}`} className="btn-primary mt-3 w-full">Play it now</Link>
                 <Link href="/discover" className="btn-ghost mt-2 w-full text-xs">See it in Discover</Link>
               </div>
             ) : (
               <>
-                <button onClick={publish} disabled={!canPublish} className="btn-primary w-full disabled:opacity-40">{connected ? 'Publish to community' : 'Connect wallet to publish'}</button>
+                <button onClick={publish} disabled={!canPublish} className="btn-primary w-full disabled:opacity-40">{!connected ? 'Connect wallet to publish' : editId ? 'Save changes' : 'Publish to community'}</button>
                 {stats.ok && name.trim().length < 3 && <p className="mt-2 text-center text-[0.68rem] text-slate-500">Give your world a name (3+ characters).</p>}
               </>
             )}

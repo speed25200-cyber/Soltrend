@@ -11,6 +11,8 @@ import { GraphGame } from '@/components/games/GraphGame';
 import { simulateGraph, normaliseEdge, starterGraph, FORGE_TEMPLATES, type ForgeGraph } from '@/lib/forge/model';
 import { generateDistinct, noveltyScore, FEELINGS, type Feeling, type Candidate } from '@/lib/forge/generator';
 import { describeWithAI, aiEnabled } from '@/lib/forge/aiCreate';
+import { useDraft } from '@/hooks/useDraft';
+import { draftAge } from '@/lib/drafts';
 import { clampEdge } from '@/lib/games';
 import { AURAS } from '@/lib/auras';
 import {
@@ -100,6 +102,7 @@ export function NodeBuilder() {
   const [testing, setTesting] = useState(false);
   const [published, setPublished] = useState<{ id: string } | null>(null);
   const [remixParent, setRemixParent] = useState<string | null>(null);
+  const [editId, setEditId] = useState<string | null>(null); // editing one of my games in place
 
   // Generator: pick a feeling → three structurally distinct, novel candidates.
   const [feeling, setFeeling] = useState<Feeling>('tense');
@@ -143,9 +146,13 @@ export function NodeBuilder() {
     sfx.packWin(soundPack, 3);
   };
 
-  // Visual remix — preload a published game's graph + look via ?remix=<id>.
+  // Load a published game's graph + look for a remix (?remix=<id>, a fork) or an
+  // in-place edit of your own game (?edit=<id>).
+  const [qParam] = useState(() => (typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams()));
   useEffect(() => {
-    const id = new URLSearchParams(window.location.search).get('remix');
+    const editParam = qParam.get('edit');
+    const remixParam = qParam.get('remix');
+    const id = editParam || remixParam;
     if (!id) return;
     const src = ugc.find((g) => g.id === id);
     if (!src || src.template !== 'graph' || !src.params.graph) return;
@@ -154,8 +161,10 @@ export function NodeBuilder() {
     } catch {
       return;
     }
-    setRemixParent(src.id);
-    setName(`${src.name} remix`);
+    const editing = !!editParam && !!src.mine;
+    if (editing) setEditId(src.id);
+    else setRemixParent(src.id);
+    setName(editing ? src.name : `${src.name} remix`);
     setTagline(src.theme.tagline || '');
     setIcon((src.theme.icon as IconName) || 'orbit');
     setAccent(src.theme.accent || 'violet');
@@ -164,8 +173,34 @@ export function NodeBuilder() {
     if (src.theme.background) setBackground(src.theme.background as BackgroundId);
     if (src.theme.soundPack) setSoundPack(src.theme.soundPack as SoundPackId);
     if (src.theme.winEffect) setWinEffect(src.theme.winEffect as WinEffectId);
+    if (src.theme.symbols?.length) setSymbolIds(src.theme.symbols.map((s) => s.id));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Autosave a draft of new-from-scratch work (not while editing or remixing).
+  const draftActive = !editId && !qParam.get('edit') && !qParam.get('remix');
+  const draftSnap = useMemo(
+    () => ({ graph, name, tagline, icon, accent, aura, presentation, background, soundPack, winEffect, symbolIds }),
+    [graph, name, tagline, icon, accent, aura, presentation, background, soundPack, winEffect, symbolIds],
+  );
+  const draft = useDraft('node', draftSnap, draftActive);
+  const restoreDraft = () => {
+    const d = draft.pending?.data as typeof draftSnap | undefined;
+    if (!d) return;
+    setGraph(d.graph);
+    setName(d.name);
+    setTagline(d.tagline);
+    setIcon(d.icon);
+    setAccent(d.accent);
+    setAura(d.aura);
+    setPresentation(d.presentation);
+    setBackground(d.background);
+    setSoundPack(d.soundPack);
+    setWinEffect(d.winEffect);
+    setSymbolIds(d.symbolIds);
+    draft.dismiss();
+    sfx.click();
+  };
 
   const sim = useMemo(() => simulateGraph(graph, 20000), [graph]);
 
@@ -192,29 +227,41 @@ export function NodeBuilder() {
     sfx.click();
   };
 
+  const updateUgc = useCasino((s) => s.updateUgc);
   const canPublish = sim.ok && connected && name.trim().length >= 3;
+  const theme = {
+    accent,
+    icon,
+    aura,
+    tagline: tagline.trim() || undefined,
+    presentation,
+    background,
+    soundPack,
+    winEffect,
+    symbols: usesSymbols && symbols.length >= 2 ? symbols : undefined,
+  };
   const publish = () => {
     if (!canPublish) return;
-    const game = publishUgc({
+    const shared = {
       name: name.trim(),
-      template: 'graph',
-      creator: publicKey ? shortAddr(publicKey.toBase58()) : 'anon',
       edge: clampEdge(sim.edge),
       maxWin: Math.max(1, Math.round(sim.maxMult)),
-      parentId: remixParent ?? undefined,
       params: { graph: JSON.stringify(graph) },
-      theme: {
-        accent,
-        icon,
-        aura,
-        tagline: tagline.trim() || undefined,
-        presentation,
-        background,
-        soundPack,
-        winEffect,
-        symbols: usesSymbols && symbols.length >= 2 ? symbols : undefined,
-      },
+      theme,
+    };
+    if (editId) {
+      updateUgc(editId, shared);
+      sfx.jackpot();
+      setPublished({ id: editId });
+      return;
+    }
+    const game = publishUgc({
+      ...shared,
+      template: 'graph',
+      creator: publicKey ? shortAddr(publicKey.toBase58()) : 'anon',
+      parentId: remixParent ?? undefined,
     });
+    draft.clear();
     sfx.jackpot();
     burstWin(12);
     setPublished({ id: game.id });
@@ -222,6 +269,19 @@ export function NodeBuilder() {
 
   return (
     <div className="space-y-4">
+      {editId && (
+        <div className="flex items-center gap-2 rounded-xl border border-neon-cyan/30 bg-neon-cyan/10 px-3 py-2 text-xs text-neon-cyan">
+          <Icon name="pencil" size={13} /> Editing a published game — changes go live when you save.
+        </div>
+      )}
+      {draft.pending && draftActive && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-neon-violet/30 bg-neon-violet/10 px-3 py-2 text-xs text-slate-200">
+          <Icon name="spark" size={13} className="text-neon-violet" />
+          <span>You have an unsaved draft from {draftAge(draft.pending.savedAt, Date.now())}.</span>
+          <button onClick={restoreDraft} className="btn-ghost !py-1 text-xs">Restore</button>
+          <button onClick={draft.clear} className="text-slate-500 hover:text-loss">Discard</button>
+        </div>
+      )}
       <p className="text-sm text-slate-400">Wire RNG → transforms → payout to invent a brand-new mechanic, or generate one below. Validated vault-safe, provably fair.</p>
       <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
         {/* Editor */}
@@ -466,12 +526,12 @@ export function NodeBuilder() {
           {published ? (
             <div className="glass grid place-items-center gap-2 p-6 text-center">
               <span className="grid h-12 w-12 place-items-center rounded-2xl bg-win/15 text-win"><Icon name="check" size={26} /></span>
-              <div className="font-display font-bold text-white">Forged &amp; published!</div>
+              <div className="font-display font-bold text-white">{editId ? 'Changes saved!' : 'Forged &amp; published!'}</div>
               <button className="btn-primary mt-1" onClick={() => router.push(`/play/ugc?id=${published.id}`)}>Play it →</button>
             </div>
           ) : (
             <button className="btn-primary w-full" disabled={!canPublish} onClick={publish}>
-              {!connected ? 'Connect wallet to publish' : !sim.ok ? 'Fix the graph to publish' : name.trim().length < 3 ? 'Name your game' : 'Publish forged game'}
+              {!connected ? 'Connect wallet to publish' : !sim.ok ? 'Fix the graph to publish' : name.trim().length < 3 ? 'Name your game' : editId ? 'Save changes' : 'Publish forged game'}
             </button>
           )}
         </div>

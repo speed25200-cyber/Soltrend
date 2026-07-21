@@ -232,10 +232,13 @@ function LimitField({
   );
 }
 
+const STUDIO_MODE: Record<string, string> = { graph: 'node', board: 'world', towers: 'classic' };
+
 function CreatorDashboard() {
   const ugc = useCasino((s) => s.ugc);
   const claimedRoyalties = useCasino((s) => s.progress.claimedRoyalties);
   const claimRoyalties = useCasino((s) => s.claimRoyalties);
+  const deleteUgc = useCasino((s) => s.deleteUgc);
   const mine = ugc.filter((g) => g.mine);
   const earnings = creatorEarnings(ugc);
   const claimable = Math.max(0, Math.round((earnings - claimedRoyalties) * 10000) / 10000);
@@ -267,14 +270,32 @@ function CreatorDashboard() {
             <MiniStat label="Royalties" value={`◎${fmtSol(earnings, 3)}`} accent />
           </div>
           <div className="mt-3 divide-y divide-white/[0.05] rounded-xl border border-white/[0.06]">
-            {mine.map((g) => (
-              <Link key={g.id} href={`/play/ugc?id=${g.id}`} className="flex items-center gap-3 p-3 text-sm hover:bg-white/[0.02]">
-                <Icon name={g.theme.icon} size={18} />
-                <span className="flex-1 truncate font-semibold text-white">{g.name}</span>
-                <span className="font-mono text-xs text-slate-400">◎{fmtCompact(g.volume)} vol</span>
-                <span className="font-mono text-xs text-gold">◎{fmtSol(g.volume * g.edge * 0.3, 3)}</span>
-              </Link>
-            ))}
+            {mine.map((g) => {
+              const mode = STUDIO_MODE[g.template];
+              return (
+                <div key={g.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 p-3 text-sm">
+                  <Link href={`/play/ugc?id=${g.id}`} className="flex min-w-0 flex-1 items-center gap-3 hover:opacity-80">
+                    <Icon name={g.theme.icon} size={18} />
+                    <span className="truncate font-semibold text-white">{g.name}</span>
+                  </Link>
+                  <span className="font-mono text-xs text-slate-400">◎{fmtCompact(g.volume)} vol</span>
+                  <span className="font-mono text-xs text-gold">◎{fmtSol(g.volume * g.edge * 0.3, 3)}</span>
+                  {mode && (
+                    <div className="flex items-center gap-1">
+                      <Link href={`/studio?mode=${mode}&edit=${g.id}`} className="chip hover:border-neon-cyan/50 !text-[0.68rem]" title="Edit this game in the studio">Edit</Link>
+                      <Link href={`/studio?mode=${mode}&remix=${g.id}`} className="chip hover:border-neon-violet/50 !text-[0.68rem]" title="Duplicate into a new game">Duplicate</Link>
+                      <button
+                        onClick={() => { if (window.confirm(`Unpublish "${g.name}"? This removes it from the community.`)) deleteUgc(g.id); }}
+                        className="chip hover:border-loss/50 hover:text-loss !text-[0.68rem]"
+                        title="Unpublish (delete) this game"
+                      >
+                        Unpublish
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
           <div className="mt-4 flex items-center gap-3">
             <button
