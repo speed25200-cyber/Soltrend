@@ -67,9 +67,19 @@ the stake-weighted entry list to pick a winner (win chance == pot share), who
 takes the pot minus a 3% rake. Commit-reveal per round. Client: `useJackpot` +
 the Jackpot tab on `/duel`.
 
-Both duel and jackpot resolution are covered by unit tests in
-`apps/api/test/settlement.spec.ts` (reproducibility, stake-weighted odds,
-distribution).
+### Game-show elimination (`/showdown`)
+
+**`ShowdownGateway`** (`/showdown` namespace) is a fair last-one-standing.
+Players `join` for a fixed table stake during the open window; at start a seeded
+Fisher-Yates shuffle (`eliminationOrder`) fixes the drop order, and the server
+emits `eliminated` one at a time for suspense until one seat remains and takes
+the pot minus a 4% rake. Equal buy-ins make each seat an even `1/N`; the whole
+order is verifiable from the revealed seed. Client: `useShowdown` + the Game Show
+tab on `/duel`.
+
+Duel, jackpot and showdown resolution are all covered by unit tests in
+`apps/api/test/settlement.spec.ts` (reproducibility, stake-weighted / uniform
+odds, distribution) — 14 tests, all green.
 
 ## Going live
 
