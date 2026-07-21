@@ -31,6 +31,7 @@ export const CATALOG: GameMeta[] = [
   { slug: 'limbo', name: 'Limbo', icon: 'limbo', tagline: 'Aim for the multiplier', template: 'limbo', tier: 1, accent: 'win' },
   { slug: 'coinflip', name: 'Coinflip', icon: 'coin', tagline: 'Fifty-fifty, instant', template: 'coinflip', tier: 2, accent: 'gold' },
   { slug: 'wheel', name: 'Wheel', icon: 'wheel', tagline: 'Spin the segments', template: 'wheel', tier: 2, accent: 'violet' },
+  { slug: 'towers', name: 'Towers', icon: 'target', tagline: 'Climb the tower, dodge the traps', template: 'towers', tier: 2, accent: 'cyan' },
 ];
 
 export const bySlug = (slug: string) => CATALOG.find((g) => g.slug === slug);
