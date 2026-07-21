@@ -168,9 +168,9 @@ pub mod house_vault {
         // Virtual offset (VIRT) neutralises the first-depositor inflation attack:
         // shares = amount · (total_shares + VIRT) / (pool_value + VIRT).
         let minted: u128 = (amount as u128)
-            .checked_mul(ctx.accounts.pool.total_shares + VIRT)
+            .checked_mul(ctx.accounts.pool.total_shares.checked_add(VIRT).ok_or(CasinoError::MathOverflow)?)
             .ok_or(CasinoError::MathOverflow)?
-            / (value + VIRT);
+            / value.checked_add(VIRT).ok_or(CasinoError::MathOverflow)?;
         require!(minted > 0, CasinoError::ZeroShares);
 
         // Staker funds the pool.
@@ -207,9 +207,9 @@ pub mod house_vault {
         let value = pool_ai.lamports().saturating_sub(rent) as u128;
         // Mirror of the mint formula: amount = shares · (value + VIRT) / (total + VIRT).
         let amount = (shares
-            .checked_mul(value + VIRT)
+            .checked_mul(value.checked_add(VIRT).ok_or(CasinoError::MathOverflow)?)
             .ok_or(CasinoError::MathOverflow)?
-            / (ctx.accounts.pool.total_shares + VIRT)) as u64;
+            / ctx.accounts.pool.total_shares.checked_add(VIRT).ok_or(CasinoError::MathOverflow)?) as u64;
 
         // A staker can never withdraw locked (reserved) liability, only free value.
         let free = pool_ai.lamports().saturating_sub(rent).saturating_sub(ctx.accounts.pool.locked);
@@ -304,6 +304,11 @@ pub mod house_vault {
     /// provably-fair float and, with the public GameSpec, verify the payout.
     pub fn settle_bet(ctx: Context<SettleBet>, server_seed: [u8; 32], payout_multiplier_bps: u64) -> Result<()> {
         let cfg = &ctx.accounts.config;
+        // Native games MUST go through `settle_native` (outcome computed on-chain).
+        // Without this, the authority could settle a native game via this
+        // authority-multiplier path and re-introduce the discretion settle_native
+        // was built to remove.
+        require!(!ctx.accounts.game.native, CasinoError::NotNativeGame);
         let bet = &ctx.accounts.bet;
 
         // Commit-reveal: the revealed seed must hash to the committed value.
@@ -532,8 +537,9 @@ fn validate_native(template: u8, p0: u64, p1: u64) -> Result<()> {
         TPL_DICE => require!(p0 > 0 && p0 < BPS_DENOM && p1 <= 1, CasinoError::InvalidNativeParams),
         // coinflip: no params.
         TPL_COINFLIP => {}
-        // limbo: p0 = target multiplier in bps (>= 1.00×).
-        TPL_LIMBO => require!(p0 >= BPS_DENOM, CasinoError::InvalidNativeParams),
+        // limbo: p0 = target multiplier in bps, in [1.00×, 1000×]. The upper bound
+        // stops a silently-unwinnable game (win_prob truncating to 0).
+        TPL_LIMBO => require!(p0 >= BPS_DENOM && p0 <= 1000 * BPS_DENOM, CasinoError::InvalidNativeParams),
         _ => return err!(CasinoError::InvalidNativeParams),
     }
     Ok(())

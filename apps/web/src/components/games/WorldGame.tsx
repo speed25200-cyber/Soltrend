@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { GameLayout } from '@/components/GameLayout';
 import { BetAmount } from '@/components/BetControls';
 import { BetButton } from './BetButton';
@@ -43,6 +43,9 @@ export function WorldGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params,
   const [seeds, setSeeds] = useState<ReturnType<typeof reserveSeeds> | null>(null);
   const [hitIndex, setHitIndex] = useState<number | null>(null);
   const [bonus, setBonus] = useState<number | null>(null);
+  // Synchronous re-entry guard — a double-click/tap can't settle the round twice
+  // (React `phase` state updates async; extra risk here as the 3D scene janks).
+  const settledRef = useRef(false);
 
   const picks = revealed.size;
   const curMult = picks > 0 ? boardMultiplier(board, picks, edge) : 1;
@@ -59,12 +62,15 @@ export function WorldGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params,
     setRevealed(new Set());
     setHitIndex(null);
     setBonus(null);
+    settledRef.current = false;
     setPhase('playing');
   };
 
   const reveal = (i: number) => {
     if (phase !== 'playing' || revealed.has(i) || !seeds) return;
     if (bombSet.has(i)) {
+      if (settledRef.current) return;
+      settledRef.current = true;
       setHitIndex(i);
       setPhase('busted');
       sfx.packLoss(soundPack);
@@ -83,6 +89,8 @@ export function WorldGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params,
     if (phase !== 'playing' || !seeds) return;
     const p = override ?? picks;
     if (p === 0) return;
+    if (settledRef.current) return;
+    settledRef.current = true;
     let m = boardMultiplier(board, p, edge);
     // Logic core: an edge-neutral bonus multiplier drawn from a separate channel.
     if (spec.logic) {

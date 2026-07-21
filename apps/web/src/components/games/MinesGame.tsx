@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { GameLayout } from '@/components/GameLayout';
 import { BetAmount } from '@/components/BetControls';
@@ -25,6 +25,9 @@ export function MinesGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params 
   const [revealed, setRevealed] = useState<Set<number>>(new Set());
   const [bombSet, setBombSet] = useState<Set<number>>(new Set());
   const [seeds, setSeeds] = useState<ReturnType<typeof reserveSeeds> | null>(null);
+  // Synchronous re-entry guard: blocks a double-tap settling the same round twice
+  // (React `phase` state updates async, so it can't block back-to-back events).
+  const settledRef = useRef(false);
 
   const picks = revealed.size;
   const nextMult = minesMultiplier(GRID, bombs, picks + 1, edge);
@@ -36,12 +39,15 @@ export function MinesGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params 
     setSeeds(s);
     setBombSet(minesLayout(GRID, bombs, s));
     setRevealed(new Set());
+    settledRef.current = false;
     setPhase('playing');
   };
 
   const reveal = (i: number) => {
     if (phase !== 'playing' || revealed.has(i) || !seeds) return;
     if (bombSet.has(i)) {
+      if (settledRef.current) return;
+      settledRef.current = true;
       setBombSet(new Set(bombSet));
       setPhase('busted');
       settle({
@@ -68,6 +74,8 @@ export function MinesGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params 
     if (phase !== 'playing' || !seeds) return;
     const p = picksOverride ?? picks;
     if (p === 0) return;
+    if (settledRef.current) return;
+    settledRef.current = true;
     const m = minesMultiplier(GRID, bombs, p, edge);
     setPhase('cashed');
     settle({

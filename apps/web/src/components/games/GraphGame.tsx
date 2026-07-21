@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { GameLayout } from '@/components/GameLayout';
 import { BetAmount } from '@/components/BetControls';
 import { BetButton } from './BetButton';
@@ -43,6 +43,8 @@ export function GraphGame({ meta, gameId, gameName, params, maxBet }: GameConfig
   const [round, setRound] = useState(0);
   const [mode, setMode] = useState<'manual' | 'auto'>('manual');
   const revealTimer = useRef<number>();
+  const rollingRef = useRef(false); // sync guard so a double-click can't burn a nonce
+  useEffect(() => () => window.clearTimeout(revealTimer.current), []); // cancel on unmount
 
   const presentation: PresentationId = (meta.presentation as PresentationId) || 'pulse';
   const background: BackgroundId = (meta.background as BackgroundId) || 'none';
@@ -73,6 +75,9 @@ export function GraphGame({ meta, gameId, gameName, params, maxBet }: GameConfig
 
   const playRound = (amount: number, quiet: boolean) => {
     if (!graph) return { win: false, payout: 0 };
+    // Manual play: block re-entry during the suspense reveal so a double-click
+    // can't reserve (and drop) a second nonce, leaving a gap in the fair chain.
+    if (!quiet && rollingRef.current) return { win: false, payout: 0 };
     const seeds = reserveSeeds();
     const stream = floatStream(seeds.serverSeed, seeds.clientSeed, seeds.nonce);
     const m = round2(runGraph(graph, () => stream.next()));
@@ -82,10 +87,12 @@ export function GraphGame({ meta, gameId, gameName, params, maxBet }: GameConfig
       commit(amount, m, didWin, payout, seeds, true);
     } else {
       // Suspense reveal for the scene.
+      rollingRef.current = true;
       window.clearTimeout(revealTimer.current);
       setRolling(true);
       setWin(null);
       revealTimer.current = window.setTimeout(() => {
+        rollingRef.current = false;
         setRolling(false);
         commit(amount, m, didWin, payout, seeds, false);
       }, 650);

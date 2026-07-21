@@ -47,6 +47,13 @@ export function AutoBet({
   const profitRef = useRef(0);
   const doneRef = useRef(0);
   const timer = useRef<number>();
+  // Always call the LATEST guard (which closes over the live balance / RG limits),
+  // never the one frozen into the loop closure — otherwise auto-bet keeps betting
+  // against a stale balance and can drive it negative.
+  const guardRef = useRef(guard);
+  guardRef.current = guard;
+  const playRef = useRef(playRound);
+  playRef.current = playRound;
 
   useEffect(() => () => { runningRef.current = false; window.clearTimeout(timer.current); }, []);
 
@@ -59,10 +66,10 @@ export function AutoBet({
   const loop = () => {
     if (!runningRef.current) return;
     const bet = Math.round(betRef.current * 10000) / 10000;
-    const g = guard(bet);
+    const g = guardRef.current(bet);
     if (!g.ok) return stop();
 
-    const res = playRound(bet, true);
+    const res = playRef.current(bet, true);
     const net = res.payout - bet;
     profitRef.current = Math.round((profitRef.current + net) * 10000) / 10000;
     doneRef.current += 1;
@@ -83,7 +90,7 @@ export function AutoBet({
   };
 
   const start = () => {
-    if (disabled) return;
+    if (disabled || runningRef.current) return; // block double-start (two loops)
     sfx.click();
     betRef.current = baseBet;
     profitRef.current = 0;

@@ -320,7 +320,9 @@ export const useCasino = create<CasinoState>()(
             nonce: seeds.nonce,
           };
           return {
-            balance: round4(s.balance - rest.bet + rest.payout),
+            // Floor at 0 — a stale/replayed settle with bet > balance must never
+            // drive the ledger negative (mirrors the on-chain "pull stake first").
+            balance: Math.max(0, round4(s.balance - rest.bet + rest.payout)),
             history: [record, ...s.history].slice(0, 200),
             lossDay: d,
             sessionLossToday: Math.max(0, (lossReset ? 0 : s.sessionLossToday) - net),
