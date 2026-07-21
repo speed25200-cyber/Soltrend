@@ -24,7 +24,13 @@ export type NodeKind =
   | 'map'
   | 'chance'
   | 'segments'
+  | 'ladder'
+  | 'multidraw'
+  | 'clamp'
   | 'payout';
+
+/** Node kinds that pull their own randomness from the fair stream. */
+export const RANDOM_KINDS = new Set<NodeKind>(['rng', 'ladder', 'multidraw']);
 
 export interface ForgeNode {
   id: string;
@@ -215,6 +221,66 @@ export const NODE_DEFS: Record<NodeKind, NodeDef> = {
       return parts[parts.length - 1].m;
     },
   },
+  ladder: {
+    kind: 'ladder',
+    label: 'Risk tower',
+    hint: 'Auto-climb: each step survives with prob P and compounds ×Step, else busts to 0',
+    color: '#f43f5e',
+    inputs: [],
+    params: [
+      { key: 'steps', label: 'Max steps', type: 'number', default: 6, step: 1 },
+      { key: 'p', label: 'P survive', type: 'number', default: 0.72, step: 0.01 },
+      { key: 'step', label: '×/step', type: 'number', default: 1.32, step: 0.01 },
+    ],
+    eval: (_i, p, ctx) => {
+      const steps = Math.max(1, Math.min(64, Math.round(num(p.steps, 6))));
+      const pw = Math.max(0, Math.min(1, num(p.p, 0.72)));
+      const mult = Math.max(1, num(p.step, 1.32));
+      let acc = 1;
+      for (let s = 0; s < steps; s++) {
+        if (ctx.next() < pw) acc *= mult;
+        else return 0;
+      }
+      return acc;
+    },
+  },
+  multidraw: {
+    kind: 'multidraw',
+    label: 'Multi-draw',
+    hint: 'Draw N fair values and keep the best / worst / average — luck of many rolls',
+    color: '#14b8a6',
+    inputs: [],
+    params: [
+      { key: 'n', label: 'Draws', type: 'number', default: 3, step: 1 },
+      { key: 'op', label: 'Keep', type: 'select', options: ['max', 'min', 'avg', 'sum'], default: 'max' },
+    ],
+    eval: (_i, p, ctx) => {
+      const n = Math.max(1, Math.min(50, Math.round(num(p.n, 3))));
+      let best = p.op === 'min' ? 1 : 0;
+      let acc = 0;
+      for (let k = 0; k < n; k++) {
+        const v = ctx.next();
+        acc += v;
+        if (p.op === 'max') best = Math.max(best, v);
+        else if (p.op === 'min') best = Math.min(best, v);
+      }
+      if (p.op === 'avg') return acc / n;
+      if (p.op === 'sum') return acc;
+      return best;
+    },
+  },
+  clamp: {
+    kind: 'clamp',
+    label: 'Clamp',
+    hint: 'Keep a value inside [lo, hi] — tame runaway payouts',
+    color: '#0ea5e9',
+    inputs: [{ key: 'x', label: 'X' }],
+    params: [
+      { key: 'lo', label: 'lo', type: 'number', default: 0 },
+      { key: 'hi', label: 'hi', type: 'number', default: 100 },
+    ],
+    eval: (i, p) => Math.max(num(p.lo, 0), Math.min(num(p.hi, 100), i.x ?? 0)),
+  },
   payout: {
     kind: 'payout',
     label: 'Payout',
@@ -290,8 +356,8 @@ const BUCKETS: { label: string; min: number; max: number }[] = [
 export function simulateGraph(g: ForgeGraph, rounds = 4000): GraphSim {
   const errors: string[] = [];
   if (!payoutNode(g)) errors.push('Add a Payout node — every game needs one.');
-  const hasRng = g.nodes.some((n) => n.kind === 'rng');
-  if (!hasRng) errors.push('Add at least one RNG node so the outcome is random.');
+  const hasRng = g.nodes.some((n) => RANDOM_KINDS.has(n.kind));
+  if (!hasRng) errors.push('Add a randomness source (RNG, Risk tower or Multi-draw) so the outcome is random.');
 
   const serverSeed = createServerSeed().serverSeed;
   const buckets = BUCKETS.map((b) => ({ label: b.label, count: 0 }));
@@ -407,6 +473,31 @@ export const FORGE_TEMPLATES: ForgeTemplate[] = [
         { id: 'r', kind: 'rng', x: 60, y: 180, params: {}, inputs: {} },
         { id: 'sg', kind: 'segments', x: 300, y: 150, params: { segs: '0:12, 1.5:8, 2:4, 5:2, 20:1' }, inputs: { x: 'r' } },
         { id: 'pay', kind: 'payout', x: 620, y: 190, params: { scale: 1 }, inputs: { mult: 'sg' } },
+      ],
+    }),
+  },
+  {
+    id: 'tower',
+    label: 'Risk tower',
+    hint: 'Climb or bust — high volatility',
+    build: (): ForgeGraph => ({
+      nodes: [
+        { id: 'ld', kind: 'ladder', x: 90, y: 150, params: { steps: 8, p: 0.74, step: 1.3 }, inputs: {} },
+        { id: 'cp', kind: 'clamp', x: 340, y: 160, params: { lo: 0, hi: 500 }, inputs: { x: 'ld' } },
+        { id: 'pay', kind: 'payout', x: 590, y: 180, params: { scale: 1 }, inputs: { mult: 'cp' } },
+      ],
+    }),
+  },
+  {
+    id: 'bestof',
+    label: 'Best of N',
+    hint: 'Keep your luckiest roll',
+    build: (): ForgeGraph => ({
+      nodes: [
+        { id: 'md', kind: 'multidraw', x: 60, y: 170, params: { n: 3, op: 'max' }, inputs: {} },
+        { id: 'cv', kind: 'curve', x: 300, y: 160, params: { type: 'crash', k: 0.55 }, inputs: { x: 'md' } },
+        { id: 'cp', kind: 'clamp', x: 520, y: 170, params: { lo: 0, hi: 200 }, inputs: { x: 'cv' } },
+        { id: 'pay', kind: 'payout', x: 740, y: 190, params: { scale: 1 }, inputs: { mult: 'cp' } },
       ],
     }),
   },
