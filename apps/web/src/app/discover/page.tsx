@@ -13,6 +13,16 @@ export default function DiscoverPage() {
   const trending = [...ugc].sort((a, b) => b.volume - a.volume);
   const fresh = [...ugc].sort((a, b) => b.createdAt - a.createdAt);
   const gotw = trending.find((g) => g.featured) ?? trending[0];
+
+  // Top creators by total wagered across their catalog.
+  const byCreator = new Map<string, { volume: number; games: number }>();
+  for (const g of ugc) {
+    const c = byCreator.get(g.creator) ?? { volume: 0, games: 0 };
+    c.volume += g.volume;
+    c.games += 1;
+    byCreator.set(g.creator, c);
+  }
+  const creators = [...byCreator.entries()].sort((a, b) => b[1].volume - a[1].volume).slice(0, 8);
   const hex = gotw ? ACCENT_HEX[(gotw.theme.accent as keyof typeof ACCENT_HEX) ?? 'violet'] : '#a855f7';
 
   return (
@@ -56,6 +66,25 @@ export default function DiscoverPage() {
           ))}
         </div>
       </section>
+
+      {creators.length > 0 && (
+        <section>
+          <SectionHead eyebrow="Creators" title="Top creators" sub="The builders behind the community's games" />
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {creators.map(([name, c]) => (
+              <Link key={name} href={`/creator?name=${encodeURIComponent(name)}`} className="glass glass-hover flex items-center gap-3 p-4">
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-neon-violet/15 font-display text-sm font-bold text-neon-violet">
+                  {name.slice(0, 2).toUpperCase()}
+                </span>
+                <div className="min-w-0">
+                  <div className="truncate font-semibold text-white">{name}</div>
+                  <div className="text-xs text-slate-500">{c.games} game{c.games === 1 ? '' : 's'} · ◎{fmtCompact(c.volume)}</div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2">
         <div className="glass flex flex-col items-center gap-3 p-8 text-center">
