@@ -12,4 +12,7 @@ export interface GameConfig {
   gameId?: string;
   gameName?: string;
   params?: Record<string, number | string>;
+  /** Bankroll-relative max bet (◎). Enforced on-chain; mirrored here so the UI
+   *  blocks over-cap bets. Undefined = no per-game cap (built-in Originals). */
+  maxBet?: number;
 }

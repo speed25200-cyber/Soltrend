@@ -25,7 +25,7 @@ const World3D = dynamic(() => import('@/components/worlds/World3D'), {
 type Phase = 'idle' | 'playing' | 'busted' | 'cashed';
 
 /** Runtime for a 3D "World" — spatial board (body) + optional logic core (brain). */
-export function WorldGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params }: GameConfig) {
+export function WorldGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, maxBet }: GameConfig) {
   const { guard, reserveSeeds, settle } = usePlay();
   const bumpUgc = useCasino((s) => s.bumpUgc);
 
@@ -48,7 +48,9 @@ export function WorldGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params 
   const curMult = picks > 0 ? boardMultiplier(board, picks, edge) : 1;
   const nextMult = boardMultiplier(board, Math.min(picks + 1, safe), edge);
   const heat = Math.min(1, Math.log10(Math.max(1, curMult)) / 2);
-  const g = guard(bet);
+  const base = guard(bet);
+  const overCap = maxBet != null && bet > maxBet;
+  const g = overCap ? { ok: false, reason: `Max bet ◎${maxBet} — this game's bankroll cap` } : base;
 
   const start = () => {
     const s = reserveSeeds();
