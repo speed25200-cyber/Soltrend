@@ -26,6 +26,8 @@ import {
 } from '@/lib/presentation';
 import { SceneStage } from '@/components/scenes/SceneStage';
 import { SceneBackground } from '@/components/scenes/SceneBackground';
+import { SpriteGlyph } from '@/components/create/SpriteGlyph';
+import { listSprites, SYMBOLS_PER_GAME, type Sprite } from '@/lib/sprites';
 import { ACCENT_HEX, type GameMeta } from '@/lib/catalog';
 import { fmtMult, shortAddr } from '@/lib/format';
 import { sfx } from '@/lib/sound';
@@ -51,6 +53,20 @@ export function NodeBuilder() {
   const [winEffect, setWinEffect] = useState<WinEffectId>('confetti');
   const [previewRound, setPreviewRound] = useState(1);
   const [target, setTarget] = useState(2);
+
+  // Custom pixel symbols (from the studio's Symbols editor) for slot presentations.
+  const [library, setLibrary] = useState<Sprite[]>([]);
+  const [symbolIds, setSymbolIds] = useState<string[]>([]);
+  useEffect(() => setLibrary(listSprites()), []);
+  const symbols = useMemo(
+    () => symbolIds.map((id) => library.find((s) => s.id === id)).filter((s): s is Sprite => !!s),
+    [symbolIds, library],
+  );
+  const toggleSymbol = (id: string) =>
+    setSymbolIds((ids) =>
+      ids.includes(id) ? ids.filter((x) => x !== id) : ids.length >= SYMBOLS_PER_GAME ? ids : [...ids, id],
+    );
+  const isSlot = presentation === 'reel';
 
   const applyPreset = (s: (typeof STYLE_PRESETS)[number]['style']) => {
     setPresentation(s.presentation);
@@ -147,6 +163,7 @@ export function NodeBuilder() {
     soundPack,
     winEffect,
     seedKey: name || 'forge-preview',
+    symbols: isSlot && symbols.length >= 2 ? symbols : undefined,
   };
 
   const normalise = () => {
@@ -166,7 +183,17 @@ export function NodeBuilder() {
       maxWin: Math.max(1, Math.round(sim.maxMult)),
       parentId: remixParent ?? undefined,
       params: { graph: JSON.stringify(graph) },
-      theme: { accent, icon, aura, tagline: tagline.trim() || undefined, presentation, background, soundPack, winEffect },
+      theme: {
+        accent,
+        icon,
+        aura,
+        tagline: tagline.trim() || undefined,
+        presentation,
+        background,
+        soundPack,
+        winEffect,
+        symbols: isSlot && symbols.length >= 2 ? symbols : undefined,
+      },
     });
     sfx.jackpot();
     burstWin(12);
@@ -354,12 +381,43 @@ export function NodeBuilder() {
                   <div className="relative h-36 overflow-hidden rounded-lg">
                     <SceneBackground background={background} palette={paletteFromSeed(name || 'forge-preview', accentHex(accent))} />
                     <div className="relative z-10 h-full">
-                      <SceneStage compact presentation={presentation} mult={2.4} win rolling={false} palette={paletteFromSeed(name || 'forge-preview', accentHex(accent))} round={previewRound} />
+                      <SceneStage compact presentation={presentation} mult={2.4} win rolling={false} palette={paletteFromSeed(name || 'forge-preview', accentHex(accent))} round={previewRound} symbols={meta.symbols} />
                     </div>
                   </div>
                   <button className="btn-ghost mt-1 w-full !py-1.5 text-xs" onClick={() => setPreviewRound((r) => r + 1)}>Replay preview</button>
                 </div>
               </div>
+
+              {isSlot && (
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-slate-500">Reel symbols · your own pixel art</span>
+                    <span className="text-[10px] text-slate-600">{symbols.length}/{SYMBOLS_PER_GAME}</span>
+                  </div>
+                  {library.length === 0 ? (
+                    <p className="mt-1.5 rounded-lg border border-white/[0.06] bg-void-950/50 p-2 text-xs text-slate-500">
+                      No symbols yet — draw some in the <Link href="/studio?mode=art" className="text-neon-cyan hover:underline">Symbols</Link> editor, then pick them here. Default icons are used until you do.
+                    </p>
+                  ) : (
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {library.map((s) => {
+                        const on = symbolIds.includes(s.id);
+                        return (
+                          <button
+                            key={s.id}
+                            onClick={() => { toggleSymbol(s.id); setPreviewRound((r) => r + 1); }}
+                            title={s.name}
+                            className={`rounded-lg border-2 p-1 transition ${on ? 'border-neon-violet bg-neon-violet/10' : 'border-white/10 bg-void-950/50 hover:border-white/25'}`}
+                          >
+                            <SpriteGlyph sprite={s} size={30} />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {symbols.length === 1 && <p className="mt-1 text-[10px] text-gold">Pick at least 2 symbols to use custom art.</p>}
+                </div>
+              )}
             </div>
           </div>
 

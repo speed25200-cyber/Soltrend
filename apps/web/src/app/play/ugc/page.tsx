@@ -49,6 +49,7 @@ function UgcInner() {
     soundPack: game.theme.soundPack as GameMeta['soundPack'],
     winEffect: game.theme.winEffect as GameMeta['winEffect'],
     seedKey: game.specHash || game.id,
+    symbols: game.theme.symbols,
   };
 
   return (

@@ -5,9 +5,10 @@ import { SectionHead } from '@/components/SectionHead';
 import { Icon, type IconName } from '@/components/Icon';
 import { WorldBuilder } from '@/components/create/WorldBuilder';
 import { NodeBuilder } from '@/components/create/NodeBuilder';
+import { SpriteEditor } from '@/components/create/SpriteEditor';
 import { sfx } from '@/lib/sound';
 
-type Mode = 'world' | 'node';
+type Mode = 'world' | 'node' | 'art';
 
 /**
  * The single creation surface — 3D World and Node game builders merged behind one
@@ -19,7 +20,7 @@ export default function StudioPage() {
 
   useEffect(() => {
     const m = new URLSearchParams(window.location.search).get('mode');
-    if (m === 'node' || m === 'world') setMode(m);
+    if (m === 'node' || m === 'world' || m === 'art') setMode(m);
   }, []);
 
   const pick = (m: Mode) => {
@@ -39,7 +40,7 @@ export default function StudioPage() {
         sub="Design a 3D world or wire a node mechanic — provably fair, vault-safe, published to the community in a tap."
       />
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-3">
         <ModeCard
           active={mode === 'world'}
           onClick={() => pick('world')}
@@ -56,9 +57,17 @@ export default function StudioPage() {
           blurb="Generate a game from a feeling, or wire your own mechanic node-by-node."
           accent="#a855f7"
         />
+        <ModeCard
+          active={mode === 'art'}
+          onClick={() => pick('art')}
+          icon="star"
+          title="Symbols"
+          blurb="Draw your own pixel symbols — then use them in your slot and scratch games."
+          accent="#ffd25f"
+        />
       </div>
 
-      {mode === 'world' ? <WorldBuilder /> : <NodeBuilder />}
+      {mode === 'world' ? <WorldBuilder /> : mode === 'node' ? <NodeBuilder /> : <SpriteEditor />}
     </div>
   );
 }

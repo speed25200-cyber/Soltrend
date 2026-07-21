@@ -1,0 +1,125 @@
+/**
+ * Pixel-sprite model for the creator studio.
+ *
+ * Creators draw their own slot symbols / tokens on a small grid. A sprite is a
+ * tiny, self-contained value: a palette plus one base36 char per cell indexing
+ * that palette (index 0 = transparent). It serialises to plain JSON so a
+ * published game can carry its custom symbols inline — every player renders the
+ * exact pixels the creator drew, no server, no assets to host.
+ */
+
+export interface Sprite {
+  id: string;
+  name: string;
+  grid: number; // side length in cells (square)
+  palette: string[]; // hex colors; index 0 is unused (transparent), 1..n are paints
+  data: string; // grid*grid base36 chars, each an index into palette (0 = transparent)
+}
+
+const KEY = 'soltrend-sprites';
+export const MAX_GRID = 24;
+export const SYMBOLS_PER_GAME = 6;
+
+/** A warm, readable default palette (index 0 kept transparent). */
+export const DEFAULT_PALETTE = [
+  'transparent',
+  '#ffffff',
+  '#0b1020',
+  '#ff3b6b',
+  '#ff9f43',
+  '#ffd25f',
+  '#10f5a0',
+  '#22d3ee',
+  '#4f7cff',
+  '#a855f7',
+  '#ec4899',
+  '#94a3b8',
+  '#1e293b',
+  '#7c3f12',
+  '#0f766e',
+];
+
+const newId = () => 's' + Math.random().toString(36).slice(2, 9);
+const blankData = (grid: number) => '0'.repeat(grid * grid);
+
+export function newSprite(grid = 16, name = 'symbol'): Sprite {
+  return { id: newId(), name, grid, palette: [...DEFAULT_PALETTE], data: blankData(grid) };
+}
+
+export const idx = (s: Sprite, x: number, y: number) => y * s.grid + x;
+
+export function pixelAt(s: Sprite, x: number, y: number): number {
+  const c = s.data[idx(s, x, y)];
+  return c ? parseInt(c, 36) : 0;
+}
+
+/** Immutably paint one cell (color 0 = erase). */
+export function setPixel(s: Sprite, x: number, y: number, color: number): Sprite {
+  if (x < 0 || y < 0 || x >= s.grid || y >= s.grid) return s;
+  const i = idx(s, x, y);
+  const ch = Math.max(0, Math.min(35, color)).toString(36);
+  if (s.data[i] === ch) return s;
+  return { ...s, data: s.data.slice(0, i) + ch + s.data.slice(i + 1) };
+}
+
+export const clearSprite = (s: Sprite): Sprite => ({ ...s, data: blankData(s.grid) });
+
+/** True when the sprite has at least one painted cell. */
+export const isDrawn = (s: Sprite) => /[^0]/.test(s.data);
+
+/* ------------------------------------------------------------ persistence */
+
+export function listSprites(): Sprite[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(KEY);
+    const arr = raw ? (JSON.parse(raw) as Sprite[]) : [];
+    return Array.isArray(arr) ? arr.filter(validSprite) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveSprite(sprite: Sprite): Sprite[] {
+  const all = listSprites();
+  const i = all.findIndex((s) => s.id === sprite.id);
+  if (i >= 0) all[i] = sprite;
+  else all.unshift(sprite);
+  persist(all);
+  return all;
+}
+
+export function deleteSprite(id: string): Sprite[] {
+  const all = listSprites().filter((s) => s.id !== id);
+  persist(all);
+  return all;
+}
+
+export function getSprite(id: string): Sprite | undefined {
+  return listSprites().find((s) => s.id === id);
+}
+
+function persist(all: Sprite[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(KEY, JSON.stringify(all));
+  } catch {
+    /* quota — ignore */
+  }
+}
+
+/** Defensive shape check for anything read from storage or a published game. */
+export function validSprite(s: unknown): s is Sprite {
+  if (!s || typeof s !== 'object') return false;
+  const o = s as Sprite;
+  return (
+    typeof o.id === 'string' &&
+    typeof o.name === 'string' &&
+    typeof o.grid === 'number' &&
+    o.grid > 0 &&
+    o.grid <= MAX_GRID &&
+    Array.isArray(o.palette) &&
+    typeof o.data === 'string' &&
+    o.data.length === o.grid * o.grid
+  );
+}

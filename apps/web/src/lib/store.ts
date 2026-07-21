@@ -15,6 +15,7 @@ import { persist } from 'zustand/middleware';
 import { createServerSeed, randomHex, sha256Hex } from './provably-fair';
 import type { Template } from './games';
 import type { IconName } from '@/components/Icon';
+import type { Sprite } from './sprites';
 import {
   ACHIEVEMENTS,
   DAILY_MISSIONS,
@@ -58,6 +59,9 @@ export interface UgcGame {
     background?: string;
     soundPack?: string;
     winEffect?: string;
+    /** Custom pixel symbols drawn in the studio, carried inline so every player
+     *  renders the creator's own slot art (used by reel/scratch presentations). */
+    symbols?: Sprite[];
   };
   volume: number;
   players: number;

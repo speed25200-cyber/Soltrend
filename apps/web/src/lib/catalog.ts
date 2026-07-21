@@ -1,6 +1,7 @@
 import type { Template } from './games';
 import type { IconName } from '@/components/Icon';
 import type { PresentationId, BackgroundId, SoundPackId, WinEffectId } from './presentation';
+import type { Sprite } from './sprites';
 
 export interface GameMeta {
   slug: string;
@@ -17,6 +18,8 @@ export interface GameMeta {
   soundPack?: SoundPackId;
   winEffect?: WinEffectId;
   seedKey?: string;
+  /** Custom pixel symbols for reel/scratch presentations (creator-drawn). */
+  symbols?: Sprite[];
 }
 
 /** Launch catalogue — the "Originals" that drive the volume (§2). */

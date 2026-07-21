@@ -3,6 +3,8 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { fmtMult } from '@/lib/format';
 import { Icon, type IconName } from '@/components/Icon';
+import { SpriteGlyph } from '@/components/create/SpriteGlyph';
+import type { Sprite } from '@/lib/sprites';
 import type { Palette, PresentationId } from '@/lib/presentation';
 
 export interface SceneProps {
@@ -13,6 +15,7 @@ export interface SceneProps {
   palette: Palette;
   round: number; // increments each result to retrigger animation
   compact?: boolean;
+  symbols?: Sprite[]; // creator-drawn pixel symbols for reel/scratch scenes
 }
 
 const SCENES: Record<string, (p: SceneProps) => JSX.Element> = {
@@ -125,11 +128,20 @@ function Rocket({ mult, win, rolling, palette, round }: SceneProps) {
 const SLOT_SYMS: IconName[] = ['gem', 'coin', 'star', 'clover', 'crown', 'flame'];
 const REEL_H = 56;
 
-function ReelCol({ finalIdx, rolling, round, ri, c }: { finalIdx: number; rolling: boolean; round: number; ri: number; c: string }) {
-  const n = SLOT_SYMS.length;
+/** One reel face — a creator's custom sprite when supplied, else a built-in icon. */
+function SlotFace({ i, symbols, dim }: { i: number; symbols?: Sprite[]; dim: string }) {
+  if (symbols && symbols.length) return <SpriteGlyph sprite={symbols[i % symbols.length]} size={34} />;
+  return (
+    <span style={{ color: dim }}>
+      <Icon name={SLOT_SYMS[i % SLOT_SYMS.length]} size={26} />
+    </span>
+  );
+}
+
+function ReelCol({ finalIdx, rolling, round, ri, c, n, symbols }: { finalIdx: number; rolling: boolean; round: number; ri: number; c: string; n: number; symbols?: Sprite[] }) {
   // A short strip of fillers ending on the landing symbol.
-  const strip = [...Array(5)].map((_, k) => SLOT_SYMS[(finalIdx + k + 1) % n]);
-  strip.push(SLOT_SYMS[finalIdx]);
+  const strip = [...Array(5)].map((_, k) => (finalIdx + k + 1) % n);
+  strip.push(finalIdx);
   const rest = -(strip.length - 1) * REEL_H;
   return (
     <div className="relative overflow-hidden rounded-lg border border-white/10 bg-void-950/70" style={{ height: REEL_H, width: REEL_H }}>
@@ -139,8 +151,8 @@ function ReelCol({ finalIdx, rolling, round, ri, c }: { finalIdx: number; rollin
         transition={rolling ? { repeat: Infinity, duration: 0.32 + ri * 0.06, ease: 'linear' } : { type: 'spring', stiffness: 120, damping: 13, delay: ri * 0.12 }}
       >
         {strip.map((s, k) => (
-          <div key={k} className="grid place-items-center" style={{ height: REEL_H, color: k === strip.length - 1 ? c : '#475569' }}>
-            <Icon name={s} size={26} />
+          <div key={k} className="grid place-items-center" style={{ height: REEL_H }}>
+            <SlotFace i={s} symbols={symbols} dim={k === strip.length - 1 ? c : '#475569'} />
           </div>
         ))}
       </motion.div>
@@ -148,16 +160,18 @@ function ReelCol({ finalIdx, rolling, round, ri, c }: { finalIdx: number; rollin
   );
 }
 
-function Reel({ mult, win, rolling, palette, round }: SceneProps) {
+function Reel({ mult, win, rolling, palette, round, symbols }: SceneProps) {
   const c = winColor(win, palette);
-  const base = round % SLOT_SYMS.length;
+  const custom = symbols && symbols.length >= 2 ? symbols : undefined;
+  const n = custom ? custom.length : SLOT_SYMS.length;
+  const base = round % n;
   // Win → three of a kind; loss → a deliberately non-matching line.
-  const finals = win === true ? [base, base, base] : [base, (base + 2) % SLOT_SYMS.length, (base + 4) % SLOT_SYMS.length];
+  const finals = win === true ? [base, base, base] : [base, (base + 2) % n, (base + 4) % n];
   return (
     <div className="text-center">
       <div className="mx-auto flex w-fit gap-2 rounded-xl border-2 p-2" style={{ borderColor: `${c}66`, boxShadow: `0 0 40px -10px ${c}` }}>
         {finals.map((f, ri) => (
-          <ReelCol key={ri} finalIdx={f} rolling={rolling} round={round} ri={ri} c={c} />
+          <ReelCol key={ri} finalIdx={f} rolling={rolling} round={round} ri={ri} c={c} n={n} symbols={custom} />
         ))}
       </div>
       <Label mult={mult} win={win} p={palette} />

@@ -115,7 +115,7 @@ export function GraphGame({ meta, gameId, gameName, params, maxBet }: GameConfig
         <div className="relative h-full min-h-[300px]">
           <SceneBackground background={background} palette={palette} />
           <div className="relative z-10 h-full">
-            <SceneStage presentation={presentation} mult={mult} win={win} rolling={rolling} palette={palette} round={round} />
+            <SceneStage presentation={presentation} mult={mult} win={win} rolling={rolling} palette={palette} round={round} symbols={meta.symbols} />
           </div>
         </div>
       }
