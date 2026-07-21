@@ -38,6 +38,7 @@ games with no code, and earn from them. This tracks the vision and what's shippe
 **Community + discovery**
 - **Creator pages** — a maker's catalog + aggregate stats + remix reach.
 - **Top creators** + **novelty-ranked "genuinely new"** sections on Discover.
+- **The Floor** — a spatial 3D discovery view of the community's games.
 
 **Multiplayer**
 - **Live Crash rooms** + shared **3D plaza** (presence).
@@ -83,7 +84,6 @@ to paid, wallet-signed purchases is the remaining integration step.
 5. **Per-game quests / battle pass** and **collectibles / loot drops** —
    engagement metas. The platform already has XP/VIP, missions and achievements;
    any per-game layer must stay cosmetic and behind the RG limits below.
-6. **"The Floor"** — spatial 3D discovery layered on the existing novelty feed.
 
 ## Guardrails
 
