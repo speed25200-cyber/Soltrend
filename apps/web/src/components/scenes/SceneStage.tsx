@@ -2,6 +2,7 @@
 
 import { AnimatePresence, motion } from 'framer-motion';
 import { fmtMult } from '@/lib/format';
+import { Icon, type IconName } from '@/components/Icon';
 import type { Palette, PresentationId } from '@/lib/presentation';
 
 export interface SceneProps {
@@ -121,26 +122,43 @@ function Rocket({ mult, win, rolling, palette, round }: SceneProps) {
 }
 
 /* -------------------------------------------------------------------- Reel */
+const SLOT_SYMS: IconName[] = ['gem', 'coin', 'star', 'clover', 'crown', 'flame'];
+const REEL_H = 56;
+
+function ReelCol({ finalIdx, rolling, round, ri, c }: { finalIdx: number; rolling: boolean; round: number; ri: number; c: string }) {
+  const n = SLOT_SYMS.length;
+  // A short strip of fillers ending on the landing symbol.
+  const strip = [...Array(5)].map((_, k) => SLOT_SYMS[(finalIdx + k + 1) % n]);
+  strip.push(SLOT_SYMS[finalIdx]);
+  const rest = -(strip.length - 1) * REEL_H;
+  return (
+    <div className="relative overflow-hidden rounded-lg border border-white/10 bg-void-950/70" style={{ height: REEL_H, width: REEL_H }}>
+      <motion.div
+        key={round}
+        animate={{ y: rolling ? [rest, 0, rest] : rest }}
+        transition={rolling ? { repeat: Infinity, duration: 0.32 + ri * 0.06, ease: 'linear' } : { type: 'spring', stiffness: 120, damping: 13, delay: ri * 0.12 }}
+      >
+        {strip.map((s, k) => (
+          <div key={k} className="grid place-items-center" style={{ height: REEL_H, color: k === strip.length - 1 ? c : '#475569' }}>
+            <Icon name={s} size={26} />
+          </div>
+        ))}
+      </motion.div>
+    </div>
+  );
+}
+
 function Reel({ mult, win, rolling, palette, round }: SceneProps) {
   const c = winColor(win, palette);
-  const strip = [0.2, 5, 1.1, 0, 2.4, 0.5, mult ?? 0];
-  const rowH = 64;
+  const base = round % SLOT_SYMS.length;
+  // Win → three of a kind; loss → a deliberately non-matching line.
+  const finals = win === true ? [base, base, base] : [base, (base + 2) % SLOT_SYMS.length, (base + 4) % SLOT_SYMS.length];
   return (
     <div className="text-center">
-      <div className="relative mx-auto h-[64px] w-40 overflow-hidden rounded-xl border-2" style={{ borderColor: `${c}66`, boxShadow: `0 0 40px -10px ${c}` }}>
-        <div className="pointer-events-none absolute inset-0 z-10" style={{ background: 'linear-gradient(180deg,#05060f, transparent 30%, transparent 70%, #05060f)' }} />
-        <motion.div
-          key={round}
-          initial={{ y: -(strip.length - 1) * rowH - (rolling ? 0 : 0) }}
-          animate={{ y: rolling ? [-(strip.length - 1) * rowH, 0, -(strip.length - 1) * rowH] : -(strip.length - 1) * rowH }}
-          transition={rolling ? { repeat: Infinity, duration: 0.4, ease: 'linear' } : { type: 'spring', stiffness: 90, damping: 14 }}
-        >
-          {strip.map((v, i) => (
-            <div key={i} className="grid font-display text-3xl font-bold tabular-nums" style={{ height: rowH, placeItems: 'center', color: i === strip.length - 1 ? c : '#64748b' }}>
-              {fmtMult(v)}
-            </div>
-          ))}
-        </motion.div>
+      <div className="mx-auto flex w-fit gap-2 rounded-xl border-2 p-2" style={{ borderColor: `${c}66`, boxShadow: `0 0 40px -10px ${c}` }}>
+        {finals.map((f, ri) => (
+          <ReelCol key={ri} finalIdx={f} rolling={rolling} round={round} ri={ri} c={c} />
+        ))}
       </div>
       <Label mult={mult} win={win} p={palette} />
     </div>

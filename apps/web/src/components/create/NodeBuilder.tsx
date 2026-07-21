@@ -100,6 +100,9 @@ export function NodeBuilder() {
     setGraph(c.graph);
     setName(randomName());
     applyPreset(STYLE_PRESETS[(Math.random() * STYLE_PRESETS.length) | 0].style);
+    // Match the presentation to the mechanic so slots/scratch look the part.
+    if (c.graph.nodes.some((n) => n.kind === 'reel')) setPresentation('reel');
+    else if (c.graph.nodes.some((n) => n.kind === 'scratch')) setPresentation('cards');
     sfx.packWin(soundPack, 3);
   };
 
@@ -227,7 +230,7 @@ export function NodeBuilder() {
             </button>
             <span className="label-eyebrow mx-1">or template</span>
             {FORGE_TEMPLATES.map((t) => (
-              <button key={t.id} className="chip hover:border-neon-violet/50" title={t.hint} onClick={() => { setGraph(t.build()); sfx.click(); }}>
+              <button key={t.id} className="chip hover:border-neon-violet/50" title={t.hint} onClick={() => { setGraph(t.build()); if (t.id === 'slot') setPresentation('reel'); else if (t.id === 'scratch') setPresentation('cards'); sfx.click(); }}>
                 {t.label}
               </button>
             ))}
