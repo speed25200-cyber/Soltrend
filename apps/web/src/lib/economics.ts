@@ -14,22 +14,31 @@
  *     protocol takes rake, revenue scales linearly with volume.
  */
 
-/** Platform fee taken off a creator's bankroll deposit at publish time. */
+/** Platform fee skimmed off a creator's bond at publish time (anti-spam + instant rake). */
 export const CREATION_FEE = 0.03; // 3%
 
-/** How the house edge on every bet is divided. Sums to 1. Platform-favoured. */
+/**
+ * How the house edge on every bet is divided. Sums to 1.
+ *
+ * STAKER-FAVOURED by design: the people who put up the bankroll and carry the
+ * variance must earn the majority, or no one funds the house and the whole
+ * zero-capital bootstrap stalls. The protocol takes a small, RISK-FREE rake — it
+ * never holds bankroll variance, so its margin scales with volume, not luck.
+ */
 export const EDGE_SPLIT = {
-  platform: 0.5, // risk-free protocol rake — our core margin
-  creator: 0.2, // design royalty
-  bankroll: 0.2, // yield to whoever funds the game (creator + community LPs)
-  community: 0.1, // jackpot + treasury
+  bankroll: 0.6, // stakers (creator bond + community LPs) — they fund + risk it
+  creator: 0.2, // design royalty — incentive to ship good, popular games
+  platform: 0.15, // risk-free protocol rake — our core margin, zero capital in
+  insurance: 0.05, // solvency backstop for black-swan runs (protects stakers)
 } as const;
 
 /**
- * Bankroll safety: a single bet's max payout must stay a small fraction of the
- * bankroll so one lucky player can't ruin a game. maxPayout ≤ bankroll / RUIN_K.
+ * Bankroll safety: a single round's max payout must stay a small fraction of the
+ * game's bankroll so one lucky player can't ruin it. maxPayout ≤ bankroll / RUIN_K.
+ * This is the mechanism that lets a game open on a TINY bankroll (even just the
+ * creator's bond) and grow its bet limits organically as stakers pile in.
  */
-export const RUIN_K = 5; // → max payout capped at 20% of bankroll
+export const RUIN_K = 5; // → max payout capped at 20% of the game's bankroll
 
 export function maxBetFor(netBankroll: number, maxWinMult: number): number {
   if (maxWinMult <= 0) return 0;
@@ -38,10 +47,10 @@ export function maxBetFor(netBankroll: number, maxWinMult: number): number {
 
 export interface RevenueProjection {
   totalEdge: number;
-  platform: number;
-  creator: number;
   bankroll: number;
-  community: number;
+  creator: number;
+  platform: number;
+  insurance: number;
 }
 
 /** Project how a given wagered `volume` (SOL) at `edge` splits across parties. */
@@ -49,11 +58,18 @@ export function projectRevenue(volume: number, edge: number): RevenueProjection 
   const totalEdge = volume * edge;
   return {
     totalEdge,
-    platform: totalEdge * EDGE_SPLIT.platform,
-    creator: totalEdge * EDGE_SPLIT.creator,
     bankroll: totalEdge * EDGE_SPLIT.bankroll,
-    community: totalEdge * EDGE_SPLIT.community,
+    creator: totalEdge * EDGE_SPLIT.creator,
+    platform: totalEdge * EDGE_SPLIT.platform,
+    insurance: totalEdge * EDGE_SPLIT.insurance,
   };
+}
+
+/** Rough annualised yield for a staker, given a game's daily volume vs its bankroll. */
+export function stakerApr(dailyVolume: number, bankroll: number, edge: number): number {
+  if (bankroll <= 0) return 0;
+  const dailyYield = (dailyVolume * edge * EDGE_SPLIT.bankroll) / bankroll;
+  return dailyYield * 365;
 }
 
 /** Heuristic ruin risk given how much bankroll cushions the max payout + swings. */

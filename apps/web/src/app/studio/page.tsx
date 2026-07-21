@@ -413,10 +413,10 @@ function verdict(s: SimResult): string {
 /* ---------------------------------------------------------------- Economics */
 
 const SPLIT_ROWS = [
-  { key: 'platform', label: 'Platform rake', color: '#a855f7', note: 'risk-free' },
+  { key: 'bankroll', label: 'Stakers (bankroll)', color: '#10f5a0', note: 'fund + risk it' },
   { key: 'creator', label: 'You (design royalty)', color: '#22d3ee', note: 'royalty' },
-  { key: 'bankroll', label: 'Bankroll yield', color: '#10f5a0', note: 'you + LPs' },
-  { key: 'community', label: 'Jackpot + treasury', color: '#ffd25f', note: 'community' },
+  { key: 'platform', label: 'Platform rake', color: '#a855f7', note: 'risk-free' },
+  { key: 'insurance', label: 'Insurance fund', color: '#ffd25f', note: 'staker backstop' },
 ] as const;
 
 function EconomicsTab({ edge, maxWinMult, bankroll, setBankroll }: { edge: number; maxWinMult: number; bankroll: number; setBankroll: (n: number) => void }) {
@@ -486,13 +486,13 @@ function EconomicsTab({ edge, maxWinMult, bankroll, setBankroll }: { edge: numbe
         </div>
         <p className="mt-2 text-xs text-slate-500">If your game does <span className="font-mono text-slate-300">◎{fmtSol(volume, 0)}</span> in total wagers at a {(edge * 100).toFixed(1)}% edge:</p>
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <EcoStat label="Platform" value={`◎${fmtSol(proj.platform, 2)}`} accent="violet" />
+          <EcoStat label="Stakers" value={`◎${fmtSol(proj.bankroll, 2)}`} accent="win" />
           <EcoStat label="You (royalty)" value={`◎${fmtSol(proj.creator, 2)}`} accent="cyan" />
-          <EcoStat label="Bankroll yield" value={`◎${fmtSol(proj.bankroll, 2)}`} accent="win" />
-          <EcoStat label="Community" value={`◎${fmtSol(proj.community, 2)}`} accent="gold" />
+          <EcoStat label="Platform" value={`◎${fmtSol(proj.platform, 2)}`} accent="violet" />
+          <EcoStat label="Insurance" value={`◎${fmtSol(proj.insurance, 2)}`} accent="gold" />
         </div>
         <p className="mt-3 rounded-xl border border-neon-violet/20 bg-neon-violet/[0.06] p-3 text-xs leading-relaxed text-slate-300">
-          As the creator you earn the <b>royalty</b> (20%) <i>plus</i> the <b>bankroll yield</b> (20%) on the liquidity you provide — up to ~40% of the edge. The platform keeps 50% as pure, risk-free rake. Bring community liquidity and the bankroll share splits pro-rata.
+          The <b>stakers</b> who fund a game&apos;s bankroll earn the biggest slice (60%) — because they carry the risk. As the creator you take a <b>20% royalty</b>, and by staking your own bond behind the game you also share the staker yield. The platform keeps a lean <b>15%</b> as pure, risk-free rake; 5% builds an insurance fund that backstops stakers.
         </p>
       </div>
     </div>
