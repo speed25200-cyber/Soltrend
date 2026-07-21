@@ -1,0 +1,23 @@
+# Deploy the Soltrend realtime API to Fly.io:  fly launch --copy-config --now
+# Then:  NEXT_PUBLIC_REALTIME_URL=https://soltrend-api.fly.dev  (and rebuild the web app)
+app = "soltrend-api"
+primary_region = "cdg"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "4000"
+
+# Socket.IO needs sticky, long-lived connections — keep at least one machine warm.
+[http_service]
+  internal_port = 4000
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

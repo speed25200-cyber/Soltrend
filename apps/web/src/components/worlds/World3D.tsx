@@ -2,7 +2,7 @@
 
 import { Component, useMemo, useRef, type ReactNode } from 'react';
 import { Canvas, useFrame, type ThreeEvent } from '@react-three/fiber';
-import { OrbitControls, RoundedBox } from '@react-three/drei';
+import { OrbitControls, RoundedBox, Stars, Sparkles } from '@react-three/drei';
 import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import type { WorldSpec } from '@/lib/forge/world';
@@ -112,6 +112,37 @@ function Rig({ spec, heat }: { spec: WorldSpec; heat: number }) {
   );
 }
 
+/** Per-environment mood — procedural, fully self-contained (no external assets). */
+function Atmosphere({ env, skin }: { env: WorldSpec['environment']; skin: (typeof BOARD_SKINS)[BoardSkin] }) {
+  return (
+    <>
+      {(env === 'void' || env === 'nebula') && (
+        <Stars radius={90} depth={50} count={env === 'nebula' ? 2200 : 1400} factor={4} saturation={0} fade speed={0.7} />
+      )}
+      {(env === 'nebula' || env === 'arena') && (
+        <Sparkles count={44} scale={[11, 5, 11]} size={4} speed={0.4} color={skin.gemGlow} position={[0, 1.6, 0]} />
+      )}
+      {env === 'grid' && (
+        <Sparkles count={30} scale={[12, 2, 12]} size={3} speed={0.3} color={skin.gem} position={[0, 0.4, 0]} />
+      )}
+      {env === 'sunset' && (
+        <>
+          <mesh position={[0, 3.5, -18]}>
+            <sphereGeometry args={[7, 32, 32]} />
+            <meshBasicMaterial color="#ff7a3c" />
+          </mesh>
+          <Sparkles count={30} scale={[14, 6, 14]} size={5} speed={0.25} color="#ffb078" position={[0, 2, 0]} />
+        </>
+      )}
+      {/* horizon glow ring — grounds the board in a "place" */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.18, 0]}>
+        <ringGeometry args={[9, 13, 64]} />
+        <meshBasicMaterial color={skin.gem} transparent opacity={0.05} side={THREE.DoubleSide} />
+      </mesh>
+    </>
+  );
+}
+
 function Scene({ spec, revealed, bombSet, showBombs, playing, hitIndex, onReveal, heat }: World3DProps) {
   const env = envDef(spec.environment);
   const skin = BOARD_SKINS[spec.board.skin];
@@ -125,6 +156,7 @@ function Scene({ spec, revealed, bombSet, showBombs, playing, hitIndex, onReveal
       <fog attach="fog" args={[env.fog, 12, 26]} />
       <ambientLight intensity={env.ambient} />
       <Rig spec={spec} heat={heat} />
+      <Atmosphere env={spec.environment} skin={skin} />
 
       {/* ground */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.2, 0]} receiveShadow>
