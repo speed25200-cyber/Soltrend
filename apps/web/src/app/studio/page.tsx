@@ -123,21 +123,21 @@ export default function StudioPage() {
       />
 
       <div className="grid gap-3 sm:grid-cols-2">
+        <Link href="/worlds" className="glass glass-hover flex items-center gap-3 p-4">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-neon-cyan/15 text-neon-cyan"><Icon name="gem" size={20} /></span>
+          <div className="flex-1">
+            <div className="font-display text-sm font-bold text-white">Soltrend Worlds · 3D <span className="chip !border-neon-cyan/40 !text-neon-cyan">New</span></div>
+            <div className="text-xs text-slate-500">Design a playable 3D world — a board players reveal in space, with an optional node-graph logic core.</div>
+          </div>
+          <span className="text-neon-cyan">→</span>
+        </Link>
         <Link href="/forge" className="glass glass-hover flex items-center gap-3 p-4">
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-neon-violet/15 text-neon-violet"><Icon name="orbit" size={20} /></span>
           <div className="flex-1">
-            <div className="font-display text-sm font-bold text-white">Node Forge <span className="chip !border-neon-magenta/40 !text-neon-magenta">Beta</span></div>
-            <div className="text-xs text-slate-500">Wire your own mechanic from scratch in the visual graph editor.</div>
+            <div className="font-display text-sm font-bold text-white">Node Forge · logic <span className="chip !border-neon-magenta/40 !text-neon-magenta">Beta</span></div>
+            <div className="text-xs text-slate-500">Wire a pure-math mechanic from scratch in the visual graph editor.</div>
           </div>
           <span className="text-neon-violet">→</span>
-        </Link>
-        <Link href="/arcade" className="glass glass-hover flex items-center gap-3 p-4">
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-neon-cyan/15 text-neon-cyan"><Icon name="gem" size={20} /></span>
-          <div className="flex-1">
-            <div className="font-display text-sm font-bold text-white">Arcade Builder <span className="chip !border-neon-cyan/40 !text-neon-cyan">New</span></div>
-            <div className="text-xs text-slate-500">Design a playable board — tiles players reveal to bank an escalating multiplier.</div>
-          </div>
-          <span className="text-neon-cyan">→</span>
         </Link>
       </div>
 
