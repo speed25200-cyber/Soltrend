@@ -28,6 +28,13 @@ const BPS_DENOM: u64 = 10_000;
 /// Max payout is capped at 1/RUIN_K of a pool's bankroll, so one lucky player can
 /// never drain the stakers. This is what lets a game open on a tiny bankroll.
 const RUIN_K: u64 = 5;
+/// Virtual shares+assets offset (ERC-4626 style) that neutralises the classic
+/// first-depositor share-inflation / donation attack: an attacker would have to
+/// donate an economically absurd amount to round a victim's mint to zero.
+const VIRT: u128 = 1_000_000;
+/// A player may reclaim an unsettled bet after this many slots (~40 min), so a
+/// withholding settlement authority can never trap player funds.
+const SETTLE_TIMEOUT_SLOTS: u64 = 5_400;
 
 #[program]
 pub mod house_vault {
@@ -40,6 +47,7 @@ pub mod house_vault {
         max_edge_bps: u16,
         max_payout_lamports: u64,
         split: RevenueSplit,
+        settlement_authority: Pubkey,
     ) -> Result<()> {
         require!(min_edge_bps <= max_edge_bps, CasinoError::InvalidEdgeBand);
         require!(max_edge_bps <= 2_000, CasinoError::InvalidEdgeBand); // hard cap 20%
@@ -48,6 +56,7 @@ pub mod house_vault {
         let cfg = &mut ctx.accounts.config;
         cfg.admin = ctx.accounts.admin.key();
         cfg.treasury = ctx.accounts.treasury.key();
+        cfg.settlement_authority = settlement_authority;
         cfg.min_edge_bps = min_edge_bps;
         cfg.max_edge_bps = max_edge_bps;
         cfg.max_payout_lamports = max_payout_lamports;
@@ -86,6 +95,7 @@ pub mod house_vault {
         let pool = &mut ctx.accounts.pool;
         pool.game = game.key();
         pool.total_shares = 0;
+        pool.locked = 0;
         pool.bump = ctx.bumps.pool;
         Ok(())
     }
@@ -115,14 +125,12 @@ pub mod house_vault {
         let rent = Rent::get()?.minimum_balance(pool_ai.data_len());
         let value = pool_ai.lamports().saturating_sub(rent) as u128;
 
-        let minted: u128 = if ctx.accounts.pool.total_shares == 0 || value == 0 {
-            amount as u128
-        } else {
-            (amount as u128)
-                .checked_mul(ctx.accounts.pool.total_shares)
-                .ok_or(CasinoError::MathOverflow)?
-                / value
-        };
+        // Virtual offset (VIRT) neutralises the first-depositor inflation attack:
+        // shares = amount · (total_shares + VIRT) / (pool_value + VIRT).
+        let minted: u128 = (amount as u128)
+            .checked_mul(ctx.accounts.pool.total_shares + VIRT)
+            .ok_or(CasinoError::MathOverflow)?
+            / (value + VIRT);
         require!(minted > 0, CasinoError::ZeroShares);
 
         // Staker funds the pool.
@@ -157,9 +165,15 @@ pub mod house_vault {
         let pool_ai = ctx.accounts.pool.to_account_info();
         let rent = Rent::get()?.minimum_balance(pool_ai.data_len());
         let value = pool_ai.lamports().saturating_sub(rent) as u128;
-        let total = ctx.accounts.pool.total_shares.max(1);
-        let amount = (shares.checked_mul(value).ok_or(CasinoError::MathOverflow)? / total) as u64;
+        // Mirror of the mint formula: amount = shares · (value + VIRT) / (total + VIRT).
+        let amount = (shares
+            .checked_mul(value + VIRT)
+            .ok_or(CasinoError::MathOverflow)?
+            / (ctx.accounts.pool.total_shares + VIRT)) as u64;
 
+        // A staker can never withdraw locked (reserved) liability, only free value.
+        let free = pool_ai.lamports().saturating_sub(rent).saturating_sub(ctx.accounts.pool.locked);
+        require!(amount <= free, CasinoError::BankrollLocked);
         require!(pool_ai.lamports() >= amount.saturating_add(rent), CasinoError::InsufficientVault);
 
         **pool_ai.try_borrow_mut_lamports()? -= amount;
@@ -174,45 +188,40 @@ pub mod house_vault {
         Ok(())
     }
 
-    /* -------------------------------------------------------------- settle */
+    /* -------------------------------------------------- bet (commit / reveal) */
 
-    /// Settle a single bet against the game's pool.
-    ///
-    /// `payout_multiplier_bps` is the provably-fair outcome (20_000 = 2.00×). The
-    /// payout comes FROM the game's pool and is capped at `bankroll / RUIN_K`
-    /// (invariant 2). The house edge is split: the staker share (60%) stays in the
-    /// pool as yield; the creator/platform/insurance cuts move to the treasury.
-    pub fn settle_bet(ctx: Context<SettleBet>, bet_amount: u64, payout_multiplier_bps: u64) -> Result<()> {
+    /// PHASE 1 — the player opens a bet. Funds are pulled into the pool and the
+    /// MAXIMUM possible payout is *reserved* against the pool (so concurrent bets
+    /// can't over-commit the bankroll). The player commits to `server_seed_hash`
+    /// (published by the fairness service beforehand) and their own `client_seed`,
+    /// so the outcome is bound to a seed the operator cannot grind.
+    pub fn open_bet(
+        ctx: Context<OpenBet>,
+        bet_amount: u64,
+        max_payout: u64,
+        server_seed_hash: [u8; 32],
+        client_seed: [u8; 32],
+        nonce: u64,
+    ) -> Result<()> {
         let cfg = &ctx.accounts.config;
         require!(!cfg.paused, CasinoError::Paused);
         require!(bet_amount > 0, CasinoError::ZeroAmount);
+        require!(max_payout > 0, CasinoError::ZeroAmount);
 
         let pool_ai = ctx.accounts.pool.to_account_info();
         let rent = Rent::get()?.minimum_balance(pool_ai.data_len());
 
-        // Bankroll BEFORE this bet — the staker capital the cap must protect.
-        let bankroll = pool_ai.lamports().saturating_sub(rent);
+        // Free bankroll = pool value minus already-reserved liabilities.
+        let free = pool_ai
+            .lamports()
+            .saturating_sub(rent)
+            .saturating_sub(ctx.accounts.pool.locked);
 
-        let payout = ((bet_amount as u128)
-            .checked_mul(payout_multiplier_bps as u128)
-            .ok_or(CasinoError::MathOverflow)?
-            / BPS_DENOM as u128) as u64;
+        // Invariant 2: the reserved max payout must fit the bankroll cap + abs cap.
+        require!((max_payout as u128) * (RUIN_K as u128) <= free as u128, CasinoError::BankrollCapExceeded);
+        require!(max_payout <= cfg.max_payout_lamports, CasinoError::PayoutTooLarge);
 
-        // Invariant 2: bankroll-relative cap AND absolute cap.
-        require!(
-            (payout as u128) * (RUIN_K as u128) <= bankroll as u128,
-            CasinoError::BankrollCapExceeded
-        );
-        require!(payout <= cfg.max_payout_lamports, CasinoError::PayoutTooLarge);
-
-        // Edge split — the non-staker cuts that leave the pool for the treasury.
-        let edge = (bet_amount as u128 * ctx.accounts.game.edge_bps as u128 / BPS_DENOM as u128) as u64;
-        let creator_cut = edge * cfg.split.creator_bps as u64 / BPS_DENOM;
-        let platform_cut = edge * cfg.split.platform_bps as u64 / BPS_DENOM;
-        let insurance_cut = edge * cfg.split.insurance_bps as u64 / BPS_DENOM;
-        let skim = creator_cut + platform_cut + insurance_cut;
-
-        // Player stakes into the pool.
+        // Pull the stake into the pool + reserve the liability.
         system_program::transfer(
             CpiContext::new(
                 ctx.accounts.system_program.to_account_info(),
@@ -223,6 +232,60 @@ pub mod house_vault {
             ),
             bet_amount,
         )?;
+        ctx.accounts.pool.locked = ctx.accounts.pool.locked.checked_add(max_payout).ok_or(CasinoError::MathOverflow)?;
+
+        let bet = &mut ctx.accounts.bet;
+        bet.pool = ctx.accounts.pool.key();
+        bet.game = ctx.accounts.game.key();
+        bet.player = ctx.accounts.player.key();
+        bet.bet_amount = bet_amount;
+        bet.max_payout = max_payout;
+        bet.server_seed_hash = server_seed_hash;
+        bet.client_seed = client_seed;
+        bet.nonce = nonce;
+        bet.open_slot = Clock::get()?.slot;
+        bet.bump = ctx.bumps.bet;
+        Ok(())
+    }
+
+    /// PHASE 2 — the SETTLEMENT AUTHORITY reveals the server seed and the outcome.
+    /// Guarantees:
+    ///  - only `config.settlement_authority` may settle (no one can drain a pool
+    ///    by passing an arbitrary multiplier — the previous critical hole);
+    ///  - `sha256(server_seed) == bet.server_seed_hash` (commit-reveal: the seed
+    ///    was fixed before the bet, so the outcome could not be ground);
+    ///  - `payout <= bet.max_payout` (the authority can never pay more than was
+    ///    reserved at open, bounding operator error/abuse).
+    /// The revealed seed + multiplier are emitted so anyone can recompute the
+    /// provably-fair float and, with the public GameSpec, verify the payout.
+    pub fn settle_bet(ctx: Context<SettleBet>, server_seed: [u8; 32], payout_multiplier_bps: u64) -> Result<()> {
+        let cfg = &ctx.accounts.config;
+        let bet = &ctx.accounts.bet;
+
+        // Commit-reveal: the revealed seed must hash to the committed value.
+        let h = anchor_lang::solana_program::hash::hash(&server_seed);
+        require!(h.to_bytes() == bet.server_seed_hash, CasinoError::SeedMismatch);
+
+        let payout = ((bet.bet_amount as u128)
+            .checked_mul(payout_multiplier_bps as u128)
+            .ok_or(CasinoError::MathOverflow)?
+            / BPS_DENOM as u128) as u64;
+
+        // The authority can never exceed what was reserved at open.
+        require!(payout <= bet.max_payout, CasinoError::PayoutTooLarge);
+
+        let pool_ai = ctx.accounts.pool.to_account_info();
+        let rent = Rent::get()?.minimum_balance(pool_ai.data_len());
+        let max_payout = bet.max_payout;
+        let bet_amount = bet.bet_amount;
+        let player_key = bet.player;
+
+        // Edge split — non-staker cuts leave the pool for the treasury.
+        let edge = (bet_amount as u128 * ctx.accounts.game.edge_bps as u128 / BPS_DENOM as u128) as u64;
+        let creator_cut = edge * cfg.split.creator_bps as u64 / BPS_DENOM;
+        let platform_cut = edge * cfg.split.platform_bps as u64 / BPS_DENOM;
+        let insurance_cut = edge * cfg.split.insurance_bps as u64 / BPS_DENOM;
+        let skim = creator_cut + platform_cut + insurance_cut;
 
         // Pay the player from the pool (invariant 1).
         if payout > 0 {
@@ -230,13 +293,14 @@ pub mod house_vault {
             **pool_ai.try_borrow_mut_lamports()? -= payout;
             **ctx.accounts.player.to_account_info().try_borrow_mut_lamports()? += payout;
         }
-
-        // Move the non-staker edge cuts pool → treasury (staker 60% stays as yield).
         if skim > 0 {
             require!(pool_ai.lamports() >= skim.saturating_add(rent), CasinoError::InsufficientVault);
             **pool_ai.try_borrow_mut_lamports()? -= skim;
             **ctx.accounts.treasury.to_account_info().try_borrow_mut_lamports()? += skim;
         }
+
+        // Release the reserved liability.
+        ctx.accounts.pool.locked = ctx.accounts.pool.locked.saturating_sub(max_payout);
 
         ctx.accounts.creator_vault.accrued = ctx.accounts.creator_vault.accrued.saturating_add(creator_cut);
         let t = &mut ctx.accounts.treasury;
@@ -248,7 +312,7 @@ pub mod house_vault {
         game.total_plays = game.total_plays.saturating_add(1);
 
         emit!(BetSettled {
-            player: ctx.accounts.player.key(),
+            player: player_key,
             game: game.key(),
             bet_amount,
             payout,
@@ -256,7 +320,35 @@ pub mod house_vault {
             creator_cut,
             platform_cut,
             insurance_cut,
+            server_seed,
+            multiplier_bps: payout_multiplier_bps,
         });
+        Ok(())
+    }
+
+    /// Anti-griefing: if the authority never settles, after `SETTLE_TIMEOUT_SLOTS`
+    /// the player reclaims their stake and the reserved liability is released.
+    pub fn cancel_bet(ctx: Context<CancelBet>) -> Result<()> {
+        let bet = &ctx.accounts.bet;
+        require!(
+            Clock::get()?.slot >= bet.open_slot.saturating_add(SETTLE_TIMEOUT_SLOTS),
+            CasinoError::TooEarlyToCancel
+        );
+        let pool_ai = ctx.accounts.pool.to_account_info();
+        let rent = Rent::get()?.minimum_balance(pool_ai.data_len());
+        let refund = bet.bet_amount;
+        let max_payout = bet.max_payout;
+
+        require!(pool_ai.lamports() >= refund.saturating_add(rent), CasinoError::InsufficientVault);
+        **pool_ai.try_borrow_mut_lamports()? -= refund;
+        **ctx.accounts.player.to_account_info().try_borrow_mut_lamports()? += refund;
+        ctx.accounts.pool.locked = ctx.accounts.pool.locked.saturating_sub(max_payout);
+        Ok(())
+    }
+
+    /// Admin rotates the settlement authority (e.g. key rotation / incident).
+    pub fn set_authority(ctx: Context<AdminOnly>, new_authority: Pubkey) -> Result<()> {
+        ctx.accounts.config.settlement_authority = new_authority;
         Ok(())
     }
 
@@ -400,8 +492,30 @@ pub struct Unstake<'info> {
 }
 
 #[derive(Accounts)]
+#[instruction(bet_amount: u64, max_payout: u64, server_seed_hash: [u8; 32], client_seed: [u8; 32], nonce: u64)]
+pub struct OpenBet<'info> {
+    #[account(seeds = [b"config"], bump)]
+    pub config: Account<'info, Config>,
+    #[account(address = pool.game)]
+    pub game: Account<'info, Game>,
+    #[account(mut, seeds = [b"pool", game.key().as_ref()], bump = pool.bump)]
+    pub pool: Account<'info, GamePool>,
+    #[account(
+        init,
+        payer = player,
+        space = 8 + Bet::SIZE,
+        seeds = [b"bet", pool.key().as_ref(), player.key().as_ref(), &nonce.to_le_bytes()],
+        bump
+    )]
+    pub bet: Account<'info, Bet>,
+    #[account(mut)]
+    pub player: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
 pub struct SettleBet<'info> {
-    #[account(seeds = [b"config"], bump, has_one = treasury)]
+    #[account(seeds = [b"config"], bump, has_one = treasury, has_one = settlement_authority)]
     pub config: Account<'info, Config>,
     #[account(mut, seeds = [b"treasury"], bump = treasury.bump)]
     pub treasury: Account<'info, Treasury>,
@@ -413,9 +527,29 @@ pub struct SettleBet<'info> {
     pub creator: UncheckedAccount<'info>,
     #[account(mut, seeds = [b"creator", creator.key().as_ref()], bump)]
     pub creator_vault: Account<'info, CreatorVault>,
-    #[account(mut)]
+    #[account(
+        mut,
+        close = player,
+        has_one = pool,
+        has_one = player,
+        constraint = bet.game == game.key() @ CasinoError::GameMismatch
+    )]
+    pub bet: Account<'info, Bet>,
+    /// CHECK: matched via `bet.has_one = player`; receives the payout + rent refund.
+    #[account(mut, address = bet.player)]
+    pub player: UncheckedAccount<'info>,
+    /// Only the configured settlement authority may reveal + settle.
+    pub settlement_authority: Signer<'info>,
+}
+
+#[derive(Accounts)]
+pub struct CancelBet<'info> {
+    #[account(mut, seeds = [b"pool", pool.game.as_ref()], bump = pool.bump)]
+    pub pool: Account<'info, GamePool>,
+    #[account(mut, close = player, has_one = pool, has_one = player)]
+    pub bet: Account<'info, Bet>,
+    #[account(mut, address = bet.player)]
     pub player: Signer<'info>,
-    pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
@@ -456,6 +590,7 @@ pub struct AdminOnly<'info> {
 pub struct Config {
     pub admin: Pubkey,
     pub treasury: Pubkey,
+    pub settlement_authority: Pubkey,
     pub min_edge_bps: u16,
     pub max_edge_bps: u16,
     pub max_payout_lamports: u64,
@@ -463,7 +598,7 @@ pub struct Config {
     pub paused: bool,
 }
 impl Config {
-    pub const SIZE: usize = 32 + 32 + 2 + 2 + 8 + RevenueSplit::SIZE + 1;
+    pub const SIZE: usize = 32 + 32 + 32 + 2 + 2 + 8 + RevenueSplit::SIZE + 1;
 }
 
 /// Split of the house edge. Must sum to 10_000 bps. Staker-favoured: only the
@@ -518,10 +653,33 @@ impl Game {
 pub struct GamePool {
     pub game: Pubkey,
     pub total_shares: u128,
+    /// Sum of max-payout liabilities reserved by open, unsettled bets. Stakers can
+    /// never withdraw locked value; new bets can't reserve beyond free bankroll.
+    pub locked: u64,
     pub bump: u8,
 }
 impl GamePool {
-    pub const SIZE: usize = 32 + 16 + 1;
+    pub const SIZE: usize = 32 + 16 + 8 + 1;
+}
+
+/// An open bet awaiting settlement. Records the fairness commitment so the outcome
+/// is bound to a pre-fixed server seed; the reserved `max_payout` bounds the
+/// settlement authority's payout.
+#[account]
+pub struct Bet {
+    pub pool: Pubkey,
+    pub game: Pubkey,
+    pub player: Pubkey,
+    pub bet_amount: u64,
+    pub max_payout: u64,
+    pub server_seed_hash: [u8; 32],
+    pub client_seed: [u8; 32],
+    pub nonce: u64,
+    pub open_slot: u64,
+    pub bump: u8,
+}
+impl Bet {
+    pub const SIZE: usize = 32 + 32 + 32 + 8 + 8 + 32 + 32 + 8 + 8 + 1;
 }
 
 #[account]
@@ -556,6 +714,9 @@ pub struct BetSettled {
     pub creator_cut: u64,
     pub platform_cut: u64,
     pub insurance_cut: u64,
+    /// Revealed seed + outcome so anyone can recompute the provably-fair result.
+    pub server_seed: [u8; 32],
+    pub multiplier_bps: u64,
 }
 
 #[event]
@@ -594,6 +755,14 @@ pub enum CasinoError {
     PayoutTooLarge,
     #[msg("Payout exceeds the pool's bankroll cap (1/RUIN_K)")]
     BankrollCapExceeded,
+    #[msg("Amount exceeds the pool's free (unlocked) bankroll")]
+    BankrollLocked,
+    #[msg("Revealed server seed does not match the committed hash")]
+    SeedMismatch,
+    #[msg("Bet does not belong to this game")]
+    GameMismatch,
+    #[msg("Settlement timeout has not elapsed yet")]
+    TooEarlyToCancel,
     #[msg("Vault has insufficient liquidity")]
     InsufficientVault,
     #[msg("Arithmetic overflow")]

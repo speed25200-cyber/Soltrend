@@ -13,21 +13,39 @@ spec an external auditor should verify before mainnet.
    another's bankroll. Verify the `seeds = [b"pool", game.key()]` constraint and
    the `has_one`/`address` checks tying `game`↔`pool`↔`creator`.
 
-2. **Bankroll cap.** In `settle_bet`, `payout * RUIN_K ≤ bankroll` where
-   `bankroll = pool.lamports() − rent`, measured **before** the player's bet is
-   added. Also `payout ≤ config.max_payout_lamports`. Confirm the ordering
-   (bankroll read before the inbound transfer) and the u128 math can't overflow.
+2. **Bankroll cap + liability reservation.** Bets are two-phase. `open_bet`
+   reserves `max_payout` against `pool.locked` and requires
+   `max_payout * RUIN_K ≤ free` where `free = pool.lamports() − rent − pool.locked`
+   (and `max_payout ≤ config.max_payout_lamports`), so concurrent open bets can
+   never over-commit the bankroll. `settle_bet` requires `payout ≤ bet.max_payout`
+   and releases the reservation. Verify `locked` is always incremented on open and
+   decremented on exactly one of settle/cancel (no double-release, no leak).
+
+2b. **Settlement authorisation + commit-reveal (the critical control).** Only
+   `config.settlement_authority` may call `settle_bet` (`has_one`), closing the
+   previous hole where anyone could pass an arbitrary multiplier and drain a pool.
+   The instruction verifies `sha256(server_seed) == bet.server_seed_hash`, so the
+   outcome is bound to a seed fixed at `open_bet` (published by the fairness
+   service beforehand) — the authority cannot grind it, and `client_seed` is
+   player-chosen. The revealed seed + multiplier are emitted for public
+   verification. `cancel_bet` lets the player reclaim funds after
+   `SETTLE_TIMEOUT_SLOTS` if the authority withholds. **Auditor:** confirm the
+   authority cannot pay to an address other than `bet.player`, cannot settle
+   twice (the Bet account is `close`d), and that a compromised authority is bounded
+   to `bet.max_payout` per bet (it cannot mint beyond the reserved liability).
 
 3. **Edge band.** `register_game` clamps `edge_bps ∈ [min_edge_bps, max_edge_bps]`,
    and `max_edge_bps ≤ 2000` (20%) is enforced at `init_config`.
 
-4. **Pro-rata shares (ERC-4626 style).** `stake` mints
-   `shares = amount · total_shares / pool_value` (or `amount` for the first
-   staker); `unstake` returns `shares · pool_value / total_shares`. Verify:
-   rounding always favours the pool (integer division), a zero-share mint is
-   rejected (`ZeroShares`), and `unstake` can't take a pool below rent-exemption.
-   Check first-deposit share-inflation / donation attacks (a griefer donating
-   lamports to the pool before the first stake to skew `pool_value`).
+4. **Pro-rata shares (ERC-4626 style) + inflation defence.** `stake` mints
+   `shares = amount · (total_shares + VIRT) / (pool_value + VIRT)`; `unstake`
+   returns `shares · (pool_value + VIRT) / (total_shares + VIRT)`. The `VIRT`
+   virtual offset (1e6) neutralises the classic first-depositor donation/inflation
+   attack — a griefer would need an economically absurd donation to round a
+   victim's mint to zero. Verify: rounding always favours the pool (integer
+   division), a zero-share mint is rejected (`ZeroShares`), `unstake` can only take
+   the pool's *free* value (not `locked`), and it can't breach rent-exemption.
+   Re-check the arithmetic bounds of `VIRT` against `u128` overflow.
 
 5. **Split conservation.** `RevenueSplit` sums to 10 000 bps. Only the non-staker
    cuts (`creator + platform + insurance`) physically leave the pool into the
@@ -60,11 +78,15 @@ spec an external auditor should verify before mainnet.
 
 ## Not covered on-chain (by design)
 
-- **Outcome integrity** — `payout_multiplier_bps` is computed off-chain from the
-  provably-fair stream / VRF. The commit-reveal / VRF proof must be validated
-  before this instruction is trusted (out of scope for this program; see the
-  fairness service). An auditor should confirm the calling authority is
-  constrained so a malicious caller can't pass an arbitrary multiplier.
+- **Outcome→multiplier mapping** — the program verifies the *randomness*
+  (commit-reveal on `server_seed`) and constrains *who* settles (the authority)
+  and *how much* (`≤ bet.max_payout`), but it does not re-run the off-chain
+  GameSpec to check that `payout_multiplier_bps` is the correct function of the
+  revealed float (that would require the graph interpreter on-chain). This is a
+  bounded trust assumption on the operator: every settlement emits the seed +
+  multiplier, so with the public GameSpec anyone can recompute and publicly prove
+  a mismatch. For full trustlessness, replace the authority multiplier with an
+  on-chain VRF + a restricted set of verifiable game templates.
 - **Geo / KYC / RG** — enforced at the app + compliance layer.
 
 ## Test coverage

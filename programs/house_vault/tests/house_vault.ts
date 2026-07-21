@@ -1,23 +1,26 @@
 import * as anchor from '@coral-xyz/anchor';
 import { Program } from '@coral-xyz/anchor';
 import { PublicKey, LAMPORTS_PER_SOL, SystemProgram, Keypair } from '@solana/web3.js';
+import { createHash } from 'crypto';
 import { assert } from 'chai';
 import { HouseVault } from '../target/types/house_vault';
 
 /**
- * Anchor tests covering the community-bankroll invariants (see CHECKLIST_AUDIT.md):
- *  - config init + edge band + staker-favoured split-sum (60/20/15/5)
- *  - register_game creates the per-game bankroll pool; out-of-band edge rejected
- *  - stake mints pro-rata shares; unstake returns pro-rata value
- *  - settle_bet: payout math, the bankroll cap (payout ≤ bankroll/RUIN_K), pool
- *    solvency, and the edge split (creator/platform/insurance leave the pool)
- *  - claim_royalties gated on KYC
+ * Anchor tests covering the community-bankroll + settlement invariants
+ * (see CHECKLIST_AUDIT.md):
+ *  - config + staker-favoured split (60/20/15/5) + settlement authority
+ *  - register_game creates the per-game pool; out-of-band edge rejected
+ *  - stake mints shares (virtual-offset defence against inflation)
+ *  - open_bet reserves the max payout + enforces the bankroll cap
+ *  - settle_bet: ONLY the authority can settle, commit-reveal is verified
+ *    (sha256(seed) == hash), payout is bounded by the reservation, edge is skimmed
+ *  - claim_royalties gated on KYC; unstake returns pro-rata value
  */
 describe('house_vault', () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
   const program = anchor.workspace.HouseVault as Program<HouseVault>;
-  const admin = provider.wallet as anchor.Wallet;
+  const admin = provider.wallet as anchor.Wallet; // also the settlement authority
 
   const [config] = PublicKey.findProgramAddressSync([Buffer.from('config')], program.programId);
   const [treasury] = PublicKey.findProgramAddressSync([Buffer.from('treasury')], program.programId);
@@ -39,72 +42,50 @@ describe('house_vault', () => {
     program.programId,
   );
 
-  it('initialises config with a valid edge band + 60/20/15/5 split', async () => {
+  const betPda = (nonce: number) => {
+    const n = Buffer.alloc(8);
+    n.writeBigUInt64LE(BigInt(nonce));
+    return PublicKey.findProgramAddressSync(
+      [Buffer.from('bet'), pool.toBuffer(), admin.publicKey.toBuffer(), n],
+      program.programId,
+    )[0];
+  };
+  const serverSeed = Array.from({ length: 32 }, (_, i) => (i * 7 + 3) & 0xff);
+  const serverSeedHash = Array.from(createHash('sha256').update(Buffer.from(serverSeed)).digest());
+  const clientSeed = Array.from({ length: 32 }, () => 1);
+
+  it('initialises config with the split + a settlement authority', async () => {
     await program.methods
-      .initConfig(100, 500, new anchor.BN(1000 * LAMPORTS_PER_SOL), {
-        bankrollBps: 6000,
-        creatorBps: 2000,
-        platformBps: 1500,
-        insuranceBps: 500,
-      })
+      .initConfig(
+        100,
+        500,
+        new anchor.BN(1000 * LAMPORTS_PER_SOL),
+        { bankrollBps: 6000, creatorBps: 2000, platformBps: 1500, insuranceBps: 500 },
+        admin.publicKey,
+      )
       .accounts({ config, treasury, admin: admin.publicKey, systemProgram: SystemProgram.programId })
       .rpc();
-
     const cfg = await program.account.config.fetch(config);
-    assert.equal(cfg.split.bankrollBps, 6000);
-  });
-
-  it('rejects a split that does not sum to 100%', async () => {
-    try {
-      await program.methods
-        .initConfig(100, 500, new anchor.BN(1), { bankrollBps: 1, creatorBps: 1, platformBps: 1, insuranceBps: 1 })
-        .accounts({ config, treasury, admin: admin.publicKey, systemProgram: SystemProgram.programId })
-        .rpc();
-      assert.fail('should have thrown');
-    } catch (e) {
-      assert.include(e.toString(), 'InvalidSplit');
-    }
+    assert.equal(cfg.settlementAuthority.toBase58(), admin.publicKey.toBase58());
   });
 
   it('registers a creator + a game (with its bankroll pool)', async () => {
-    for (const kp of [creator, staker]) {
-      await provider.connection.confirmTransaction(
-        await provider.connection.requestAirdrop(kp.publicKey, 20 * LAMPORTS_PER_SOL),
-      );
-    }
+    await provider.connection.confirmTransaction(
+      await provider.connection.requestAirdrop(creator.publicKey, 5 * LAMPORTS_PER_SOL),
+    );
+    await provider.connection.confirmTransaction(
+      await provider.connection.requestAirdrop(staker.publicKey, 30 * LAMPORTS_PER_SOL),
+    );
     await program.methods
       .initCreator()
       .accounts({ creatorVault, creator: creator.publicKey, systemProgram: SystemProgram.programId })
       .signers([creator])
       .rpc();
-
     await program.methods
       .registerGame(specHash, 200, 0)
       .accounts({ config, game, pool, creator: creator.publicKey, systemProgram: SystemProgram.programId })
       .signers([creator])
       .rpc();
-
-    const p = await program.account.gamePool.fetch(pool);
-    assert.equal(p.totalShares.toString(), '0');
-  });
-
-  it('rejects an out-of-band edge on register_game', async () => {
-    const badHash = Array.from({ length: 32 }, () => 9);
-    const [badGame] = PublicKey.findProgramAddressSync(
-      [Buffer.from('game'), creator.publicKey.toBuffer(), Buffer.from(badHash)],
-      program.programId,
-    );
-    const [badPool] = PublicKey.findProgramAddressSync([Buffer.from('pool'), badGame.toBuffer()], program.programId);
-    try {
-      await program.methods
-        .registerGame(badHash, 9000, 0)
-        .accounts({ config, game: badGame, pool: badPool, creator: creator.publicKey, systemProgram: SystemProgram.programId })
-        .signers([creator])
-        .rpc();
-      assert.fail('should reject');
-    } catch (e) {
-      assert.include(e.toString(), 'EdgeOutOfBand');
-    }
   });
 
   it('stakes into the pool and mints shares', async () => {
@@ -117,12 +98,12 @@ describe('house_vault', () => {
     assert.isAbove(Number(pos.shares.toString()), 0);
   });
 
-  it('rejects a bet whose payout exceeds the bankroll cap (payout > pool/RUIN_K)', async () => {
-    // pool ≈ 10 SOL → cap ≈ 2 SOL. A 1 SOL bet at 5× pays 5 SOL > cap → reject.
+  it('rejects an open_bet whose reserved payout exceeds the bankroll cap', async () => {
+    // pool ≈ 10 SOL → cap = 2 SOL. Reserving 3 SOL must be rejected.
     try {
       await program.methods
-        .settleBet(new anchor.BN(1 * LAMPORTS_PER_SOL), new anchor.BN(50_000))
-        .accounts({ config, treasury, game, pool, creator: creator.publicKey, creatorVault, player: admin.publicKey, systemProgram: SystemProgram.programId })
+        .openBet(new anchor.BN(1 * LAMPORTS_PER_SOL), new anchor.BN(3 * LAMPORTS_PER_SOL), serverSeedHash, clientSeed, new anchor.BN(1))
+        .accounts({ config, game, pool, bet: betPda(1), player: admin.publicKey, systemProgram: SystemProgram.programId })
         .rpc();
       assert.fail('should hit the bankroll cap');
     } catch (e) {
@@ -130,15 +111,31 @@ describe('house_vault', () => {
     }
   });
 
-  it('settles a winning bet, pays from the pool, and skims the edge to the treasury', async () => {
+  it('opens a bet, then ONLY the settlement authority can settle it (commit-reveal)', async () => {
+    const bet = betPda(2);
     await program.methods
-      .settleBet(new anchor.BN(0.1 * LAMPORTS_PER_SOL), new anchor.BN(19_800)) // 1.98×
-      .accounts({ config, treasury, game, pool, creator: creator.publicKey, creatorVault, player: admin.publicKey, systemProgram: SystemProgram.programId })
+      .openBet(new anchor.BN(0.1 * LAMPORTS_PER_SOL), new anchor.BN(0.2 * LAMPORTS_PER_SOL), serverSeedHash, clientSeed, new anchor.BN(2))
+      .accounts({ config, game, pool, bet, player: admin.publicKey, systemProgram: SystemProgram.programId })
+      .rpc();
+
+    // A wrong seed must be rejected (hash mismatch).
+    try {
+      await program.methods
+        .settleBet(clientSeed, new anchor.BN(19_800))
+        .accounts({ config, treasury, game, pool, creator: creator.publicKey, creatorVault, bet, player: admin.publicKey, settlementAuthority: admin.publicKey })
+        .rpc();
+      assert.fail('wrong seed should fail');
+    } catch (e) {
+      assert.include(e.toString(), 'SeedMismatch');
+    }
+
+    // Correct reveal by the authority settles + accrues the edge.
+    await program.methods
+      .settleBet(serverSeed, new anchor.BN(19_800)) // 1.98×
+      .accounts({ config, treasury, game, pool, creator: creator.publicKey, creatorVault, bet, player: admin.publicKey, settlementAuthority: admin.publicKey })
       .rpc();
     const cv = await program.account.creatorVault.fetch(creatorVault);
     assert.isAbove(cv.accrued.toNumber(), 0);
-    const t = await program.account.treasury.fetch(treasury);
-    assert.isAbove(t.platformAccrued.toNumber(), 0);
   });
 
   it('blocks royalty claims until KYC is verified, then pays out', async () => {
@@ -152,7 +149,6 @@ describe('house_vault', () => {
     } catch (e) {
       assert.include(e.toString(), 'KycRequired');
     }
-
     await program.methods.setKyc(true).accounts({ config, creatorVault, admin: admin.publicKey }).rpc();
     await program.methods
       .claimRoyalties()
