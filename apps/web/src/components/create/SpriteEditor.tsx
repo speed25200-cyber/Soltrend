@@ -13,6 +13,7 @@ import {
   pixelAt,
   saveSprite,
   setPixel,
+  starterSprites,
   type Sprite,
 } from '@/lib/sprites';
 
@@ -60,6 +61,11 @@ export function SpriteEditor() {
     } catch {
       setShareMsg(code);
     }
+  };
+  const addStarters = () => {
+    let next = library;
+    for (const s of starterSprites()) next = saveSprite(s);
+    setLibrary(next);
   };
   const importPack = () => {
     const code = window.prompt('Paste a symbol pack code');
@@ -185,9 +191,12 @@ export function SpriteEditor() {
         </div>
         {shareMsg && <p className="break-all rounded-lg border border-white/[0.06] bg-void-950/50 p-2 text-[11px] text-slate-400">{shareMsg}</p>}
         {library.length === 0 ? (
-          <p className="py-8 text-center text-sm text-slate-500">
-            No symbols yet. Draw one and save it — then use it in your slot and scratch games.
-          </p>
+          <div className="grid place-items-center gap-3 py-8 text-center">
+            <p className="text-sm text-slate-500">
+              No symbols yet. Draw one and save it — then use it in your slot and scratch games.
+            </p>
+            <button onClick={addStarters} className="btn-ghost text-xs">Add starter symbols</button>
+          </div>
         ) : (
           <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
             {library.map((s) => (

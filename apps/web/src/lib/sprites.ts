@@ -108,6 +108,31 @@ function persist(all: Sprite[]) {
   }
 }
 
+/* ------------------------------------------------------------ starter set */
+// A few procedurally-drawn symbols so a first-time creator has something to
+// use (and edit) immediately — an empty editor is a weak first impression.
+
+function paint(grid: number, color: number, fn: (x: number, y: number, c: number, r: number) => boolean): string {
+  const c = (grid - 1) / 2;
+  let data = '';
+  for (let y = 0; y < grid; y++) for (let x = 0; x < grid; x++) data += fn(x, y, c, grid / 2 - 1) ? color.toString(36) : '0';
+  return data;
+}
+
+export function starterSprites(): Sprite[] {
+  const G = 12;
+  const mk = (name: string, color: number, data: string): Sprite => ({ id: newId(), name, grid: G, palette: [...DEFAULT_PALETTE], data });
+  const dist = (x: number, y: number, c: number) => Math.hypot(x - c, y - c);
+  return [
+    mk('Gem', 9, paint(G, 9, (x, y, c, r) => Math.abs(x - c) + Math.abs(y - c) <= r)), // diamond
+    mk('Coin', 5, paint(G, 5, (x, y, c, r) => { const d = dist(x, y, c); return d <= r && d >= r - 2; })), // ring
+    mk('Star', 6, paint(G, 6, (x, y, c, r) => Math.abs(x - c) < 1.2 || Math.abs(y - c) < 1.2 || Math.abs(Math.abs(x - c) - Math.abs(y - c)) < 1)), // burst
+    mk('Seven', 3, paint(G, 3, (x, y, c) => y < 2 || (x - (10 - y * 0.7)) ** 2 < 2)), // lucky 7
+    mk('Clover', 6, paint(G, 6, (x, y, c) => dist(x, y, c - 2) < 3 || dist(x, y, c + 2) < 3 || dist(x - 2, y, c) < 3 || dist(x + 2, y, c) < 3)),
+    mk('Bell', 5, paint(G, 5, (x, y, c, r) => (y > c - 3 && dist(x, y - 1, c) < r) || (y === G - 2 && Math.abs(x - c) < 1))),
+  ];
+}
+
 /* ---------------------------------------------------------------- sharing */
 // Symbols are tiny, so a shareable "pack" is just base64 of the JSON. This lets
 // creators trade symbol packs by pasting a code — no server, the seed of an
