@@ -16,13 +16,14 @@ import { setSoundOn } from '@/lib/sound';
 const NAV = [
   { href: '/', label: 'Lobby', icon: LobbyIcon },
   { href: '/live', label: 'Live', icon: LiveIcon },
+  { href: '/plaza', label: 'Plaza', icon: PlazaIcon },
   { href: '/discover', label: 'Discover', icon: DiscoverIcon },
   { href: '/studio', label: 'Create', icon: CreateIcon },
   { href: '/rewards', label: 'Rewards', icon: RewardIcon },
   { href: '/leaderboard', label: 'Ranks', icon: RankIcon },
   { href: '/profile', label: 'Profile', icon: ProfileIcon },
 ];
-const BOTTOM = NAV.filter((n) => n.href !== '/leaderboard');
+const BOTTOM = NAV.filter((n) => n.href !== '/leaderboard' && n.href !== '/rewards');
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -51,7 +52,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Link>
 
           <nav className="ml-4 hidden items-center gap-1 md:flex">
-            {NAV.slice(0, 6).map((n) => (
+            {NAV.slice(0, 7).map((n) => (
               <Link
                 key={n.href}
                 href={n.href}
@@ -146,6 +147,14 @@ function LiveIcon({ active }: IconP) {
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
       <circle cx="12" cy="12" r="3" fill={c(active)} />
       <path d="M6.3 6.3a8 8 0 000 11.4M17.7 6.3a8 8 0 010 11.4" stroke={c(active)} strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+function PlazaIcon({ active }: IconP) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+      <ellipse cx="12" cy="17" rx="9" ry="3.5" stroke={c(active)} strokeWidth="2" />
+      <path d="M12 4l3 6-3 2-3-2z" fill={active ? c(active) : 'none'} stroke={c(active)} strokeWidth="2" strokeLinejoin="round" />
     </svg>
   );
 }

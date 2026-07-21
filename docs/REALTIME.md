@@ -37,7 +37,16 @@ Key files:
 - `apps/api/src/realtime/crash.ts` — provably-fair crash point + climb curve.
 - `apps/api/src/realtime/realtime.gateway.ts` — the room engine + socket events.
 - `apps/web/src/hooks/useCrashRoom.ts` — the client (lazy socket.io, gated by env).
-- `apps/web/src/app/live/page.tsx` — the room UI.
+- `apps/web/src/app/live/page.tsx` — the room UI (Solo · 3D + Live rooms).
+
+### Shared 3D plaza (`/plaza`)
+
+A second namespace, **`/plaza`** (`PlazaGateway`), is a lightweight presence
+channel: each client is a Peer with `{ name, ship, x, z }`, the server keeps the
+authoritative roster and broadcasts it at 10 Hz, and every client renders the
+others as ship avatars gliding around a shared 3D space (`usePlaza` +
+`PlazaScene`). Movement is cosmetic (no funds). Offline it degrades to a solo
+plaza with ambient ships; hosting the API fills it with real players.
 
 ## Going live
 
