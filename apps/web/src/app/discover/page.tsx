@@ -92,7 +92,10 @@ export default function DiscoverPage() {
           <p className="max-w-md text-sm text-slate-400">
             Publish it in minutes and start earning royalties the moment people play.
           </p>
-          <Link href="/studio" className="btn-primary">Open the Studio</Link>
+          <div className="flex gap-2">
+            <Link href="/studio" className="btn-primary">Open the Studio</Link>
+            <Link href="/market" className="btn-ghost">Asset market</Link>
+          </div>
         </div>
         <div className="glass relative flex flex-col items-center gap-3 overflow-hidden p-8 text-center">
           <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-win/15 blur-3xl" />

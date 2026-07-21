@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { SpriteGlyph } from './SpriteGlyph';
+import { publishPack } from '@/lib/market';
 import {
   clearSprite,
   decodePack,
@@ -66,6 +68,13 @@ export function SpriteEditor() {
     let next = library;
     for (const s of starterSprites()) next = saveSprite(s);
     setLibrary(next);
+  };
+  const publishToMarket = () => {
+    if (!library.length) return;
+    const name = window.prompt('Name your pack', 'My symbols');
+    if (!name) return;
+    publishPack(name, 'you', library);
+    setShareMsg(`Published "${name}" to the marketplace`);
   };
   const importPack = () => {
     const code = window.prompt('Paste a symbol pack code');
@@ -177,12 +186,16 @@ export function SpriteEditor() {
       <div className="glass space-y-3 p-4">
         <div className="flex items-center justify-between gap-2">
           <h3 className="text-sm font-semibold text-slate-200">Your symbols</h3>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Link href="/market" className="btn-ghost text-xs" title="Browse the asset marketplace">Market</Link>
             <button onClick={importPack} className="btn-ghost text-xs" title="Paste a shared pack">
               Import
             </button>
             <button onClick={shareLibrary} disabled={!library.length} className="btn-ghost text-xs disabled:opacity-40" title="Copy a shareable code for all your symbols">
-              Share pack
+              Share
+            </button>
+            <button onClick={publishToMarket} disabled={!library.length} className="btn-ghost text-xs disabled:opacity-40" title="Publish your symbols to the marketplace">
+              Publish
             </button>
             <button onClick={() => setSprite(newSprite(sprite.grid))} className="btn-ghost text-xs">
               New

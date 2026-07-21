@@ -133,6 +133,47 @@ export function starterSprites(): Sprite[] {
   ];
 }
 
+/** Curated themed packs for the asset marketplace (deterministic art). */
+export function spritePack(theme: 'gems' | 'fruit' | 'cosmic'): Sprite[] {
+  const G = 12;
+  const mk = (name: string, color: number, data: string): Sprite => ({ id: newId(), name, grid: G, palette: [...DEFAULT_PALETTE], data });
+  const dist = (x: number, y: number, cx: number, cy: number) => Math.hypot(x - cx, y - cy);
+  const c = (G - 1) / 2;
+  const disc = (color: number, r: number, cx = c, cy = c) => mkData(G, color, (x, y) => dist(x, y, cx, cy) <= r);
+  const ring = (color: number, r: number) => mkData(G, color, (x, y) => { const d = dist(x, y, c, c); return d <= r && d >= r - 2; });
+  const diamond = (color: number, r: number) => mkData(G, color, (x, y) => Math.abs(x - c) + Math.abs(y - c) <= r);
+
+  if (theme === 'gems')
+    return [
+      mk('Ruby', 3, diamond(3, 5)),
+      mk('Sapphire', 8, diamond(8, 5)),
+      mk('Emerald', 6, diamond(6, 5)),
+      mk('Amethyst', 9, diamond(9, 5)),
+      mk('Topaz', 5, diamond(5, 5)),
+    ];
+  if (theme === 'fruit')
+    return [
+      mk('Cherry', 3, disc(3, 4)),
+      mk('Orange', 4, disc(4, 5)),
+      mk('Lemon', 5, disc(5, 5)),
+      mk('Lime', 6, disc(6, 5)),
+      mk('Grape', 9, disc(9, 4)),
+    ];
+  return [
+    mk('Sun', 5, disc(5, 4)),
+    mk('Ring', 7, ring(7, 5)),
+    mk('Nova', 6, mkData(G, 6, (x, y) => Math.abs(x - c) < 1.2 || Math.abs(y - c) < 1.2)),
+    mk('Comet', 8, mkData(G, 8, (x, y) => dist(x, y, c - 2, c - 2) < 2.5 || (x - y > 1 && x - y < 3))),
+    mk('Moon', 11, mkData(G, 11, (x, y) => dist(x, y, c, c) <= 5 && dist(x, y, c + 2.5, c - 1) > 5)),
+  ];
+}
+
+function mkData(grid: number, color: number, fn: (x: number, y: number) => boolean): string {
+  let data = '';
+  for (let y = 0; y < grid; y++) for (let x = 0; x < grid; x++) data += fn(x, y) ? color.toString(36) : '0';
+  return data;
+}
+
 /* ---------------------------------------------------------------- sharing */
 // Symbols are tiny, so a shareable "pack" is just base64 of the JSON. This lets
 // creators trade symbol packs by pasting a code — no server, the seed of an
