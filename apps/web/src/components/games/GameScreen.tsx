@@ -10,6 +10,7 @@ import { PlinkoGame } from './PlinkoGame';
 import { CoinflipGame } from './CoinflipGame';
 import { WheelGame } from './WheelGame';
 import { GraphGame } from './GraphGame';
+import { BoardGame } from './BoardGame';
 
 const BY_TEMPLATE: Record<Template, (c: GameConfig) => JSX.Element> = {
   dice: DiceGame,
@@ -20,6 +21,7 @@ const BY_TEMPLATE: Record<Template, (c: GameConfig) => JSX.Element> = {
   wheel: WheelGame,
   towers: DiceGame, // fallback — no bespoke Towers UI yet
   graph: GraphGame,
+  board: BoardGame,
 };
 
 /**

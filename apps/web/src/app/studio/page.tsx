@@ -122,14 +122,24 @@ export default function StudioPage() {
         sub="Assemble from audited primitives, stress-test the maths, play it, then publish — no code, no smart contract."
       />
 
-      <Link href="/forge" className="glass glass-hover flex items-center gap-3 p-4">
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-neon-violet/15 text-neon-violet"><Icon name="orbit" size={20} /></span>
-        <div className="flex-1">
-          <div className="font-display text-sm font-bold text-white">New · Node Forge <span className="chip !border-neon-magenta/40 !text-neon-magenta">Beta</span></div>
-          <div className="text-xs text-slate-500">Go beyond templates — wire your own mechanic from scratch in the visual graph editor.</div>
-        </div>
-        <span className="text-neon-violet">→</span>
-      </Link>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Link href="/forge" className="glass glass-hover flex items-center gap-3 p-4">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-neon-violet/15 text-neon-violet"><Icon name="orbit" size={20} /></span>
+          <div className="flex-1">
+            <div className="font-display text-sm font-bold text-white">Node Forge <span className="chip !border-neon-magenta/40 !text-neon-magenta">Beta</span></div>
+            <div className="text-xs text-slate-500">Wire your own mechanic from scratch in the visual graph editor.</div>
+          </div>
+          <span className="text-neon-violet">→</span>
+        </Link>
+        <Link href="/arcade" className="glass glass-hover flex items-center gap-3 p-4">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-neon-cyan/15 text-neon-cyan"><Icon name="gem" size={20} /></span>
+          <div className="flex-1">
+            <div className="font-display text-sm font-bold text-white">Arcade Builder <span className="chip !border-neon-cyan/40 !text-neon-cyan">New</span></div>
+            <div className="text-xs text-slate-500">Design a playable board — tiles players reveal to bank an escalating multiplier.</div>
+          </div>
+          <span className="text-neon-cyan">→</span>
+        </Link>
+      </div>
 
       {/* Tabs */}
       <div className="flex gap-1 overflow-x-auto rounded-xl bg-void-900/80 p-1">
