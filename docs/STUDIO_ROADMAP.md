@@ -41,10 +41,10 @@ games with no code, and earn from them. This tracks the vision and what's shippe
 
 **Multiplayer**
 - **Live Crash rooms** + shared **3D plaza** (presence).
-- Three PvP templates on `/duel` — **1v1 duel** (stake-weighted coin),
-  **shared jackpot** (community-pot raffle) and **game-show elimination**
-  (fair last-one-standing). Server-authoritative, commit-reveal, unit-tested,
-  graceful offline.
+- Four PvP templates on `/duel` — **1v1 duel** (stake-weighted coin),
+  **shared jackpot** (community-pot raffle), **game-show elimination** (fair
+  last-one-standing) and **co-op heist** (shared multiplier + crew vault).
+  Server-authoritative, commit-reveal, unit-tested, graceful offline.
 
 **Feel**
 - Animated scenes incl. a real 3-reel slot, sound packs, win effects,
@@ -61,9 +61,10 @@ games with no code, and earn from them. This tracks the vision and what's shippe
 
 **Needs hosted infrastructure** (the client app is a static export; the gateways
 are built + unit-tested but only run once the API is deployed):
-1. **Multiplayer templates** — **duel**, **shared jackpot** and **game-show
-   elimination** gateways ship today (`/duel`), degrading gracefully offline.
-   Only a **co-op / shared-run** variant remains on the same pattern.
+1. **Multiplayer templates** — **duel**, **shared jackpot**, **game-show
+   elimination** and **co-op heist** gateways all ship today (`/duel`),
+   degrading gracefully offline. This line is complete; deploying the API is
+   all that's left to make them live.
 2. **LLM game creation** — a true "describe → game" model + an AI balance/tuning
    assistant. The offline keyword assistant ships today; the LLM upgrade needs a
    hosted model.

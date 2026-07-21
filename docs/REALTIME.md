@@ -77,9 +77,19 @@ the pot minus a 4% rake. Equal buy-ins make each seat an even `1/N`; the whole
 order is verifiable from the revealed seed. Client: `useShowdown` + the Game Show
 tab on `/duel`.
 
-Duel, jackpot and showdown resolution are all covered by unit tests in
+### Co-op heist (`/heist`)
+
+**`HeistGateway`** (`/heist` namespace) is cooperative. The crew rides one shared,
+server-authoritative multiplier (same climb + bust curve as the Crash rooms);
+each member `grab`s to lock the current multiplier before the bust. A **crew
+vault** — 5% of every ante — is split among the crew as a bonus *only if everyone
+grabs in time*, so the crew is pulling for each other. Edge-safe: the house edge
+lives in the bust distribution while the vault is pure redistribution of player
+antes. Client: `useHeist` + the Heist tab on `/duel`.
+
+Duel, jackpot, showdown and heist resolution are all covered by unit tests in
 `apps/api/test/settlement.spec.ts` (reproducibility, stake-weighted / uniform
-odds, distribution) — 14 tests, all green.
+odds, distribution, vault conservation) — 16 tests, all green.
 
 ## Going live
 
