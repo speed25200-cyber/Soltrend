@@ -10,6 +10,7 @@ import { ForgeEditor } from '@/components/forge/ForgeEditor';
 import { GraphGame } from '@/components/games/GraphGame';
 import { simulateGraph, normaliseEdge, starterGraph, FORGE_TEMPLATES, type ForgeGraph } from '@/lib/forge/model';
 import { generateDistinct, noveltyScore, FEELINGS, type Feeling, type Candidate } from '@/lib/forge/generator';
+import { describe as describeGame } from '@/lib/forge/describe';
 import { clampEdge } from '@/lib/games';
 import { AURAS } from '@/lib/auras';
 import {
@@ -114,6 +115,25 @@ export function NodeBuilder() {
       sfx.click();
     }, 20);
   };
+  // "Describe your game" — a transparent keyword mapper (offline, not an LLM):
+  // text → feeling + style → a generated, playable draft in one tap.
+  const [idea, setIdea] = useState('');
+  const describeAndBuild = () => {
+    if (!idea.trim()) return;
+    const { feeling: f, presentation: pres } = describeGame(idea);
+    setFeeling(f);
+    setGenerating(true);
+    setTimeout(() => {
+      const cands = generateDistinct(f, 3, []);
+      setCandidates(cands);
+      if (cands[0]) loadCandidate(cands[0]);
+      if (pres) setPresentation(pres);
+      setName(idea.trim().slice(0, 28));
+      setGenerating(false);
+      sfx.packWin(soundPack, 3);
+    }, 20);
+  };
+
   const loadCandidate = (c: Candidate) => {
     setGraph(c.graph);
     setName(randomName());
@@ -217,8 +237,26 @@ export function NodeBuilder() {
 
           {/* Generator — pick a feeling, get three distinct games */}
           <div className="glass space-y-3 p-4">
+            <div>
+              <span className="label-eyebrow">Describe your game</span>
+              <div className="mt-1.5 flex gap-2">
+                <input
+                  value={idea}
+                  onChange={(e) => setIdea(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && describeAndBuild()}
+                  placeholder="e.g. a tense high-risk rocket game"
+                  maxLength={60}
+                  className="input-num !font-sans flex-1 text-sm"
+                />
+                <button className="btn-primary !py-1.5 text-xs" onClick={describeAndBuild} disabled={generating || !idea.trim()}>
+                  <Icon name="spark" size={13} /> Build it
+                </button>
+              </div>
+              <p className="mt-1 text-[0.62rem] text-slate-600">Keywords map to a feeling + style — try &ldquo;chill slow slot&rdquo; or &ldquo;huge jackpot wheel&rdquo;.</p>
+            </div>
+            <div className="h-px bg-white/[0.06]" />
             <div className="flex flex-wrap items-center gap-2">
-              <span className="label-eyebrow">Generate a game · pick a feeling</span>
+              <span className="label-eyebrow">Or pick a feeling</span>
               <span className="ml-auto text-[0.62rem] text-slate-600">distinct + novelty-scored</span>
             </div>
             <div className="flex flex-wrap gap-2">
