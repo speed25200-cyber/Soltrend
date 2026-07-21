@@ -163,6 +163,38 @@ describe('house_vault', () => {
     assert.isAbove(cv.accrued.toNumber(), 0);
   });
 
+  it('settles a NATIVE coinflip fully on-chain (no authority discretion)', async () => {
+    // Native coinflip game. Expected outcome for (serverSeed pattern, clientSeed
+    // all-1s, nonce 2): floatBps=4217 < 5000 → win → mult = 2·(1−edge) = 19600.
+    // These vectors come from the JS twin apps/web/src/lib/native-fair.ts and must
+    // match the on-chain computation byte-for-byte.
+    const hN = Array.from({ length: 32 }, () => 11);
+    const [gN] = PublicKey.findProgramAddressSync([Buffer.from('game'), creator.publicKey.toBuffer(), Buffer.from(hN)], program.programId);
+    const [pN] = PublicKey.findProgramAddressSync([Buffer.from('pool'), gN.toBuffer()], program.programId);
+    const [posN] = PublicKey.findProgramAddressSync([Buffer.from('stake'), pN.toBuffer(), creator.publicKey.toBuffer()], program.programId);
+    await program.methods
+      .registerGame(hN, 200, 1 /* coinflip */, new anchor.BN(2 * LAMPORTS_PER_SOL), true, new anchor.BN(0), new anchor.BN(0))
+      .accounts({ config, game: gN, pool: pN, position: posN, creator: creator.publicKey, systemProgram: SystemProgram.programId })
+      .signers([creator])
+      .rpc();
+
+    const n = Buffer.alloc(8); n.writeBigUInt64LE(2n);
+    const [betN] = PublicKey.findProgramAddressSync([Buffer.from('bet'), pN.toBuffer(), admin.publicKey.toBuffer(), n], program.programId);
+    await program.methods
+      .openBet(new anchor.BN(0.1 * LAMPORTS_PER_SOL), new anchor.BN(0.2 * LAMPORTS_PER_SOL), serverSeedHash, clientSeed, new anchor.BN(2))
+      .accounts({ config, game: gN, pool: pN, bet: betN, player: admin.publicKey, systemProgram: SystemProgram.programId })
+      .rpc();
+
+    let settled: any;
+    const listener = program.addEventListener('betSettled', (e) => { settled = e; });
+    await program.methods
+      .settleNative(serverSeed)
+      .accounts({ config, treasury, game: gN, pool: pN, creator: creator.publicKey, creatorVault, bet: betN, player: admin.publicKey, settlementAuthority: admin.publicKey })
+      .rpc();
+    await program.removeEventListener(listener);
+    assert.equal(settled.multiplierBps.toNumber(), 19_600); // Rust == JS vector
+  });
+
   it('blocks royalty claims until KYC is verified, then pays out', async () => {
     try {
       await program.methods

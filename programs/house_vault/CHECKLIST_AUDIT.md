@@ -85,15 +85,24 @@ spec an external auditor should verify before mainnet.
 
 ## Not covered on-chain (by design)
 
-- **Outcome→multiplier mapping** — the program verifies the *randomness*
-  (commit-reveal on `server_seed`) and constrains *who* settles (the authority)
-  and *how much* (`≤ bet.max_payout`), but it does not re-run the off-chain
-  GameSpec to check that `payout_multiplier_bps` is the correct function of the
-  revealed float (that would require the graph interpreter on-chain). This is a
-  bounded trust assumption on the operator: every settlement emits the seed +
-  multiplier, so with the public GameSpec anyone can recompute and publicly prove
-  a mismatch. For full trustlessness, replace the authority multiplier with an
-  on-chain VRF + a restricted set of verifiable game templates.
+- **Native templates are fully trustless.** `settle_native` computes the outcome
+  ON-CHAIN for dice / coinflip / limbo (`game.native == true`): `float_bps =
+  native_float_bps(server_seed, client_seed, nonce)` via an on-chain HMAC-SHA256,
+  then `native_multiplier_bps(...)` — the authority passes NO multiplier and has
+  zero discretion. The byte-exact JS twin is `apps/web/src/lib/native-fair.ts`;
+  the Anchor test cross-checks a vector (coinflip → 19600 bps). **Auditor:**
+  independently re-derive the HMAC + float + each template formula and confirm
+  Rust == JS on a fuzzed vector set (integer rounding, edge=max, `p0` extremes).
+- **UGC (non-native) games** still use authority-settled `settle_bet`: the program
+  verifies the *randomness* (commit-reveal) + *who* settles + *how much*
+  (`≤ bet.max_payout`), but can't re-run an arbitrary off-chain graph, so the
+  multiplier→outcome mapping is a bounded, publicly-verifiable trust assumption
+  (seed + multiplier are emitted). Full trustlessness there needs on-chain VRF +
+  an on-chain interpreter, or forcing UGC into the native template set.
+- **Per-pool kill-switch.** `set_pool_paused` (admin OR game creator) blocks new
+  `open_bet`s on one pool without a global pause; stakers can still `unstake` and
+  open bets still settle. Verify the admin/creator authorisation and that a paused
+  pool cannot accept new liability.
 - **Geo / KYC / RG** — enforced at the app + compliance layer.
 
 ## Test coverage

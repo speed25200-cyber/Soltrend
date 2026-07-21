@@ -86,6 +86,9 @@ pub mod house_vault {
         edge_bps: u16,
         template: u8,
         bond: u64,
+        native: bool,
+        p0: u64,
+        p1: u64,
     ) -> Result<()> {
         let cfg = &ctx.accounts.config;
         require!(
@@ -93,12 +96,19 @@ pub mod house_vault {
             CasinoError::EdgeOutOfBand
         );
         require!(bond >= cfg.min_bond_lamports && bond > 0, CasinoError::BondTooSmall);
+        // Native games have their outcome computed ON-CHAIN — validate their params.
+        if native {
+            validate_native(template, p0, p1)?;
+        }
 
         let game = &mut ctx.accounts.game;
         game.creator = ctx.accounts.creator.key();
         game.spec_hash = spec_hash;
         game.edge_bps = edge_bps;
         game.template = template;
+        game.native = native;
+        game.p0 = p0;
+        game.p1 = p1;
         game.total_volume = 0;
         game.total_plays = 0;
 
@@ -106,6 +116,7 @@ pub mod house_vault {
         pool.game = game.key();
         pool.total_shares = 0;
         pool.locked = 0;
+        pool.paused = false;
         pool.bump = ctx.bumps.pool;
 
         // The creator's bond funds the pool → they become the first staker.
@@ -234,6 +245,7 @@ pub mod house_vault {
     ) -> Result<()> {
         let cfg = &ctx.accounts.config;
         require!(!cfg.paused, CasinoError::Paused);
+        require!(!ctx.accounts.pool.paused, CasinoError::PoolPaused);
         require!(bet_amount > 0, CasinoError::ZeroAmount);
         require!(max_payout > 0, CasinoError::ZeroAmount);
         // Defence-in-depth: an absolute per-bet ceiling bounds the damage if the
@@ -358,6 +370,88 @@ pub mod house_vault {
         Ok(())
     }
 
+    /// PHASE 2 (native) — settle a NATIVE-template bet with the outcome computed
+    /// entirely ON-CHAIN. The authority only reveals `server_seed`; it has ZERO
+    /// discretion over the multiplier, which is a pure function of
+    /// HMAC-SHA256(server_seed, client_seed ‖ nonce) and the game's on-chain params.
+    /// This makes dice / coinflip / limbo fully trustless (no operator can lie
+    /// about the result). Verified: sha256(server_seed) == committed hash.
+    pub fn settle_native(ctx: Context<SettleBet>, server_seed: [u8; 32]) -> Result<()> {
+        let cfg = &ctx.accounts.config;
+        let game_ro = &ctx.accounts.game;
+        require!(game_ro.native, CasinoError::NotNativeGame);
+        let bet = &ctx.accounts.bet;
+
+        // Commit-reveal.
+        let h = anchor_lang::solana_program::hash::hash(&server_seed);
+        require!(h.to_bytes() == bet.server_seed_hash, CasinoError::SeedMismatch);
+
+        // Fair float, derived on-chain — identical scheme the client verifies.
+        let float_bps = native_float_bps(&server_seed, &bet.client_seed, bet.nonce);
+        let mult_bps = native_multiplier_bps(game_ro.template, game_ro.p0, game_ro.p1, game_ro.edge_bps, float_bps)?;
+
+        let payout = ((bet.bet_amount as u128) * (mult_bps as u128) / BPS_DENOM as u128) as u64;
+        require!(payout <= bet.max_payout, CasinoError::PayoutTooLarge);
+
+        let edge = (bet.bet_amount as u128 * game_ro.edge_bps as u128 / BPS_DENOM as u128) as u64;
+        let creator_cut = edge * cfg.split.creator_bps as u64 / BPS_DENOM;
+        let platform_cut = edge * cfg.split.platform_bps as u64 / BPS_DENOM;
+        let insurance_cut = edge * cfg.split.insurance_bps as u64 / BPS_DENOM;
+        let skim = creator_cut + platform_cut + insurance_cut;
+        let max_payout = bet.max_payout;
+        let bet_amount = bet.bet_amount;
+        let player_key = bet.player;
+
+        let pool_ai = ctx.accounts.pool.to_account_info();
+        let rent = Rent::get()?.minimum_balance(pool_ai.data_len());
+        if payout > 0 {
+            require!(pool_ai.lamports() >= payout.saturating_add(rent), CasinoError::InsufficientVault);
+            **pool_ai.try_borrow_mut_lamports()? -= payout;
+            **ctx.accounts.player.to_account_info().try_borrow_mut_lamports()? += payout;
+        }
+        if skim > 0 {
+            require!(pool_ai.lamports() >= skim.saturating_add(rent), CasinoError::InsufficientVault);
+            **pool_ai.try_borrow_mut_lamports()? -= skim;
+            **ctx.accounts.treasury.to_account_info().try_borrow_mut_lamports()? += skim;
+        }
+
+        ctx.accounts.pool.locked = ctx.accounts.pool.locked.saturating_sub(max_payout);
+        ctx.accounts.creator_vault.accrued = ctx.accounts.creator_vault.accrued.saturating_add(creator_cut);
+        let t = &mut ctx.accounts.treasury;
+        t.platform_accrued = t.platform_accrued.saturating_add(platform_cut);
+        t.insurance_accrued = t.insurance_accrued.saturating_add(insurance_cut);
+        let game = &mut ctx.accounts.game;
+        game.total_volume = game.total_volume.saturating_add(bet_amount);
+        game.total_plays = game.total_plays.saturating_add(1);
+
+        emit!(BetSettled {
+            player: player_key,
+            game: game.key(),
+            bet_amount,
+            payout,
+            edge,
+            creator_cut,
+            platform_cut,
+            insurance_cut,
+            server_seed,
+            multiplier_bps: mult_bps,
+        });
+        Ok(())
+    }
+
+    /// Per-pool kill-switch — admin OR the game's creator can freeze a single pool
+    /// (blocks new `open_bet`s) without pausing the whole platform. Stakers can
+    /// still exit and open bets can still settle.
+    pub fn set_pool_paused(ctx: Context<SetPoolPaused>, paused: bool) -> Result<()> {
+        let signer = ctx.accounts.signer.key();
+        require!(
+            signer == ctx.accounts.config.admin || signer == ctx.accounts.game.creator,
+            CasinoError::Unauthorized
+        );
+        ctx.accounts.pool.paused = paused;
+        Ok(())
+    }
+
     /// Anti-griefing: if the authority never settles, after `SETTLE_TIMEOUT_SLOTS`
     /// the player reclaims their stake and the reserved liability is released.
     pub fn cancel_bet(ctx: Context<CancelBet>) -> Result<()> {
@@ -423,6 +517,78 @@ pub mod house_vault {
         ctx.accounts.config.paused = paused;
         Ok(())
     }
+}
+
+/* ----------------------------------------------- native fairness (on-chain) */
+
+/// Native template ids (must match the client's native builders).
+const TPL_DICE: u8 = 0;
+const TPL_COINFLIP: u8 = 1;
+const TPL_LIMBO: u8 = 2;
+
+fn validate_native(template: u8, p0: u64, p1: u64) -> Result<()> {
+    match template {
+        // dice: p0 = threshold in bps (0,10000), p1 = direction (0 under, 1 over).
+        TPL_DICE => require!(p0 > 0 && p0 < BPS_DENOM && p1 <= 1, CasinoError::InvalidNativeParams),
+        // coinflip: no params.
+        TPL_COINFLIP => {}
+        // limbo: p0 = target multiplier in bps (>= 1.00×).
+        TPL_LIMBO => require!(p0 >= BPS_DENOM, CasinoError::InvalidNativeParams),
+        _ => return err!(CasinoError::InvalidNativeParams),
+    }
+    Ok(())
+}
+
+/// HMAC-SHA256 with a raw 32-byte key (padded to the 64-byte block with zeros),
+/// implemented over the sha256 syscall.
+fn hmac_sha256(key: &[u8; 32], msg: &[u8]) -> [u8; 32] {
+    use anchor_lang::solana_program::hash::hashv;
+    let mut ipad = [0x36u8; 64];
+    let mut opad = [0x5cu8; 64];
+    for i in 0..32 {
+        ipad[i] ^= key[i];
+        opad[i] ^= key[i];
+    }
+    let inner = hashv(&[&ipad, msg]).to_bytes();
+    hashv(&[&opad, &inner]).to_bytes()
+}
+
+/// Provably-fair float in basis points [0, 10000). Scheme (matches the JS
+/// reference `nativeOutcome`): first 4 bytes of HMAC-SHA256(server_seed,
+/// client_seed ‖ nonce_le) as a big-endian u32, scaled to bps.
+fn native_float_bps(server_seed: &[u8; 32], client_seed: &[u8; 32], nonce: u64) -> u64 {
+    let mut msg = [0u8; 40];
+    msg[..32].copy_from_slice(client_seed);
+    msg[32..].copy_from_slice(&nonce.to_le_bytes());
+    let d = hmac_sha256(server_seed, &msg);
+    let r = ((d[0] as u64) << 24) | ((d[1] as u64) << 16) | ((d[2] as u64) << 8) | (d[3] as u64);
+    (r.saturating_mul(BPS_DENOM)) >> 32
+}
+
+/// The multiplier (bps) for a native template — a pure function of the fair float
+/// and the game's params. No off-chain input, so the operator has no discretion.
+fn native_multiplier_bps(template: u8, p0: u64, p1: u64, edge_bps: u16, float_bps: u64) -> Result<u64> {
+    let fair = (BPS_DENOM - edge_bps as u64) as u128; // (1 - edge) in bps
+    let m = match template {
+        TPL_DICE => {
+            let win = if p1 == 1 { float_bps > p0 } else { float_bps < p0 };
+            if !win { 0 } else {
+                let win_prob = if p1 == 1 { BPS_DENOM - p0 } else { p0 };
+                require!(win_prob > 0, CasinoError::InvalidNativeParams);
+                (fair * BPS_DENOM as u128 / win_prob as u128) as u64
+            }
+        }
+        TPL_COINFLIP => {
+            if float_bps < 5_000 { (fair * 2) as u64 } else { 0 }
+        }
+        TPL_LIMBO => {
+            // Win iff the fair draw lands under the target's win-probability band.
+            let win_prob = fair * BPS_DENOM as u128 / p0 as u128; // (1-edge)/target
+            if (float_bps as u128) < win_prob { p0 } else { 0 }
+        }
+        _ => return err!(CasinoError::InvalidNativeParams),
+    };
+    Ok(m)
 }
 
 /* ------------------------------------------------------------------ accounts */
@@ -583,6 +749,17 @@ pub struct SettleBet<'info> {
 }
 
 #[derive(Accounts)]
+pub struct SetPoolPaused<'info> {
+    #[account(seeds = [b"config"], bump)]
+    pub config: Account<'info, Config>,
+    #[account(address = pool.game)]
+    pub game: Account<'info, Game>,
+    #[account(mut, seeds = [b"pool", game.key().as_ref()], bump = pool.bump)]
+    pub pool: Account<'info, GamePool>,
+    pub signer: Signer<'info>,
+}
+
+#[derive(Accounts)]
 pub struct CancelBet<'info> {
     #[account(mut, seeds = [b"pool", pool.game.as_ref()], bump = pool.bump)]
     pub pool: Account<'info, GamePool>,
@@ -682,11 +859,16 @@ pub struct Game {
     pub spec_hash: [u8; 32],
     pub edge_bps: u16,
     pub template: u8,
+    /// When true, the outcome is computed on-chain from `template` + `p0`/`p1`
+    /// (trustless dice/coinflip/limbo). When false, an authority reveals it.
+    pub native: bool,
+    pub p0: u64,
+    pub p1: u64,
     pub total_volume: u64,
     pub total_plays: u64,
 }
 impl Game {
-    pub const SIZE: usize = 32 + 32 + 2 + 1 + 8 + 8;
+    pub const SIZE: usize = 32 + 32 + 2 + 1 + 1 + 8 + 8 + 8 + 8;
 }
 
 /// Per-game bankroll. A program-owned account that also holds the pool's lamports;
@@ -698,10 +880,12 @@ pub struct GamePool {
     /// Sum of max-payout liabilities reserved by open, unsettled bets. Stakers can
     /// never withdraw locked value; new bets can't reserve beyond free bankroll.
     pub locked: u64,
+    /// Per-pool kill-switch — blocks new bets without touching other games.
+    pub paused: bool,
     pub bump: u8,
 }
 impl GamePool {
-    pub const SIZE: usize = 32 + 16 + 8 + 1;
+    pub const SIZE: usize = 32 + 16 + 8 + 1 + 1;
 }
 
 /// An open bet awaiting settlement. Records the fairness commitment so the outcome
@@ -809,6 +993,14 @@ pub enum CasinoError {
     GameMismatch,
     #[msg("Settlement timeout has not elapsed yet")]
     TooEarlyToCancel,
+    #[msg("Game is not a native (on-chain-settled) template")]
+    NotNativeGame,
+    #[msg("Native template params are invalid")]
+    InvalidNativeParams,
+    #[msg("This pool is paused")]
+    PoolPaused,
+    #[msg("Signer is not authorised")]
+    Unauthorized,
     #[msg("Vault has insufficient liquidity")]
     InsufficientVault,
     #[msg("Arithmetic overflow")]
