@@ -119,4 +119,27 @@ export const sfx = {
     void resume();
     [440, 587.33, 880].forEach((f, i) => tone(f, i * 0.09, 0.22, { type: 'triangle', gain: 0.1 }));
   },
+  /** Per-game sound pack — win arpeggio flavoured by the creator's chosen pack. */
+  packWin(pack: string, mult = 2) {
+    if (!guard() || pack === 'none') return;
+    void resume();
+    const scales: Record<string, number[]> = {
+      arcade: [523.25, 659.25, 783.99, 1046.5],
+      deep: [196, 261.63, 329.63, 392],
+      crystal: [880, 1174.7, 1318.5, 1760],
+      retro: [440, 554.37, 659.25, 880],
+    };
+    const types: Record<string, OscillatorType> = { arcade: 'square', deep: 'sine', crystal: 'triangle', retro: 'square' };
+    const base = scales[pack] || scales.arcade;
+    const n = Math.min(4, 2 + Math.floor(Math.log2(Math.max(2, mult))));
+    for (let i = 0; i < n; i++) tone(base[i], i * 0.06, pack === 'deep' ? 0.3 : 0.18, { type: types[pack] || 'triangle', gain: pack === 'deep' ? 0.12 : 0.1 });
+  },
+  packLoss(pack: string) {
+    if (!guard() || pack === 'none') return;
+    void resume();
+    const freqs: Record<string, number> = { arcade: 200, deep: 110, crystal: 330, retro: 160 };
+    const types: Record<string, OscillatorType> = { arcade: 'sawtooth', deep: 'sine', crystal: 'triangle', retro: 'square' };
+    const f = freqs[pack] ?? 180;
+    tone(f, 0, 0.22, { type: types[pack] || 'sawtooth', gain: 0.08, to: f * 0.5 });
+  },
 };

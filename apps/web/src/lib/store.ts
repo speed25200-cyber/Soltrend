@@ -49,7 +49,16 @@ export interface UgcGame {
   creator: string;
   edge: number;
   params: Record<string, number | string>;
-  theme: { accent: string; icon: IconName; aura?: string; tagline?: string; presentation?: string };
+  theme: {
+    accent: string;
+    icon: IconName;
+    aura?: string;
+    tagline?: string;
+    presentation?: string;
+    background?: string;
+    soundPack?: string;
+    winEffect?: string;
+  };
   volume: number;
   players: number;
   plays: number;

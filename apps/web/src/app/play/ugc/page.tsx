@@ -40,6 +40,9 @@ function UgcInner() {
     accent: (game.theme.accent as GameMeta['accent']) ?? 'violet',
     aura: game.theme.aura,
     presentation: game.theme.presentation as GameMeta['presentation'],
+    background: game.theme.background as GameMeta['background'],
+    soundPack: game.theme.soundPack as GameMeta['soundPack'],
+    winEffect: game.theme.winEffect as GameMeta['winEffect'],
     seedKey: game.specHash || game.id,
   };
 

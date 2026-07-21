@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useMemo, useRef, useState } from 'react';
 import { GameLayout } from '@/components/GameLayout';
 import { BetAmount } from '@/components/BetControls';
@@ -7,13 +8,16 @@ import { BetButton } from './BetButton';
 import { AutoBet } from './AutoBet';
 import { ModeTabs } from './ModeTabs';
 import { SceneStage } from '@/components/scenes/SceneStage';
+import { SceneBackground } from '@/components/scenes/SceneBackground';
 import { usePlay } from '@/hooks/usePlay';
 import { useCasino } from '@/lib/store';
 import { round2 } from '@/lib/games';
 import { floatStream } from '@/lib/provably-fair';
 import { runGraph, type ForgeGraph } from '@/lib/forge/model';
-import { paletteFromSeed, type PresentationId } from '@/lib/presentation';
+import { paletteFromSeed, type PresentationId, type BackgroundId } from '@/lib/presentation';
 import { ACCENT_HEX } from '@/lib/catalog';
+import { sfx } from '@/lib/sound';
+import { burstWin } from '@/lib/fx';
 import type { GameConfig } from './types';
 
 /** Runtime for a node-graph ("Forge") game — same interpreter as the editor. */
@@ -39,6 +43,9 @@ export function GraphGame({ meta, gameId, gameName, params }: GameConfig) {
   const revealTimer = useRef<number>();
 
   const presentation: PresentationId = (meta.presentation as PresentationId) || 'pulse';
+  const background: BackgroundId = (meta.background as BackgroundId) || 'none';
+  const soundPack = meta.soundPack || 'arcade';
+  const winEffect = meta.winEffect || 'confetti';
   const accentHex = ACCENT_HEX[(meta.accent as keyof typeof ACCENT_HEX)] ?? '#a855f7';
   const palette = useMemo(() => paletteFromSeed(meta.seedKey || meta.name, accentHex), [meta.seedKey, meta.name, accentHex]);
 
@@ -46,11 +53,20 @@ export function GraphGame({ meta, gameId, gameName, params }: GameConfig) {
     setMult(m);
     setWin(didWin);
     setRound((r) => r + 1);
+    // Settle silently — the graph game plays its OWN themed sound + win effect.
     settle(
       { game: gameName ?? meta.name, template: 'graph', bet: amount, multiplier: m, payout, win: didWin, meta: { mult: m }, seeds },
-      { quiet },
+      { quiet: true },
     );
     if (gameId) bumpUgc(gameId, amount);
+    if (!quiet) {
+      if (didWin) {
+        sfx.packWin(soundPack, m);
+        burstWin(m, { style: winEffect, colors: [palette.primary, palette.secondary, '#ffffff'] });
+      } else {
+        sfx.packLoss(soundPack);
+      }
+    }
   };
 
   const playRound = (amount: number, quiet: boolean) => {
@@ -86,7 +102,14 @@ export function GraphGame({ meta, gameId, gameName, params }: GameConfig) {
   return (
     <GameLayout
       meta={meta}
-      stage={<SceneStage presentation={presentation} mult={mult} win={win} rolling={rolling} palette={palette} round={round} />}
+      stage={
+        <div className="relative h-full min-h-[300px]">
+          <SceneBackground background={background} palette={palette} />
+          <div className="relative z-10 h-full">
+            <SceneStage presentation={presentation} mult={mult} win={win} rolling={rolling} palette={palette} round={round} />
+          </div>
+        </div>
+      }
       controls={
         <div className="space-y-4">
           <ModeTabs mode={mode} setMode={setMode} />
@@ -100,7 +123,13 @@ export function GraphGame({ meta, gameId, gameName, params }: GameConfig) {
           ) : (
             <AutoBet baseBet={bet} setBaseBet={setBet} guard={guard} playRound={playRound} />
           )}
-          <p className="text-center text-[0.68rem] text-slate-600">Built in the node Forge · provably fair</p>
+          {gameId ? (
+            <Link href={`/forge?remix=${gameId}`} className="btn-ghost w-full !py-2 text-xs">
+              Remix this game in the Forge
+            </Link>
+          ) : (
+            <p className="text-center text-[0.68rem] text-slate-600">Built in the node Forge · provably fair</p>
+          )}
         </div>
       }
     />

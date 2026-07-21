@@ -1,6 +1,6 @@
 import type { Template } from './games';
 import type { IconName } from '@/components/Icon';
-import type { PresentationId } from './presentation';
+import type { PresentationId, BackgroundId, SoundPackId, WinEffectId } from './presentation';
 
 export interface GameMeta {
   slug: string;
@@ -13,6 +13,9 @@ export interface GameMeta {
   hot?: boolean;
   aura?: string;
   presentation?: PresentationId;
+  background?: BackgroundId;
+  soundPack?: SoundPackId;
+  winEffect?: WinEffectId;
   seedKey?: string;
 }
 

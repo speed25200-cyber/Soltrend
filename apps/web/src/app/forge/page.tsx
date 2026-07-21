@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useWallet } from '@solana/wallet-adapter-react';
@@ -12,8 +12,20 @@ import { GraphGame } from '@/components/games/GraphGame';
 import { simulateGraph, normaliseEdge, starterGraph, FORGE_TEMPLATES, type ForgeGraph } from '@/lib/forge/model';
 import { clampEdge } from '@/lib/games';
 import { AURAS } from '@/lib/auras';
-import { PRESENTATIONS, paletteFromSeed, type PresentationId } from '@/lib/presentation';
+import {
+  PRESENTATIONS,
+  BACKGROUNDS,
+  SOUND_PACKS,
+  WIN_EFFECTS,
+  STYLE_PRESETS,
+  paletteFromSeed,
+  type PresentationId,
+  type BackgroundId,
+  type SoundPackId,
+  type WinEffectId,
+} from '@/lib/presentation';
 import { SceneStage } from '@/components/scenes/SceneStage';
+import { SceneBackground } from '@/components/scenes/SceneBackground';
 import { ACCENT_HEX, type GameMeta } from '@/lib/catalog';
 import { fmtMult, shortAddr } from '@/lib/format';
 import { sfx } from '@/lib/sound';
@@ -25,6 +37,7 @@ export default function ForgePage() {
   const router = useRouter();
   const { publicKey, connected } = useWallet();
   const publishUgc = useCasino((s) => s.publishUgc);
+  const ugc = useCasino((s) => s.ugc);
 
   const [graph, setGraph] = useState<ForgeGraph>(() => starterGraph());
   const [name, setName] = useState('');
@@ -33,10 +46,47 @@ export default function ForgePage() {
   const [accent, setAccent] = useState('violet');
   const [aura, setAura] = useState('nebula');
   const [presentation, setPresentation] = useState<PresentationId>('orb');
+  const [background, setBackground] = useState<BackgroundId>('aurora');
+  const [soundPack, setSoundPack] = useState<SoundPackId>('arcade');
+  const [winEffect, setWinEffect] = useState<WinEffectId>('confetti');
   const [previewRound, setPreviewRound] = useState(1);
   const [target, setTarget] = useState(2);
+
+  const applyPreset = (s: (typeof STYLE_PRESETS)[number]['style']) => {
+    setPresentation(s.presentation);
+    setBackground(s.background);
+    setSoundPack(s.soundPack);
+    setWinEffect(s.winEffect);
+    setAccent(s.accent);
+    setAura(s.aura);
+    setPreviewRound((r) => r + 1);
+    sfx.packWin(s.soundPack, 3);
+  };
   const [testing, setTesting] = useState(false);
   const [published, setPublished] = useState<{ id: string } | null>(null);
+
+  // Visual remix — preload a published game's graph + look via ?remix=<id>.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('remix');
+    if (!id) return;
+    const src = ugc.find((g) => g.id === id);
+    if (!src || src.template !== 'graph' || !src.params.graph) return;
+    try {
+      setGraph(JSON.parse(String(src.params.graph)));
+    } catch {
+      return;
+    }
+    setName(`${src.name} remix`);
+    setTagline(src.theme.tagline || '');
+    setIcon((src.theme.icon as IconName) || 'orbit');
+    setAccent(src.theme.accent || 'violet');
+    setAura(src.theme.aura || 'nebula');
+    if (src.theme.presentation) setPresentation(src.theme.presentation as PresentationId);
+    if (src.theme.background) setBackground(src.theme.background as BackgroundId);
+    if (src.theme.soundPack) setSoundPack(src.theme.soundPack as SoundPackId);
+    if (src.theme.winEffect) setWinEffect(src.theme.winEffect as WinEffectId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const sim = useMemo(() => simulateGraph(graph, 20000), [graph]);
 
@@ -50,6 +100,9 @@ export default function ForgePage() {
     accent: accent as GameMeta['accent'],
     aura,
     presentation,
+    background,
+    soundPack,
+    winEffect,
     seedKey: name || 'forge-preview',
   };
 
@@ -68,7 +121,7 @@ export default function ForgePage() {
       creator: publicKey ? shortAddr(publicKey.toBase58()) : 'anon',
       edge: clampEdge(sim.edge),
       params: { graph: JSON.stringify(graph) },
-      theme: { accent, icon, aura, tagline: tagline.trim() || undefined, presentation },
+      theme: { accent, icon, aura, tagline: tagline.trim() || undefined, presentation, background, soundPack, winEffect },
     });
     sfx.jackpot();
     burstWin(12);
@@ -180,6 +233,21 @@ export default function ForgePage() {
               </div>
 
               <div>
+                <span className="text-xs text-slate-500">Style presets · one-click look</span>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {STYLE_PRESETS.map((pr) => (
+                    <button key={pr.id} onClick={() => applyPreset(pr.style)} className="chip hover:border-neon-violet/50">
+                      {pr.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <MiniChips label="Background" value={background} options={BACKGROUNDS} onPick={(v) => { setBackground(v as BackgroundId); setPreviewRound((r) => r + 1); }} />
+              <MiniChips label="Sound pack" value={soundPack} options={SOUND_PACKS} onPick={(v) => { setSoundPack(v as SoundPackId); sfx.packWin(v, 3); }} />
+              <MiniChips label="Win effect" value={winEffect} options={WIN_EFFECTS} onPick={(v) => setWinEffect(v as WinEffectId)} />
+
+              <div>
                 <span className="text-xs text-slate-500">Presentation · how the result reveals</span>
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
                   {PRESENTATIONS.map((pr) => (
@@ -194,8 +262,11 @@ export default function ForgePage() {
                   ))}
                 </div>
                 <div className="mt-2 rounded-xl border border-white/[0.06] bg-void-950/60 p-2">
-                  <div className="h-36 overflow-hidden">
-                    <SceneStage compact presentation={presentation} mult={2.4} win rolling={false} palette={paletteFromSeed(name || 'forge-preview', accentHex(accent))} round={previewRound} />
+                  <div className="relative h-36 overflow-hidden rounded-lg">
+                    <SceneBackground background={background} palette={paletteFromSeed(name || 'forge-preview', accentHex(accent))} />
+                    <div className="relative z-10 h-full">
+                      <SceneStage compact presentation={presentation} mult={2.4} win rolling={false} palette={paletteFromSeed(name || 'forge-preview', accentHex(accent))} round={previewRound} />
+                    </div>
                   </div>
                   <button className="btn-ghost mt-1 w-full !py-1.5 text-xs" onClick={() => setPreviewRound((r) => r + 1)}>Replay preview</button>
                 </div>
@@ -215,6 +286,25 @@ export default function ForgePage() {
             </button>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function MiniChips({ label, value, options, onPick }: { label: string; value: string; options: { id: string; label: string }[]; onPick: (v: string) => void }) {
+  return (
+    <div>
+      <span className="text-xs text-slate-500">{label}</span>
+      <div className="mt-1.5 flex flex-wrap gap-1.5">
+        {options.map((o) => (
+          <button
+            key={o.id}
+            onClick={() => onPick(o.id)}
+            className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition ${value === o.id ? 'bg-neon-violet/20 text-white ring-1 ring-neon-violet/50' : 'bg-void-900/60 text-slate-400 hover:text-white'}`}
+          >
+            {o.label}
+          </button>
+        ))}
       </div>
     </div>
   );

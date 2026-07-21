@@ -14,10 +14,20 @@ export interface SceneProps {
   compact?: boolean;
 }
 
+const SCENES: Record<string, (p: SceneProps) => JSX.Element> = {
+  orb: Orb,
+  rocket: Rocket,
+  reel: Reel,
+  burst: Burst,
+  wheel: WheelScene,
+  cards: Cards,
+  shatter: Shatter,
+  pulse: Pulse,
+};
+
 export function SceneStage(props: SceneProps) {
   const { presentation, compact } = props;
-  const Scene =
-    presentation === 'orb' ? Orb : presentation === 'rocket' ? Rocket : presentation === 'reel' ? Reel : presentation === 'burst' ? Burst : Pulse;
+  const Scene = SCENES[presentation] ?? Pulse;
   return (
     <div className={`grid place-items-center ${compact ? 'h-full scale-[0.62]' : 'h-full min-h-[280px]'}`}>
       <Scene {...props} />
@@ -161,6 +171,94 @@ function Burst({ mult, win, rolling, palette, round }: SceneProps) {
         <motion.span key={round} initial={{ scale: 0.4, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring', stiffness: 300, damping: 15 }} className="relative z-10 font-display text-4xl font-bold" style={{ color: c, textShadow: `0 0 30px ${c}` }}>
           {rolling ? '' : mult === null ? '—' : fmtMult(mult)}
         </motion.span>
+      </div>
+      <Label mult={mult} win={win} p={palette} />
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------- Wheel */
+function WheelScene({ mult, win, rolling, palette, round }: SceneProps) {
+  const c = winColor(win, palette);
+  const conic = `conic-gradient(${palette.primary} 0deg 60deg, ${palette.secondary} 60deg 120deg, ${palette.primary} 120deg 180deg, ${palette.secondary} 180deg 240deg, ${palette.primary} 240deg 300deg, ${palette.secondary} 300deg 360deg)`;
+  return (
+    <div className="text-center">
+      <div className="relative mx-auto h-44 w-44">
+        <div className="absolute left-1/2 top-[-4px] z-20 h-0 w-0 -translate-x-1/2 border-x-8 border-t-[14px] border-x-transparent border-t-white" />
+        <motion.div
+          key={round}
+          className="h-full w-full rounded-full"
+          animate={{ rotate: rolling ? 360 * 3 : 360 * 5 + 33 }}
+          transition={rolling ? { repeat: Infinity, duration: 0.8, ease: 'linear' } : { duration: 2.4, ease: [0.15, 0.85, 0.2, 1] }}
+          style={{ background: conic, boxShadow: `0 0 50px -14px ${c}`, opacity: 0.9 }}
+        />
+        <div className="absolute left-1/2 top-1/2 z-10 grid h-20 w-20 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-white/10 bg-void-900/90">
+          <span className="font-display text-xl font-bold" style={{ color: c }}>{rolling ? '' : mult === null ? '—' : fmtMult(mult)}</span>
+        </div>
+      </div>
+      <Label mult={mult} win={win} p={palette} />
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------- Cards */
+function Cards({ mult, win, rolling, palette, round }: SceneProps) {
+  const c = winColor(win, palette);
+  const revealed = !rolling && mult !== null;
+  return (
+    <div className="text-center">
+      <div className="mx-auto h-44 w-32" style={{ perspective: 800 }}>
+        <motion.div
+          key={round}
+          className="relative h-full w-full"
+          style={{ transformStyle: 'preserve-3d' }}
+          animate={{ rotateY: rolling ? [0, 180, 360] : revealed ? 180 : 0 }}
+          transition={rolling ? { repeat: Infinity, duration: 0.7, ease: 'linear' } : { duration: 0.6 }}
+        >
+          <div className="absolute inset-0 grid place-items-center rounded-2xl border border-white/10" style={{ backfaceVisibility: 'hidden', background: `linear-gradient(160deg, ${palette.primary}, ${palette.secondary})` }}>
+            <div className="h-10 w-10 rounded-full border-2 border-white/40" />
+          </div>
+          <div className="absolute inset-0 grid place-items-center rounded-2xl border-2 bg-void-900" style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)', borderColor: `${c}88` }}>
+            <span className="font-display text-2xl font-bold" style={{ color: c }}>{mult === null ? '' : fmtMult(mult)}</span>
+          </div>
+        </motion.div>
+      </div>
+      <Label mult={mult} win={win} p={palette} />
+    </div>
+  );
+}
+
+/* ----------------------------------------------------------------- Shatter */
+function Shatter({ mult, win, rolling, palette, round }: SceneProps) {
+  const c = winColor(win, palette);
+  return (
+    <div className="text-center">
+      <div className="relative mx-auto grid h-44 w-44 place-items-center">
+        <motion.svg
+          key={round}
+          viewBox="0 0 100 100"
+          className="absolute inset-0 h-full w-full"
+          animate={rolling ? { rotate: [0, 6, -6, 0], scale: [1, 1.03, 1] } : { scale: [0.9, 1] }}
+          transition={rolling ? { repeat: Infinity, duration: 0.5 } : { duration: 0.3 }}
+        >
+          <defs>
+            <linearGradient id="cryst" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stopColor={palette.primary} />
+              <stop offset="1" stopColor={palette.secondary} />
+            </linearGradient>
+          </defs>
+          <polygon points="50,6 82,32 68,86 32,86 18,32" fill="url(#cryst)" opacity={0.85} stroke={c} strokeWidth={1.5} />
+          {!rolling && win !== null && (
+            <g stroke="#05060f" strokeWidth={1}>
+              <line x1="50" y1="6" x2="50" y2="86" />
+              <line x1="18" y1="32" x2="82" y2="32" />
+              <line x1="32" y1="86" x2="68" y2="32" />
+            </g>
+          )}
+        </motion.svg>
+        <span className="relative z-10 font-display text-3xl font-bold text-void-950" style={{ textShadow: `0 1px 6px rgba(255,255,255,0.4)` }}>
+          {rolling ? '' : mult === null ? '' : fmtMult(mult)}
+        </span>
       </div>
       <Label mult={mult} win={win} p={palette} />
     </div>
