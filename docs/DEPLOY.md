@@ -89,4 +89,14 @@ run mainnet with real funds before an external audit.
 | `NEXT_PUBLIC_REALTIME_URL` | web build | realtime API origin; unset = offline panels |
 | `NEXT_PUBLIC_HOUSE_VAULT_PROGRAM` | web build | deployed program id; unset = free installs |
 | `NEXT_PUBLIC_SOLANA_RPC` | web build | RPC endpoint (defaults to devnet) |
+| `NEXT_PUBLIC_AI_URL` | web build | hosted "describe your game" model; unset = offline keyword assistant |
 | `PORT` | API | listen port (default 4000) |
+
+### AI creation endpoint (optional)
+
+Set `NEXT_PUBLIC_AI_URL` to a service exposing `POST /create` that accepts
+`{ prompt: string }` and returns `{ feeling, presentation?, name?, edge? }`
+(`feeling ∈ fast|tense|jackpot|slowburn`, `presentation` a scene id). The client
+sanitises the response to known values and the validated generator builds the
+game, so the model only influences *style*, never the payout math. Unset, the
+studio uses the built-in offline keyword mapper.

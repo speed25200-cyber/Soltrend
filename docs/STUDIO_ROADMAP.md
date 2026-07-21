@@ -68,9 +68,12 @@ are built + unit-tested but only run once the API is deployed):
    elimination** and **co-op heist** gateways all ship today (`/duel`),
    degrading gracefully offline. This line is complete; deploying the API is
    all that's left to make them live.
-2. **LLM game creation** — a true "describe → game" model + an AI balance/tuning
-   assistant. The offline keyword assistant ships today; the LLM upgrade needs a
-   hosted model.
+2. **LLM game creation** — the client is wired: when `NEXT_PUBLIC_AI_URL` is set,
+   the description is sent to a hosted model that returns generator inputs (the
+   validated generator still builds the game, so the model can't emit an unsafe
+   curve), falling back to the offline keyword assistant otherwise. Deploying a
+   model endpoint is the remaining step; an AI balance/tuning assistant is a
+   further extension.
 
 The **on-chain asset revenue-share** is fully wired: `house_vault::buy_asset`
 settles a marketplace sale (5% platform, rest to the seller's creator vault), and
