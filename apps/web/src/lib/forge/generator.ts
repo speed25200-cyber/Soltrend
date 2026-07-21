@@ -118,6 +118,29 @@ const ARCHETYPES: Archetype[] = [
     },
   },
   {
+    id: 'slot', label: 'Slot machine', feelings: ['jackpot', 'slowburn'],
+    build: (rng): ForgeGraph => {
+      const jackpot = Ri(rng, 40, 150);
+      const mid = Ri(rng, 6, 12);
+      const reels = Ri(rng, 3, 4);
+      return { nodes: [
+        { id: 'rl', kind: 'reel', x: 120, y: 150, params: { symbols: `0:60, 3:22, ${mid}:8, 25:3, ${jackpot}:1`, reels }, inputs: {} },
+        { id: 'pay', kind: 'payout', x: 440, y: 170, params: { scale: 1 }, inputs: { mult: 'rl' } },
+      ] };
+    },
+  },
+  {
+    id: 'scratch', label: 'Scratch card', feelings: ['fast', 'slowburn'],
+    build: (rng): ForgeGraph => {
+      const cells = Ri(rng, 8, 12);
+      const jackpot = Ri(rng, 40, 80);
+      return { nodes: [
+        { id: 'sc', kind: 'scratch', x: 120, y: 150, params: { prizes: `0:45, 2:22, 5:12, 20:5, ${jackpot}:1`, cells, need: 3 }, inputs: {} },
+        { id: 'pay', kind: 'payout', x: 460, y: 170, params: { scale: 1 }, inputs: { mult: 'sc' } },
+      ] };
+    },
+  },
+  {
     id: 'hybrid', label: 'Hybrid draw', feelings: ['tense', 'jackpot', 'slowburn'],
     build: (rng): ForgeGraph => {
       const n = Ri(rng, 2, 4);

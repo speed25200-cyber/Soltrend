@@ -27,10 +27,12 @@ export type NodeKind =
   | 'ladder'
   | 'multidraw'
   | 'clamp'
+  | 'reel'
+  | 'scratch'
   | 'payout';
 
 /** Node kinds that pull their own randomness from the fair stream. */
-export const RANDOM_KINDS = new Set<NodeKind>(['rng', 'ladder', 'multidraw']);
+export const RANDOM_KINDS = new Set<NodeKind>(['rng', 'ladder', 'multidraw', 'reel', 'scratch']);
 
 export interface ForgeNode {
   id: string;
@@ -72,6 +74,30 @@ export interface NodeDef {
 }
 
 const num = (v: unknown, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : typeof v === 'string' && v !== '' && Number.isFinite(+v) ? +v : d);
+
+/** Parse a "value:weight, value:weight" list into weighted entries (value = the
+ *  symbol's payout multiplier, its list index = its identity). */
+const parseWV = (s: unknown): { v: number; w: number }[] =>
+  String(s || '')
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .map((x) => {
+      const [v, w] = x.split(':');
+      return { v: parseFloat(v) || 0, w: Math.max(0, parseFloat(w) || 0) };
+    })
+    .filter((x) => x.w > 0);
+
+/** Pick an index from weighted entries using a [0,1) draw. */
+const pickIdx = (parts: { v: number; w: number }[], r: number): number => {
+  const total = parts.reduce((a, b) => a + b.w, 0);
+  let x = Math.min(0.999999, Math.max(0, r)) * total;
+  for (let i = 0; i < parts.length; i++) {
+    x -= parts[i].w;
+    if (x < 0) return i;
+  }
+  return parts.length - 1;
+};
 
 export const NODE_DEFS: Record<NodeKind, NodeDef> = {
   rng: {
@@ -280,6 +306,55 @@ export const NODE_DEFS: Record<NodeKind, NodeDef> = {
       { key: 'hi', label: 'hi', type: 'number', default: 100 },
     ],
     eval: (i, p) => Math.max(num(p.lo, 0), Math.min(num(p.hi, 100), i.x ?? 0)),
+  },
+  reel: {
+    kind: 'reel',
+    label: 'Slot reels',
+    hint: 'Spin N reels of weighted symbols — all reels match → that symbol\'s value.',
+    color: '#f472b6',
+    inputs: [],
+    params: [
+      { key: 'symbols', label: 'value:weight', type: 'text', default: '0:60, 3:20, 8:8, 25:3, 100:1' },
+      { key: 'reels', label: 'Reels', type: 'number', default: 3, step: 1 },
+    ],
+    eval: (_i, p, ctx) => {
+      const parts = parseWV(p.symbols);
+      if (parts.length === 0) return 0;
+      const reels = Math.max(2, Math.min(6, Math.round(num(p.reels, 3))));
+      const counts = new Array(parts.length).fill(0);
+      for (let r = 0; r < reels; r++) counts[pickIdx(parts, ctx.next())]++;
+      // The most-frequent symbol wins its value at 2+ of a kind; all reels
+      // matching pays the full value, a partial line pays a fraction.
+      let bestIdx = -1;
+      let bestCount = 0;
+      for (let i = 0; i < parts.length; i++) if (counts[i] > bestCount) { bestCount = counts[i]; bestIdx = i; }
+      if (bestIdx < 0 || bestCount < 2) return 0;
+      const frac = bestCount >= reels ? 1 : 0.2 + 0.8 * ((bestCount - 1) / (reels - 1));
+      return parts[bestIdx].v * frac;
+    },
+  },
+  scratch: {
+    kind: 'scratch',
+    label: 'Scratch card',
+    hint: 'Reveal cells of weighted prizes — match `need` of the same symbol → its value.',
+    color: '#fbbf24',
+    inputs: [],
+    params: [
+      { key: 'prizes', label: 'value:weight', type: 'text', default: '0:50, 2:20, 5:10, 20:4, 100:1' },
+      { key: 'cells', label: 'Cells', type: 'number', default: 9, step: 1 },
+      { key: 'need', label: 'Match', type: 'number', default: 3, step: 1 },
+    ],
+    eval: (_i, p, ctx) => {
+      const parts = parseWV(p.prizes);
+      if (parts.length === 0) return 0;
+      const cells = Math.max(3, Math.min(25, Math.round(num(p.cells, 9))));
+      const need = Math.max(2, Math.min(cells, Math.round(num(p.need, 3))));
+      const counts = new Array(parts.length).fill(0);
+      for (let c = 0; c < cells; c++) counts[pickIdx(parts, ctx.next())]++;
+      let best = 0;
+      for (let i = 0; i < parts.length; i++) if (counts[i] >= need && parts[i].v > best) best = parts[i].v;
+      return best;
+    },
   },
   payout: {
     kind: 'payout',
@@ -498,6 +573,28 @@ export const FORGE_TEMPLATES: ForgeTemplate[] = [
         { id: 'cv', kind: 'curve', x: 300, y: 160, params: { type: 'crash', k: 0.55 }, inputs: { x: 'md' } },
         { id: 'cp', kind: 'clamp', x: 520, y: 170, params: { lo: 0, hi: 200 }, inputs: { x: 'cv' } },
         { id: 'pay', kind: 'payout', x: 740, y: 190, params: { scale: 1 }, inputs: { mult: 'cp' } },
+      ],
+    }),
+  },
+  {
+    id: 'slot',
+    label: 'Slot',
+    hint: 'Match the reels',
+    build: (): ForgeGraph => ({
+      nodes: [
+        { id: 'rl', kind: 'reel', x: 120, y: 150, params: { symbols: '0:60, 3:20, 8:8, 25:3, 100:1', reels: 3 }, inputs: {} },
+        { id: 'pay', kind: 'payout', x: 440, y: 170, params: { scale: 1 }, inputs: { mult: 'rl' } },
+      ],
+    }),
+  },
+  {
+    id: 'scratch',
+    label: 'Scratch',
+    hint: 'Match 3 to win',
+    build: (): ForgeGraph => ({
+      nodes: [
+        { id: 'sc', kind: 'scratch', x: 120, y: 150, params: { prizes: '0:45, 2:22, 5:12, 20:5, 60:1', cells: 9, need: 3 }, inputs: {} },
+        { id: 'pay', kind: 'payout', x: 460, y: 170, params: { scale: 1 }, inputs: { mult: 'sc' } },
       ],
     }),
   },

@@ -11,7 +11,7 @@ const outPortY = (n: ForgeNode) => n.y + 17;
 const inPortY = (n: ForgeNode, idx: number) => n.y + HEADER + IN_GAP / 2 + idx * IN_GAP;
 const inDotTop = (idx: number) => HEADER + IN_GAP / 2 + idx * IN_GAP - 7;
 
-const PALETTE: NodeKind[] = ['rng', 'const', 'math', 'branch', 'curve', 'randint', 'map', 'chance', 'segments', 'ladder', 'multidraw', 'clamp', 'payout'];
+const PALETTE: NodeKind[] = ['rng', 'const', 'math', 'branch', 'curve', 'randint', 'map', 'chance', 'segments', 'ladder', 'multidraw', 'clamp', 'reel', 'scratch', 'payout'];
 
 export function ForgeEditor({ graph, onChange }: { graph: ForgeGraph; onChange: (g: ForgeGraph) => void }) {
   const worldRef = useRef<HTMLDivElement>(null);
