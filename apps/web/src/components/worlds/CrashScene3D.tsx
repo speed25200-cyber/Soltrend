@@ -4,10 +4,12 @@ import { Component, useMemo, useRef, type ReactNode } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Stars, Trail, Sparkles } from '@react-three/drei';
 import * as THREE from 'three';
+import { ShipMesh, shipById, type ShipSkin } from './ships';
 
 export interface CrashShip {
   wallet: string;
   cashedAt: number | null;
+  ship?: string;
 }
 
 export interface CrashScene3DProps {
@@ -15,13 +17,14 @@ export interface CrashScene3DProps {
   status: 'idle' | 'flying' | 'busted';
   accent?: string;
   ships?: CrashShip[];
+  skin?: ShipSkin;
 }
 
 const heightFor = (m: number) => Math.min(64, Math.log(Math.max(1, m)) * 7);
 
-function Rocket({ multiplier, status, accent }: { multiplier: number; status: string; accent: string }) {
+function Rocket({ multiplier, status, skin }: { multiplier: number; status: string; skin: ShipSkin }) {
   const grp = useRef<THREE.Group>(null);
-  const nose = useRef<THREE.Mesh>(null);
+  const anchor = useRef<THREE.Group>(null);
   useFrame((state, dt) => {
     const g = grp.current;
     if (!g) return;
@@ -34,22 +37,15 @@ function Rocket({ multiplier, status, accent }: { multiplier: number; status: st
     state.camera.position.y = THREE.MathUtils.damp(state.camera.position.y, g.position.y + 1.5, 5, dt);
     state.camera.position.x = THREE.MathUtils.damp(state.camera.position.x, g.position.x * 0.3, 4, dt);
     state.camera.lookAt(0, g.position.y, 0);
-    if (nose.current) (nose.current.material as THREE.MeshStandardMaterial).emissiveIntensity = 1.2 + Math.sin(state.clock.elapsedTime * 12) * 0.3;
   });
   return (
     <group ref={grp}>
-      <Trail width={3.5} length={7} color={new THREE.Color(accent)} attenuation={(t) => t * t}>
-        <mesh ref={nose} rotation={[0, 0, 0]}>
-          <coneGeometry args={[0.36, 1.15, 18]} />
-          <meshStandardMaterial color={accent} emissive={accent} emissiveIntensity={1.3} metalness={0.5} roughness={0.2} />
-        </mesh>
+      <Trail width={3.5} length={skin.trail} color={new THREE.Color(skin.color)} attenuation={(t) => t * t}>
+        <group ref={anchor}>
+          <ShipMesh skin={skin} emissive={1.4} />
+        </group>
       </Trail>
-      {/* fins */}
-      <mesh position={[0, -0.5, 0]}>
-        <cylinderGeometry args={[0.12, 0.3, 0.5, 12]} />
-        <meshStandardMaterial color="#ffffff" emissive={accent} emissiveIntensity={0.5} metalness={0.6} roughness={0.3} />
-      </mesh>
-      <pointLight color={accent} intensity={9} distance={14} />
+      <pointLight color={skin.color} intensity={9} distance={14} />
     </group>
   );
 }
@@ -81,39 +77,44 @@ function Explosion({ show, accent, at }: { show: boolean; accent: string; at: nu
   );
 }
 
-/** Little orbiting markers for the other players in the room. */
-function Ships({ ships, baseY, accent }: { ships: CrashShip[]; baseY: number; accent: string }) {
+/** The other players in the room, riding their own ships in a ring. */
+function Ships({ ships, baseY }: { ships: CrashShip[]; baseY: number }) {
   const grp = useRef<THREE.Group>(null);
-  useFrame((state) => {
-    if (grp.current) grp.current.position.y = baseY;
+  useFrame((state, dt) => {
+    if (grp.current) {
+      grp.current.position.y = baseY;
+      grp.current.rotation.y += dt * 0.12;
+    }
   });
+  const n = Math.min(24, ships.length);
   return (
     <group ref={grp}>
       {ships.slice(0, 24).map((s, i) => {
-        const a = (i / Math.max(1, Math.min(24, ships.length))) * Math.PI * 2;
-        const r = 2.4 + (i % 3) * 0.5;
+        const a = (i / Math.max(1, n)) * Math.PI * 2;
+        const r = 2.6 + (i % 3) * 0.6;
         const cashed = s.cashedAt !== null;
+        const sk = shipById(s.ship || 'dart');
         return (
-          <mesh key={i} position={[Math.cos(a) * r, cashed ? 2 + i * 0.1 : 0, Math.sin(a) * r]}>
-            <sphereGeometry args={[0.12, 8, 8]} />
-            <meshStandardMaterial color={cashed ? '#10f5a0' : accent} emissive={cashed ? '#10f5a0' : accent} emissiveIntensity={1} />
-          </mesh>
+          <group key={i} position={[Math.cos(a) * r, cashed ? 2.2 + i * 0.12 : 0, Math.sin(a) * r]} rotation={[0.2, -a, 0]}>
+            <ShipMesh skin={cashed ? { ...sk, color: '#10f5a0', glow: '#6ee7b7' } : sk} scale={0.42} emissive={cashed ? 1.6 : 1} />
+          </group>
         );
       })}
     </group>
   );
 }
 
-function Scene({ multiplier, status, accent = '#a855f7', ships = [] }: CrashScene3DProps) {
+function Scene({ multiplier, status, ships = [], skin }: CrashScene3DProps) {
   const rocketY = heightFor(multiplier);
+  const s = skin ?? shipById('dart');
   return (
     <>
       <color attach="background" args={['#05060f']} />
       <fog attach="fog" args={['#05060f', 10, 40]} />
       <ambientLight intensity={0.4} />
       <Stars radius={100} depth={60} count={2600} factor={5} saturation={0} fade speed={1.2} />
-      <Rocket multiplier={multiplier} status={status} accent={accent} />
-      <Ships ships={ships} baseY={rocketY} accent={accent} />
+      <Rocket multiplier={multiplier} status={status} skin={s} />
+      <Ships ships={ships} baseY={rocketY} />
       <Explosion show={status === 'busted'} accent="#ff3b6b" at={rocketY} />
     </>
   );

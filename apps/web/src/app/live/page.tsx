@@ -9,6 +9,8 @@ import { BetAmount } from '@/components/BetControls';
 import { BetButton } from '@/components/games/BetButton';
 import { useCrashRoom, REALTIME_URL } from '@/hooks/useCrashRoom';
 import { usePlay } from '@/hooks/usePlay';
+import { useShipSkin } from '@/hooks/useShipSkin';
+import { ShipPicker } from '@/components/worlds/ShipPicker';
 import { firstFloat } from '@/lib/provably-fair';
 import { round2 } from '@/lib/games';
 import { shortAddr } from '@/lib/format';
@@ -44,6 +46,7 @@ export default function LivePage() {
 
 function SoloCrash() {
   const { guard, reserveSeeds, settle } = usePlay();
+  const [ship, setShip] = useShipSkin();
   const [bet, setBet] = useState(0.1);
   const [mult, setMult] = useState(1);
   const [status, setStatus] = useState<'idle' | 'flying' | 'busted' | 'cashed'>('idle');
@@ -105,7 +108,7 @@ function SoloCrash() {
     <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
       <div className="glass relative min-h-[380px] overflow-hidden p-2">
         <div className="relative h-[380px] overflow-hidden rounded-2xl sm:h-[460px]">
-          <CrashScene3D multiplier={mult} status={flying ? 'flying' : busted ? 'busted' : 'idle'} accent={color} />
+          <CrashScene3D multiplier={mult} status={flying ? 'flying' : busted ? 'busted' : 'idle'} accent={color} skin={ship} />
           <div className="pointer-events-none absolute inset-x-0 top-0 grid place-items-center p-5">
             <div className="rounded-2xl border border-white/10 bg-void-950/60 px-6 py-2 backdrop-blur">
               <span className="font-mono text-5xl font-black md:text-6xl" style={{ color, textShadow: `0 0 34px ${color}` }}>
@@ -128,6 +131,10 @@ function SoloCrash() {
           )}
           <p className="text-center text-[0.68rem] text-slate-600">Provably fair · runs entirely in your browser</p>
         </div>
+        <div className="glass p-5">
+          <span className="label-eyebrow">Your ship</span>
+          <div className="mt-2"><ShipPicker value={ship} onChange={setShip} /></div>
+        </div>
       </div>
     </div>
   );
@@ -138,6 +145,7 @@ function SoloCrash() {
 function LiveRoom() {
   const { publicKey } = useWallet();
   const { state, placeBet, cashOut, enabled } = useCrashRoom();
+  const [ship] = useShipSkin();
   const [bet, setBet] = useState(0.1);
   const wallet = publicKey ? shortAddr(publicKey.toBase58()) : 'guest';
   const me = useMemo(() => state.players.find((p) => p.wallet === wallet), [state.players, wallet]);
@@ -147,14 +155,14 @@ function LiveRoom() {
   const climbing = state.phase === 'running';
   const busted = state.phase === 'result';
   const color = busted ? '#ff3b6b' : climbing ? '#10f5a0' : '#a855f7';
-  const ships: CrashShip[] = state.players.map((p) => ({ wallet: p.wallet, cashedAt: p.cashedAt }));
+  const ships: CrashShip[] = state.players.map((p) => ({ wallet: p.wallet, cashedAt: p.cashedAt, ship: p.ship }));
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
       <div className="min-w-0 space-y-4">
         <div className="glass relative min-h-[380px] overflow-hidden p-2">
           <div className="relative h-[380px] overflow-hidden rounded-2xl sm:h-[460px]">
-            <CrashScene3D multiplier={state.multiplier} status={climbing ? 'flying' : busted ? 'busted' : 'idle'} accent={color} ships={ships} />
+            <CrashScene3D multiplier={state.multiplier} status={climbing ? 'flying' : busted ? 'busted' : 'idle'} accent={color} ships={ships} skin={ship} />
             <div className="pointer-events-none absolute inset-x-0 top-0 grid place-items-center p-5">
               <div className="rounded-2xl border border-white/10 bg-void-950/60 px-6 py-2 backdrop-blur">
                 <span className="font-mono text-5xl font-black md:text-6xl" style={{ color, textShadow: `0 0 34px ${color}` }}>
@@ -186,7 +194,7 @@ function LiveRoom() {
           ) : me && me.cashedAt ? (
             <div className="rounded-xl border border-win/40 bg-win/10 p-3 text-center text-sm font-semibold text-win">Cashed {me.cashedAt.toFixed(2)}× · ◎{me.won.toFixed(3)}</div>
           ) : (
-            <button className="btn-primary w-full disabled:opacity-40" disabled={state.phase !== 'betting' || !!me} onClick={() => placeBet(bet, wallet)}>
+            <button className="btn-primary w-full disabled:opacity-40" disabled={state.phase !== 'betting' || !!me} onClick={() => placeBet(bet, wallet, ship.id)}>
               {me ? 'Bet placed' : state.phase === 'betting' ? `Join round #${state.roundId}` : 'Wait for next round'}
             </button>
           )}

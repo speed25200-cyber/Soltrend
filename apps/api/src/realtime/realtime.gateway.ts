@@ -20,6 +20,7 @@ interface Player {
   bet: number;
   cashedAt: number | null; // multiplier at cash-out, or null
   won: number; // payout
+  ship: string; // chosen ship skin id
 }
 
 interface Round {
@@ -72,10 +73,10 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
   /* ----------------------------------------------------------- client actions */
 
   @SubscribeMessage('bet')
-  onBet(@ConnectedSocket() client: Socket, @MessageBody() body: { amount?: number; wallet?: string }) {
+  onBet(@ConnectedSocket() client: Socket, @MessageBody() body: { amount?: number; wallet?: string; ship?: string }) {
     if (this.round.phase !== 'betting') return { ok: false, error: 'Betting is closed for this round' };
     const amount = Math.max(0.01, Math.min(100, Number(body?.amount) || 0.1));
-    this.round.players.set(client.id, { id: client.id, wallet: (body?.wallet || 'anon').slice(0, 16), bet: amount, cashedAt: null, won: 0 });
+    this.round.players.set(client.id, { id: client.id, wallet: (body?.wallet || 'anon').slice(0, 16), bet: amount, cashedAt: null, won: 0, ship: (body?.ship || 'dart').slice(0, 12) });
     this.broadcast();
     return { ok: true, roundId: this.round.id, hash: this.round.hash };
   }
@@ -149,7 +150,7 @@ export class RealtimeGateway implements OnGatewayInit, OnGatewayConnection, OnGa
   /* -------------------------------------------------------------------- emit */
 
   private playerList() {
-    return [...this.round.players.values()].map((p) => ({ wallet: p.wallet, bet: p.bet, cashedAt: p.cashedAt, won: p.won }));
+    return [...this.round.players.values()].map((p) => ({ wallet: p.wallet, bet: p.bet, cashedAt: p.cashedAt, won: p.won, ship: p.ship }));
   }
 
   private publicState(includeSeedOnResult = false) {

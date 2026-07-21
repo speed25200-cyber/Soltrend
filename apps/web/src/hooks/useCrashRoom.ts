@@ -12,6 +12,7 @@ export interface RoomPlayer {
   bet: number;
   cashedAt: number | null;
   won: number;
+  ship?: string;
 }
 
 export interface RoomState {
@@ -78,8 +79,8 @@ export function useCrashRoom() {
     return () => { alive = false; socket?.disconnect(); socketRef.current = null; };
   }, []);
 
-  const placeBet = useCallback((amount: number, wallet: string) => {
-    socketRef.current?.emit('bet', { amount, wallet });
+  const placeBet = useCallback((amount: number, wallet: string, ship?: string) => {
+    socketRef.current?.emit('bet', { amount, wallet, ship });
   }, []);
   const cashOut = useCallback(() => {
     socketRef.current?.emit('cashout');
