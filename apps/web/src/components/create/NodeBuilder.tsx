@@ -81,6 +81,7 @@ export function NodeBuilder() {
   };
   const [testing, setTesting] = useState(false);
   const [published, setPublished] = useState<{ id: string } | null>(null);
+  const [remixParent, setRemixParent] = useState<string | null>(null);
 
   // Generator: pick a feeling → three structurally distinct, novel candidates.
   const [feeling, setFeeling] = useState<Feeling>('tense');
@@ -117,6 +118,7 @@ export function NodeBuilder() {
     } catch {
       return;
     }
+    setRemixParent(src.id);
     setName(`${src.name} remix`);
     setTagline(src.theme.tagline || '');
     setIcon((src.theme.icon as IconName) || 'orbit');
@@ -162,6 +164,7 @@ export function NodeBuilder() {
       creator: publicKey ? shortAddr(publicKey.toBase58()) : 'anon',
       edge: clampEdge(sim.edge),
       maxWin: Math.max(1, Math.round(sim.maxMult)),
+      parentId: remixParent ?? undefined,
       params: { graph: JSON.stringify(graph) },
       theme: { accent, icon, aura, tagline: tagline.trim() || undefined, presentation, background, soundPack, winEffect },
     });

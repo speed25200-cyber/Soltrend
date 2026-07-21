@@ -71,6 +71,9 @@ export interface UgcGame {
   tvl?: number;
   /** Top multiplier this game can pay — sets the bankroll-relative max bet. */
   maxWin?: number;
+  /** If this game is a remix, the id of the game it was forked from. The parent
+   *  creator earns a share of this game's royalties (remix lineage). */
+  parentId?: string;
 }
 
 export interface RgLimits {
@@ -214,8 +217,24 @@ export const metricValue = (d: DailyState, m: Metric): number => {
   return (d as any)[m] ?? 0;
 };
 
-export const creatorEarnings = (ugc: UgcGame[]): number =>
-  round4(ugc.reduce((s, g) => s + (g.mine ? g.volume * g.edge * 0.3 : 0), 0));
+/** Share of a remixed game's royalty that flows UP to the original creator. */
+export const REMIX_PARENT_SHARE = 0.15;
+
+export const creatorEarnings = (ugc: UgcGame[]): number => {
+  const byId = new Map(ugc.map((g) => [g.id, g]));
+  let total = 0;
+  for (const g of ugc) {
+    const royalty = g.volume * g.edge * 0.3;
+    // My own games earn their royalty (minus the slice owed up to a parent).
+    if (g.mine) total += g.parentId ? royalty * (1 - REMIX_PARENT_SHARE) : royalty;
+    // If someone remixed MY game, I earn the parent share of their royalty.
+    if (g.parentId) {
+      const parent = byId.get(g.parentId);
+      if (parent?.mine) total += royalty * REMIX_PARENT_SHARE;
+    }
+  }
+  return round4(total);
+};
 
 export const seededUgc = (): UgcGame[] => [
   {

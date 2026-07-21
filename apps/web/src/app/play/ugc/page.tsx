@@ -19,7 +19,10 @@ export default function UgcPlayPage() {
 
 function UgcInner() {
   const id = useSearchParams().get('id') ?? '';
-  const game = useCasino((s) => s.ugc.find((g) => g.id === id));
+  const ugc = useCasino((s) => s.ugc);
+  const game = ugc.find((g) => g.id === id);
+  const parent = game?.parentId ? ugc.find((g) => g.id === game.parentId) : undefined;
+  const remixCount = game ? ugc.filter((g) => g.parentId === game.id).length : 0;
 
   if (!game) {
     return (
@@ -50,7 +53,17 @@ function UgcInner() {
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
-      <div className="min-w-0">
+      <div className="min-w-0 space-y-3">
+        {(parent || remixCount > 0) && (
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            {parent && (
+              <Link href={`/play/ugc?id=${parent.id}`} className="chip hover:border-neon-violet/50">
+                Remixed from <b className="text-slate-200">{parent.name}</b>
+              </Link>
+            )}
+            {remixCount > 0 && <span className="chip">{remixCount} remix{remixCount === 1 ? '' : 'es'} · original earns royalties</span>}
+          </div>
+        )}
         <GameScreen
           config={{ meta, edge: game.edge, gameId: game.id, gameName: game.name, params: game.params, maxBet: maxBetFor(game.tvl ?? 0, game.maxWin ?? 100) }}
         />

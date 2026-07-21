@@ -50,6 +50,7 @@ export function WorldBuilder() {
   const [winEffect, setWinEffect] = useState<WinEffectId>('coins');
   const [testing, setTesting] = useState(false);
   const [published, setPublished] = useState<{ id: string } | null>(null);
+  const [remixParent, setRemixParent] = useState<string | null>(null);
 
   const skin = BOARD_SKINS[spec.board.skin];
   const stats = useMemo(() => worldStats(spec, target / 100), [spec, target]);
@@ -85,6 +86,7 @@ export function WorldBuilder() {
     const src = ugc.find((game) => game.id === id);
     if (!src || src.template !== 'board') return;
     setSpecRaw(worldFromParams(src.params));
+    setRemixParent(src.id);
     setName(`${src.name} remix`);
     setTagline(src.theme.tagline || '');
     setIcon((src.theme.icon as IconName) || 'gem');
@@ -113,7 +115,7 @@ export function WorldBuilder() {
     const game = publishUgc({
       name: name.trim(), template: 'board',
       creator: publicKey ? shortAddr(publicKey.toBase58()) : 'anon',
-      edge: stats.edge, maxWin: Math.max(1, Math.round(stats.maxMult)), params: worldToParams(spec),
+      edge: stats.edge, maxWin: Math.max(1, Math.round(stats.maxMult)), parentId: remixParent ?? undefined, params: worldToParams(spec),
       theme: { accent, icon, aura: 'nebula', tagline: tagline.trim() || undefined, background, soundPack, winEffect },
     });
     sfx.jackpot();
