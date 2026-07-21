@@ -8,6 +8,7 @@ import { SpriteGlyph } from '@/components/create/SpriteGlyph';
 import { allPacks, allModules, bumpInstall, installCounts, unpublishPack, unpublishModule, type MarketPack, type MarketModule } from '@/lib/market';
 import { decodePack, listSprites, saveSprite } from '@/lib/sprites';
 import { decodeModule, listModules, saveModule } from '@/lib/forge/modules';
+import { useBuyAsset } from '@/hooks/useBuyAsset';
 
 export default function MarketPage() {
   const [packs, setPacks] = useState<MarketPack[]>([]);
@@ -39,7 +40,9 @@ export default function MarketPage() {
     refresh();
   };
 
-  const install = (p: MarketPack) => {
+  const { buy, enabled: canBuy } = useBuyAsset();
+
+  const doInstall = (p: MarketPack) => {
     const sprites = decodePack(p.code);
     if (!sprites.length) return;
     let n = 0;
@@ -50,6 +53,21 @@ export default function MarketPage() {
     setCounts(bumpInstall(p.id));
     setOwned(listSprites().length);
     setMsg(`Installed ${n} symbol${n === 1 ? '' : 's'} from ${p.name} into your library`);
+  };
+
+  const install = async (p: MarketPack) => {
+    // Paid pack + on-chain program + wallet → settle the sale, then install.
+    if (p.price && p.sellerWallet && canBuy) {
+      try {
+        setMsg(`Paying ◎${p.price} for ${p.name}…`);
+        const sig = await buy({ assetKey: p.id, sellerWallet: p.sellerWallet, priceSol: p.price });
+        setMsg(`Purchased ${p.name} on-chain (${sig.slice(0, 8)}…)`);
+      } catch (e: any) {
+        setMsg(`Purchase cancelled: ${e?.message ?? 'error'}`);
+        return;
+      }
+    }
+    doInstall(p);
   };
 
   const remove = (p: MarketPack) => {
@@ -74,7 +92,7 @@ export default function MarketPage() {
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {packs.map((p) => (
-          <PackCard key={p.id} pack={p} installs={counts[p.id] ?? 0} onInstall={() => install(p)} onRemove={p.curated ? undefined : () => remove(p)} />
+          <PackCard key={p.id} pack={p} installs={counts[p.id] ?? 0} canBuy={canBuy} onInstall={() => install(p)} onRemove={p.curated ? undefined : () => remove(p)} />
         ))}
       </div>
 
@@ -108,8 +126,10 @@ export default function MarketPage() {
   );
 }
 
-function PackCard({ pack, installs, onInstall, onRemove }: { pack: MarketPack; installs: number; onInstall: () => void; onRemove?: () => void }) {
+function PackCard({ pack, installs, canBuy, onInstall, onRemove }: { pack: MarketPack; installs: number; canBuy: boolean; onInstall: () => void; onRemove?: () => void }) {
   const preview = useMemo(() => decodePack(pack.code).slice(0, 6), [pack.code]);
+  const priced = !!pack.price && !!pack.sellerWallet;
+  const label = priced ? (canBuy ? `Buy ◎${pack.price}` : `Free install`) : 'Install';
   return (
     <div className="glass relative flex flex-col gap-3 p-4">
       <div className="flex items-start justify-between">
@@ -117,7 +137,11 @@ function PackCard({ pack, installs, onInstall, onRemove }: { pack: MarketPack; i
           <h3 className="font-display font-bold text-white">{pack.name}</h3>
           <p className="text-xs text-slate-500">by {pack.author} · {pack.count} symbols{installs > 0 ? ` · ${installs} installs` : ''}</p>
         </div>
-        {pack.curated && <span className="chip !border-gold/40 !bg-gold/10 !text-gold"><Icon name="star" size={11} /> Curated</span>}
+        {pack.curated ? (
+          <span className="chip !border-gold/40 !bg-gold/10 !text-gold"><Icon name="star" size={11} /> Curated</span>
+        ) : priced ? (
+          <span className="chip !border-neon-cyan/40 !bg-neon-cyan/10 !text-neon-cyan">◎{pack.price}</span>
+        ) : null}
       </div>
       <div className="flex flex-wrap gap-1.5">
         {preview.map((s) => (
@@ -127,7 +151,7 @@ function PackCard({ pack, installs, onInstall, onRemove }: { pack: MarketPack; i
         ))}
       </div>
       <div className="mt-auto flex gap-2">
-        <button onClick={onInstall} className="btn-primary flex-1 !py-2 text-sm">Install</button>
+        <button onClick={onInstall} className="btn-primary flex-1 !py-2 text-sm">{label}</button>
         {onRemove && <button onClick={onRemove} className="btn-ghost !py-2 text-sm" title="Unpublish">Remove</button>}
       </div>
     </div>

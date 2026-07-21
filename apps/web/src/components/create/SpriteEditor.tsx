@@ -2,8 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useWallet } from '@solana/wallet-adapter-react';
 import { SpriteGlyph } from './SpriteGlyph';
 import { publishPack } from '@/lib/market';
+import { onchainEnabled } from '@/lib/onchain/buyAsset';
 import {
   clearSprite,
   decodePack,
@@ -25,6 +27,7 @@ import {
  * into any slot or scratch game so every player renders the exact art.
  */
 export function SpriteEditor() {
+  const wallet = useWallet();
   const [sprite, setSprite] = useState<Sprite>(() => newSprite());
   const [library, setLibrary] = useState<Sprite[]>([]);
   const [color, setColor] = useState(1);
@@ -73,8 +76,16 @@ export function SpriteEditor() {
     if (!library.length) return;
     const name = window.prompt('Name your pack', 'My symbols');
     if (!name) return;
-    publishPack(name, 'you', library);
-    setShareMsg(`Published "${name}" to the marketplace`);
+    // Optional on-chain price — only offered when a wallet + program are available.
+    let price: number | undefined;
+    if (onchainEnabled() && wallet.publicKey) {
+      const raw = window.prompt('Price in SOL (blank = free)', '');
+      const p = raw ? parseFloat(raw) : NaN;
+      if (Number.isFinite(p) && p > 0) price = p;
+    }
+    const seller = wallet.publicKey?.toBase58();
+    publishPack(name, seller ? seller.slice(0, 4) + '…' + seller.slice(-4) : 'you', library, { price, sellerWallet: seller });
+    setShareMsg(price ? `Published "${name}" at ◎${price}` : `Published "${name}" to the marketplace`);
   };
   const importPack = () => {
     const code = window.prompt('Paste a symbol pack code');

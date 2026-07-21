@@ -16,6 +16,10 @@ export interface MarketPack {
   code: string; // encoded sprite pack
   count: number; // number of symbols
   curated?: boolean;
+  /** Optional price in SOL. When set with sellerWallet + an on-chain program,
+   *  the market settles the sale via house_vault::buy_asset; else it's a free install. */
+  price?: number;
+  sellerWallet?: string;
 }
 
 const PUB_KEY = 'soltrend-market';
@@ -48,13 +52,21 @@ export function listPublished(): MarketPack[] {
   }
 }
 
-export function publishPack(name: string, author: string, sprites: Sprite[]): MarketPack[] {
+export function publishPack(
+  name: string,
+  author: string,
+  sprites: Sprite[],
+  opts?: { price?: number; sellerWallet?: string },
+): MarketPack[] {
+  const price = opts?.price && opts.price > 0 ? Math.round(opts.price * 1000) / 1000 : undefined;
   const p: MarketPack = {
     id: 'u' + Math.random().toString(36).slice(2, 9),
     name: name.trim().slice(0, 40) || 'Untitled pack',
     author: author || 'anon',
     code: encodePack(sprites),
     count: sprites.length,
+    // A price is only honoured with a seller wallet to receive the royalty.
+    ...(price && opts?.sellerWallet ? { price, sellerWallet: opts.sellerWallet } : {}),
   };
   const all = [p, ...listPublished()].slice(0, 60);
   write(PUB_KEY, all);
