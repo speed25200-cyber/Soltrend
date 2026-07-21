@@ -10,7 +10,7 @@ import { ForgeEditor } from '@/components/forge/ForgeEditor';
 import { GraphGame } from '@/components/games/GraphGame';
 import { simulateGraph, normaliseEdge, starterGraph, FORGE_TEMPLATES, type ForgeGraph } from '@/lib/forge/model';
 import { generateDistinct, noveltyScore, FEELINGS, type Feeling, type Candidate } from '@/lib/forge/generator';
-import { describe as describeGame } from '@/lib/forge/describe';
+import { describeWithAI, aiEnabled } from '@/lib/forge/aiCreate';
 import { clampEdge } from '@/lib/games';
 import { AURAS } from '@/lib/auras';
 import {
@@ -118,20 +118,19 @@ export function NodeBuilder() {
   // "Describe your game" — a transparent keyword mapper (offline, not an LLM):
   // text → feeling + style → a generated, playable draft in one tap.
   const [idea, setIdea] = useState('');
-  const describeAndBuild = () => {
+  const describeAndBuild = async () => {
     if (!idea.trim()) return;
-    const { feeling: f, presentation: pres } = describeGame(idea);
-    setFeeling(f);
     setGenerating(true);
-    setTimeout(() => {
-      const cands = generateDistinct(f, 3, []);
-      setCandidates(cands);
-      if (cands[0]) loadCandidate(cands[0]);
-      if (pres) setPresentation(pres);
-      setName(idea.trim().slice(0, 28));
-      setGenerating(false);
-      sfx.packWin(soundPack, 3);
-    }, 20);
+    // A hosted model refines the inputs when configured; else the offline mapper.
+    const hint = await describeWithAI(idea);
+    setFeeling(hint.feeling);
+    const cands = generateDistinct(hint.feeling, 3, []);
+    setCandidates(cands);
+    if (cands[0]) loadCandidate(cands[0]);
+    if (hint.presentation) setPresentation(hint.presentation);
+    setName(hint.name || idea.trim().slice(0, 28));
+    setGenerating(false);
+    sfx.packWin(soundPack, 3);
   };
 
   const loadCandidate = (c: Candidate) => {
@@ -238,7 +237,7 @@ export function NodeBuilder() {
           {/* Generator — pick a feeling, get three distinct games */}
           <div className="glass space-y-3 p-4">
             <div>
-              <span className="label-eyebrow">Describe your game</span>
+              <span className="label-eyebrow">Describe your game {aiEnabled() && <span className="ml-1 text-neon-cyan">· AI</span>}</span>
               <div className="mt-1.5 flex gap-2">
                 <input
                   value={idea}
@@ -249,10 +248,14 @@ export function NodeBuilder() {
                   className="input-num !font-sans flex-1 text-sm"
                 />
                 <button className="btn-primary !py-1.5 text-xs" onClick={describeAndBuild} disabled={generating || !idea.trim()}>
-                  <Icon name="spark" size={13} /> Build it
+                  <Icon name="spark" size={13} /> {generating ? 'Building…' : 'Build it'}
                 </button>
               </div>
-              <p className="mt-1 text-[0.62rem] text-slate-600">Keywords map to a feeling + style — try &ldquo;chill slow slot&rdquo; or &ldquo;huge jackpot wheel&rdquo;.</p>
+              <p className="mt-1 text-[0.62rem] text-slate-600">
+                {aiEnabled()
+                  ? 'A hosted model picks the feeling + style; the validated generator builds the game.'
+                  : 'Keywords map to a feeling + style — try “chill slow slot” or “huge jackpot wheel”.'}
+              </p>
             </div>
             <div className="h-px bg-white/[0.06]" />
             <div className="flex flex-wrap items-center gap-2">
