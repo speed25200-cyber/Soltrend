@@ -4,7 +4,8 @@ import { useRef, useState } from 'react';
 import { Icon } from '@/components/Icon';
 import { sfx } from '@/lib/sound';
 import {
-  clampRisk, exitsFrom, newRoom, roomGain, MAX_ROOMS, MIN_RISK, MAX_RISK,
+  clampRisk, exitsFrom, newRoom, roomGain, linkId, KEYS, KEY_HEX,
+  MAX_ROOMS, MIN_RISK, MAX_RISK,
   type NexusRoom, type NexusSpec,
 } from '@/lib/forge/nexus';
 
@@ -143,7 +144,9 @@ export function NexusEditor({ spec, onChange }: { spec: NexusSpec; onChange: (s:
               <line
                 key={`${from}>${to}`}
                 x1={toPx(a.x)} y1={toPx(a.z)} x2={toPx(b.x)} y2={toPx(b.z)}
-                stroke="#a855f7" strokeOpacity={0.55} strokeWidth={1.6}
+                stroke={spec.gates?.[linkId(from, to)] ? KEY_HEX[spec.gates[linkId(from, to)]] : '#a855f7'}
+                strokeOpacity={0.55} strokeWidth={1.6}
+                strokeDasharray={spec.gates?.[linkId(from, to)] ? '4 3' : undefined}
                 markerEnd="url(#nx-arrow)"
               />
             );
@@ -166,6 +169,7 @@ export function NexusEditor({ spec, onChange }: { spec: NexusSpec; onChange: (s:
                 <text x={toPx(r.x)} y={toPx(r.z) + 3} textAnchor="middle" fontSize={8} fill="#e2e8f0" className="pointer-events-none select-none">
                   ×{roomGain(r).toFixed(1)}
                 </text>
+                {r.key && <circle cx={toPx(r.x) + 11} cy={toPx(r.z) - 11} r={3.5} fill={KEY_HEX[r.key]} />}
               </g>
             );
           })}
@@ -215,6 +219,61 @@ export function NexusEditor({ spec, onChange }: { spec: NexusSpec; onChange: (s:
                   className="mt-1.5 w-full accent-neon-cyan"
                 />
               </div>
+
+              <div>
+                <span className="label-eyebrow">Grants a key</span>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  <button
+                    onClick={() => patchRoom(room.id, { key: undefined })}
+                    className={`chip ${!room.key ? 'border-white/40 text-slate-200' : ''}`}
+                  >
+                    none
+                  </button>
+                  {KEYS.map((k) => (
+                    <button
+                      key={k}
+                      onClick={() => patchRoom(room.id, { key: k })}
+                      className="chip capitalize"
+                      style={room.key === k ? { borderColor: KEY_HEX[k], color: KEY_HEX[k] } : undefined}
+                    >
+                      {k}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Gates on this room's own exits — the dungeon layer. */}
+              {exitsFrom(spec, room.id).length > 0 && (
+                <div>
+                  <span className="label-eyebrow">Lock a path out of here</span>
+                  <div className="mt-1.5 space-y-1.5">
+                    {exitsFrom(spec, room.id).map((dest) => {
+                      const lid = linkId(room.id, dest.id);
+                      const need = spec.gates?.[lid];
+                      return (
+                        <div key={dest.id} className="flex items-center gap-1.5 text-xs">
+                          <span className="min-w-0 flex-1 truncate text-slate-400">→ {dest.label || 'Room'}</span>
+                          <button
+                            onClick={() => { const g = { ...(spec.gates ?? {}) }; delete g[lid]; patch({ gates: g }); sfx.click(); }}
+                            className={`chip !text-[0.6rem] ${!need ? 'border-white/40 text-slate-200' : ''}`}
+                          >
+                            open
+                          </button>
+                          {KEYS.map((k) => (
+                            <button
+                              key={k}
+                              onClick={() => { patch({ gates: { ...(spec.gates ?? {}), [lid]: k } }); sfx.click(); }}
+                              title={`Require the ${k} key`}
+                              className="h-5 w-5 rounded border"
+                              style={{ background: `${KEY_HEX[k]}${need === k ? 'cc' : '22'}`, borderColor: need === k ? KEY_HEX[k] : 'transparent' }}
+                            />
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 <button

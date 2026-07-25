@@ -15,7 +15,7 @@ import { sfx } from '@/lib/sound';
 import { burstWin } from '@/lib/fx';
 import { boardLayout, boardMultiplier, safeCount, cellCount, BOARD_SKINS } from '@/lib/forge/board';
 import { worldFromParams, runLogicBonus, ascentLanes, ascentFloors, ascentLayout, ascentMultiplier } from '@/lib/forge/world';
-import { nexusMultiplier, nexusRolls, exitsFrom, findRoom, isTrap, roomGain } from '@/lib/forge/nexus';
+import { nexusMultiplier, nexusRolls, exitsFrom, findRoom, isTrap, roomGain, keysAfter, KEY_HEX } from '@/lib/forge/nexus';
 import type { GameConfig } from './types';
 
 const World3D = dynamic(() => import('@/components/worlds/World3D'), {
@@ -408,7 +408,8 @@ function NexusGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, maxBet
   const best = useCasino((s) => s.bests[bestKey] ?? 0);
 
   const curMult = nexus ? nexusMultiplier(nexus, cleared, edge) : 1;
-  const options = nexus && phase === 'playing' ? exitsFrom(nexus, currentId) : [];
+  const held = useMemo(() => (nexus ? keysAfter(nexus, [nexus.startId, ...cleared]) : new Set<string>()), [nexus, cleared]);
+  const options = nexus && phase === 'playing' ? exitsFrom(nexus, currentId, held) : [];
   const heat = Math.min(1, Math.log10(Math.max(1, curMult)) / 2);
   const g = guard(bet);
 
@@ -445,7 +446,7 @@ function NexusGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, maxBet
   const enter = (id: string) => {
     if (!nexus || phase !== 'playing' || !seeds) return;
     const room = findRoom(nexus, id);
-    if (!room || !exitsFrom(nexus, currentId).some((r) => r.id === id)) return;
+    if (!room || !exitsFrom(nexus, currentId, held).some((r) => r.id === id)) return;
     if (isTrap(room, rolls)) {
       if (settledRef.current) return;
       settledRef.current = true;
@@ -462,7 +463,7 @@ function NexusGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, maxBet
     setCurrentId(id);
     sfx.tick(path.length);
     // A dead end forces the bank — the creator decided this is where it ends.
-    if (exitsFrom(nexus, id).length === 0) bank(path, seeds);
+    if (exitsFrom(nexus, id, keysAfter(nexus, [nexus.startId, ...path])).length === 0) bank(path, seeds);
   };
 
   if (!nexus) {
@@ -496,6 +497,13 @@ function NexusGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, maxBet
               <div className="text-[0.62rem] uppercase tracking-[0.25em] text-slate-400">
                 {phase === 'playing' && cleared.length > 0 ? `◎${(bet * curMult).toFixed(3)}` : `${nexus.rooms.length} rooms · ${nexus.links.length} paths`}
               </div>
+              {held.size > 0 && (
+                <div className="mt-1 flex gap-1">
+                  {[...held].map((k) => (
+                    <span key={k} className="rounded px-1.5 py-0.5 text-[0.55rem] font-bold uppercase" style={{ background: `${KEY_HEX[k]}22`, color: KEY_HEX[k] }}>{k}</span>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="rounded-xl border border-white/10 bg-void-950/70 px-3 py-2 text-right backdrop-blur">
               <div className="font-mono text-lg font-bold text-white">{cleared.length}</div>
@@ -535,12 +543,31 @@ function NexusGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, maxBet
                       onClick={() => enter(room.id)}
                       className="flex w-full items-center justify-between rounded-lg border border-white/[0.08] bg-void-900/60 px-3 py-2 text-sm transition hover:border-neon-violet/50 hover:bg-void-700/50"
                     >
-                      <span className="font-semibold text-white">{room.label || 'Room'}</span>
+                      <span className="flex items-center gap-1.5 font-semibold text-white">
+                        {room.label || 'Room'}
+                        {room.key && (
+                          <span className="rounded px-1 py-0.5 text-[0.55rem] font-bold uppercase" style={{ background: `${KEY_HEX[room.key]}22`, color: KEY_HEX[room.key] }}>
+                            {room.key} key
+                          </span>
+                        )}
+                      </span>
                       <span className="flex items-center gap-2 font-mono text-xs">
                         <span style={{ color: skin.gem }}>×{gain.toFixed(2)}</span>
                         <span className="text-slate-500">{survive.toFixed(0)}% safe</span>
                       </span>
                     </button>
+                  );
+                })}
+                {/* Paths the creator sealed — visible, so the player can plan a detour. */}
+                {exitsFrom(nexus, currentId).filter((r) => !options.some((o) => o.id === r.id)).map((room) => {
+                  const need = nexus.gates?.[`${currentId}>${room.id}`];
+                  return (
+                    <div key={room.id} className="flex w-full items-center justify-between rounded-lg border border-white/[0.05] bg-void-950/50 px-3 py-2 text-sm opacity-60">
+                      <span className="text-slate-400">{room.label || 'Room'}</span>
+                      <span className="font-mono text-[0.68rem]" style={{ color: need ? KEY_HEX[need] : '#64748b' }}>
+                        needs {need} key
+                      </span>
+                    </div>
                   );
                 })}
               </div>

@@ -36,13 +36,33 @@ export interface NexusRoom {
   /** chance this room is a trap, 0..MAX_RISK. Survival is 1 - risk. */
   risk: number;
   label?: string;
+  /**
+   * Clearing this room grants this key. Keys unlock gated paths, which is what
+   * turns a map into a dungeon: "do I detour through the lethal key room to
+   * open the rich shortcut?" Purely structural — it changes which routes are
+   * *available*, never what a room pays, so the edge proof is untouched.
+   */
+  key?: string;
 }
+
+export const KEYS = ['amber', 'azure', 'crimson'] as const;
+export type KeyId = (typeof KEYS)[number];
+
+export const KEY_HEX: Record<string, string> = {
+  amber: '#ffd25f',
+  azure: '#22d3ee',
+  crimson: '#ff3b6b',
+};
+
+export const linkId = (from: string, to: string) => `${from}>${to}`;
 
 export interface NexusSpec {
   rooms: NexusRoom[];
   /** directed edges "from>to"; a room with no exits forces a cash-out */
   links: [string, string][];
   startId: string;
+  /** "from>to" → key required to walk that path. Absent = always open. */
+  gates?: Record<string, string>;
 }
 
 export const MAX_ROOMS = 14;
@@ -58,12 +78,33 @@ export const roomGain = (room: NexusRoom) => 1 / (1 - clampRisk(room.risk));
 
 export const findRoom = (spec: NexusSpec, id: string) => spec.rooms.find((r) => r.id === id);
 
-/** Rooms reachable in one step from `id`. */
-export function exitsFrom(spec: NexusSpec, id: string): NexusRoom[] {
+/** The key a path demands, if any. */
+export const gateOn = (spec: NexusSpec, from: string, to: string) => spec.gates?.[linkId(from, to)];
+
+/**
+ * Rooms reachable in one step from `id`. Pass the keys the player is carrying to
+ * hide paths they cannot open yet; omit it to see the map's full structure.
+ */
+export function exitsFrom(spec: NexusSpec, id: string, heldKeys?: Set<string>): NexusRoom[] {
   return spec.links
-    .filter(([from]) => from === id)
+    .filter(([from, to]) => {
+      if (from !== id) return false;
+      if (!heldKeys) return true;
+      const need = gateOn(spec, from, to);
+      return !need || heldKeys.has(need);
+    })
     .map(([, to]) => findRoom(spec, to))
     .filter((r): r is NexusRoom => !!r);
+}
+
+/** Keys collected by walking `path` (room ids, in order). */
+export function keysAfter(spec: NexusSpec, path: string[]): Set<string> {
+  const held = new Set<string>();
+  for (const id of path) {
+    const k = findRoom(spec, id)?.key;
+    if (k) held.add(k);
+  }
+  return held;
 }
 
 /**
@@ -88,17 +129,22 @@ export function maxPathGain(spec: NexusSpec): number {
   const start = findRoom(spec, spec.startId);
   if (!start) return 1;
   let best = 1;
-  const walk = (id: string, gain: number, seen: Set<string>, depth: number) => {
+  // Carries the key set along the walk, so a gated shortcut only counts toward
+  // the top payout on routes that actually collected its key first.
+  const walk = (id: string, gain: number, seen: Set<string>, held: Set<string>, depth: number) => {
     if (gain > best) best = gain;
     if (depth >= MAX_DEPTH) return;
-    for (const next of exitsFrom(spec, id)) {
+    for (const next of exitsFrom(spec, id, held)) {
       if (seen.has(next.id)) continue;
       seen.add(next.id);
-      walk(next.id, gain * roomGain(next), seen, depth + 1);
+      const grew = next.key && !held.has(next.key);
+      if (grew) held.add(next.key!);
+      walk(next.id, gain * roomGain(next), seen, held, depth + 1);
+      if (grew) held.delete(next.key!);
       seen.delete(next.id);
     }
   };
-  walk(spec.startId, 1, new Set([spec.startId]), 0);
+  walk(spec.startId, 1, new Set([spec.startId]), keysAfter(spec, [spec.startId]), 0);
   return best;
 }
 
@@ -128,19 +174,38 @@ export function nexusStats(spec: NexusSpec, edge: number): NexusStats {
   if (start && exitsFrom(spec, spec.startId).length === 0) errors.push('The starting room has no exits — nowhere to go.');
 
   // Unreachable rooms are dead content; warn the creator rather than ship them.
+  // Reachability is key-aware and iterated to a fixed point: picking up a key can
+  // open gates that in turn lead to more keys.
   if (start) {
     const seen = new Set([spec.startId]);
-    const queue = [spec.startId];
-    while (queue.length) {
-      for (const next of exitsFrom(spec, queue.shift()!)) {
-        if (!seen.has(next.id)) {
+    let held = keysAfter(spec, [spec.startId]);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const id of [...seen]) {
+        for (const next of exitsFrom(spec, id, held)) {
+          if (seen.has(next.id)) continue;
           seen.add(next.id);
-          queue.push(next.id);
+          grew = true;
         }
+      }
+      const nextKeys = keysAfter(spec, [...seen]);
+      if (nextKeys.size > held.size) {
+        held = nextKeys;
+        grew = true;
       }
     }
     const orphans = spec.rooms.filter((r) => !seen.has(r.id));
     if (orphans.length) errors.push(`${orphans.length} room${orphans.length === 1 ? '' : 's'} can't be reached from the start.`);
+
+    // A gate whose key is nowhere reachable is a permanently sealed door.
+    for (const [lid, need] of Object.entries(spec.gates ?? {})) {
+      if (!spec.rooms.some((r) => r.key === need && seen.has(r.id))) {
+        const [from] = lid.split('>');
+        const label = findRoom(spec, from)?.label || 'a room';
+        errors.push(`A path out of ${label} needs the ${need} key, but no reachable room grants it.`);
+      }
+    }
   }
 
   const gain = maxPathGain(spec);
@@ -241,6 +306,34 @@ export const NEXUS_TEMPLATES: { id: string; label: string; hint: string; build: 
     },
   },
   {
+    id: 'keep',
+    label: 'Locked Keep',
+    hint: 'The rich shortcut is sealed — detour through the vault-key room first',
+    build: () => {
+      const start = newRoom(0, 3.2, 0, 0.08);
+      const hall = newRoom(-2.4, 1.2, 0, 0.14);
+      const keyRoom = newRoom(-2.6, -1.4, 0.5, 0.42);
+      keyRoom.key = 'amber';
+      keyRoom.label = 'Key vault';
+      const long = newRoom(0.4, -0.4, 0, 0.16);
+      const treasure = newRoom(2.6, -2.2, 0.9, 0.34);
+      treasure.label = 'Treasury';
+      return {
+        rooms: [start, hall, keyRoom, long, treasure],
+        links: [
+          [start.id, hall.id],
+          [start.id, long.id],
+          [hall.id, keyRoom.id],
+          [keyRoom.id, long.id],
+          [long.id, treasure.id],
+        ],
+        startId: start.id,
+        // The treasury door only opens for someone who braved the key vault.
+        gates: { [linkId(long.id, treasure.id)]: 'amber' },
+      };
+    },
+  },
+  {
     id: 'gauntlet',
     label: 'Crossroads',
     hint: 'Two parallel routes you can switch between — pick your poison',
@@ -274,10 +367,14 @@ export function nexusFromParams(params?: Record<string, number | string>): Nexus
     if (!Array.isArray(spec.rooms) || !Array.isArray(spec.links) || typeof spec.startId !== 'string') return null;
     // Drop links pointing at rooms that no longer exist.
     const ids = new Set(spec.rooms.map((r) => r.id));
+    const links = spec.links.filter(([a, b]) => ids.has(a) && ids.has(b));
+    const live = new Set(links.map(([a, b]) => linkId(a, b)));
     return {
       rooms: spec.rooms.slice(0, MAX_ROOMS).map((r) => ({ ...r, risk: clampRisk(r.risk) })),
-      links: spec.links.filter(([a, b]) => ids.has(a) && ids.has(b)),
+      links,
       startId: spec.startId,
+      // Drop gates whose path no longer exists.
+      gates: Object.fromEntries(Object.entries(spec.gates ?? {}).filter(([lid]) => live.has(lid))),
     };
   } catch {
     return null;

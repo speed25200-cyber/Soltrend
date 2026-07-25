@@ -5,7 +5,7 @@ import { Canvas, useFrame, type ThreeEvent } from '@react-three/fiber';
 import { OrbitControls, Sparkles, Stars } from '@react-three/drei';
 import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
 import * as THREE from 'three';
-import { clampRisk, exitsFrom, findRoom, roomGain, type NexusRoom, type NexusSpec } from '@/lib/forge/nexus';
+import { clampRisk, exitsFrom, findRoom, gateOn, keysAfter, KEY_HEX, type NexusRoom, type NexusSpec } from '@/lib/forge/nexus';
 import { envDef, type EnvironmentId } from '@/lib/forge/world';
 import { BOARD_SKINS, type BoardSkin } from '@/lib/forge/board';
 
@@ -101,7 +101,7 @@ function Room({
 }
 
 /** A path between rooms — a light beam that brightens when it's a live option. */
-function Link({ a, b, color, live, walked }: { a: NexusRoom; b: NexusRoom; color: string; live: boolean; walked: boolean }) {
+function Link({ a, b, color, live, walked, locked }: { a: NexusRoom; b: NexusRoom; color: string; live: boolean; walked: boolean; locked?: string }) {
   const ref = useRef<THREE.Mesh>(null);
   const { mid, len, quat } = useMemo(() => {
     const from = new THREE.Vector3(a.x, a.y, a.z);
@@ -115,14 +115,16 @@ function Link({ a, b, color, live, walked }: { a: NexusRoom; b: NexusRoom; color
     const mat = ref.current?.material as THREE.MeshBasicMaterial | undefined;
     if (!mat) return;
     const t = s.clock.elapsedTime;
-    const target = walked ? 0.85 : live ? 0.4 + Math.sin(t * 4) * 0.22 : 0.08;
+    // A sealed path still glimmers in its key's colour, so the player can see
+    // the prize they cannot reach yet and go hunting for the key.
+    const target = walked ? 0.85 : live ? 0.4 + Math.sin(t * 4) * 0.22 : locked ? 0.16 + Math.sin(t * 1.6) * 0.06 : 0.08;
     mat.opacity = THREE.MathUtils.damp(mat.opacity, target, 6, dt);
   });
 
   return (
     <mesh ref={ref} position={mid} quaternion={quat}>
       <cylinderGeometry args={[live || walked ? 0.035 : 0.014, live || walked ? 0.035 : 0.014, len, 6]} />
-      <meshBasicMaterial color={color} transparent opacity={0.1} />
+      <meshBasicMaterial color={locked ? KEY_HEX[locked] : color} transparent opacity={0.1} />
     </mesh>
   );
 }
@@ -169,9 +171,10 @@ function Scene({ spec, environment, skin: skinId, currentId, cleared, hitId, rev
   const env = envDef(environment);
   const skin = BOARD_SKINS[skinId];
   const current = findRoom(spec, currentId);
+  const held = useMemo(() => keysAfter(spec, [spec.startId, ...cleared]), [spec, cleared]);
   const nextIds = useMemo(
-    () => new Set(playing ? exitsFrom(spec, currentId).map((r) => r.id) : []),
-    [spec, currentId, playing],
+    () => new Set(playing ? exitsFrom(spec, currentId, held).map((r) => r.id) : []),
+    [spec, currentId, playing, held],
   );
   const clearedSet = useMemo(() => new Set(cleared), [cleared]);
   const walked = useMemo(() => {
@@ -203,6 +206,7 @@ function Scene({ spec, environment, skin: skinId, currentId, cleared, hitId, rev
             color={skin.gem}
             live={from === currentId && nextIds.has(to)}
             walked={walked.has(`${from}>${to}`)}
+            locked={(() => { const need = gateOn(spec, from, to); return need && !held.has(need) ? need : undefined; })()}
           />
         );
       })}
