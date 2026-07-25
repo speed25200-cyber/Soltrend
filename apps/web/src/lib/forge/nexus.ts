@@ -356,8 +356,13 @@ export const NEXUS_TEMPLATES: { id: string; label: string; hint: string; build: 
 
 /* ------------------------------------------------------------- (de)serialize */
 
+/**
+ * Serialise a Nexus for a game's params. `mode` is included because the world
+ * loader dispatches on it — without it the map would be handed to the board
+ * runtime and play as the wrong mechanic entirely.
+ */
 export function nexusToParams(spec: NexusSpec): Record<string, number | string> {
-  return { nexus: JSON.stringify(spec) };
+  return { mode: 'nexus', nexus: JSON.stringify(spec) };
 }
 
 export function nexusFromParams(params?: Record<string, number | string>): NexusSpec | null {

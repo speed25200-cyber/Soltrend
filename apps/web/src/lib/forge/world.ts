@@ -233,9 +233,11 @@ export function worldToParams(spec: WorldSpec): Record<string, number | string> 
     environment: spec.environment,
     camera: spec.camera,
     logicScale: spec.logicScale,
-    mode: spec.mode,
   };
+  // Merge the map first, then stamp the mode, so a world carrying a Nexus draft
+  // while set to another mechanic still serialises as the mechanic it plays as.
   if (spec.nexus) Object.assign(p, nexusToParams(spec.nexus));
+  p.mode = spec.mode;
   if (spec.logic) p.logic = JSON.stringify(spec.logic);
   if (spec.props.length) p.props = JSON.stringify(spec.props);
   return p;

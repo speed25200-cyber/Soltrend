@@ -4,6 +4,8 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { SectionHead } from '@/components/SectionHead';
+import { GameScreen } from '@/components/games/GameScreen';
+import type { GameMeta } from '@/lib/catalog';
 import { Icon } from '@/components/Icon';
 import { useCasino } from '@/lib/store';
 import { sfx } from '@/lib/sound';
@@ -14,7 +16,7 @@ import {
   shareCard, type Challenge, type DailyResult,
 } from '@/lib/daily';
 import {
-  exitsFrom, findRoom, isTrap, keysAfter, nexusMultiplier, nexusRolls, roomGain, KEY_HEX,
+  exitsFrom, findRoom, isTrap, keysAfter, nexusMultiplier, nexusToParams, roomGain, KEY_HEX,
 } from '@/lib/forge/nexus';
 
 const Nexus3D = dynamic(() => import('@/components/worlds/Nexus3D'), {
@@ -68,6 +70,7 @@ function DailyInner({ now }: { now: number }) {
   const [rolls, setRolls] = useState<Record<string, number>>({});
   const [copied, setCopied] = useState(false);
   const [copiedChallenge, setCopiedChallenge] = useState(false);
+  const [forReal, setForReal] = useState(false);
   const settledRef = useRef(false);
 
   const held = useMemo(() => keysAfter(spec, [spec.startId, ...cleared]), [spec, cleared]);
@@ -161,6 +164,19 @@ function DailyInner({ now }: { now: number }) {
     } catch {
       window.prompt('Copy your result', text);
     }
+  };
+
+  // The staked twin of today's map — a board-template world running the Nexus
+  // mechanic, so it goes through the same guarded betting path as any game.
+  const stakedMeta: GameMeta = {
+    slug: `daily-${puzzle.number}`,
+    name: `Daily Nexus #${puzzle.number}`,
+    icon: 'orbit',
+    tagline: "Today's map, played for stakes",
+    template: 'board',
+    tier: 1,
+    accent: 'gold',
+    seedKey: `daily-${puzzle.key}`,
   };
 
   const reveal = phase === 'busted' || phase === 'cashed';
@@ -321,9 +337,29 @@ function DailyInner({ now }: { now: number }) {
             studying the map early tells you nothing about your rolls. <Link href="/verify" className="text-neon-violet">Verify any run</Link>.
           </div>
 
-          <Link href="/discover" className="btn-ghost w-full !py-2 text-xs">Want stakes? Play the community games</Link>
+          {done && (
+            <div className="glass space-y-2 p-4">
+              <div className="font-display text-sm font-bold text-white">Run today&apos;s map for real</div>
+              <p className="text-xs text-slate-400">
+                You know the layout now. The same topology, played for stakes — your bet limits and
+                any self-set caps still apply.
+              </p>
+              <button onClick={() => setForReal((v) => !v)} className="btn-primary w-full !py-2 text-xs">
+                {forReal ? 'Hide the staked run' : 'Play it for stakes'}
+              </button>
+            </div>
+          )}
+
+          <Link href="/discover" className="btn-ghost w-full !py-2 text-xs">Or browse the community games</Link>
         </div>
       </div>
+
+      {forReal && done && (
+        <div className="space-y-3">
+          <SectionHead eyebrow="Daily · For stakes" title="The same map, with skin in the game" sub="Identical topology and odds. Every room still pays 1/survival, so the edge is the same down every route." />
+          <GameScreen config={{ meta: stakedMeta, edge: EDGE, gameName: `Daily Nexus #${puzzle.number}`, params: nexusToParams(spec), maxWin: puzzle.maxMult }} />
+        </div>
+      )}
     </div>
   );
 }
