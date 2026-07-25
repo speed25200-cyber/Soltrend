@@ -17,7 +17,7 @@ export function clampEdge(edge: number): number {
   return Math.min(MAX_EDGE, Math.max(MIN_EDGE, edge));
 }
 
-export type Template = 'dice' | 'limbo' | 'coinflip' | 'wheel' | 'mines' | 'plinko' | 'towers' | 'graph' | 'board';
+export type Template = 'dice' | 'limbo' | 'coinflip' | 'wheel' | 'mines' | 'plinko' | 'towers' | 'graph' | 'board' | 'slots';
 
 /* ----------------------------------------------------------------------- Dice */
 

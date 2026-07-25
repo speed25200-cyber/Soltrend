@@ -12,6 +12,7 @@ import { WheelGame } from './WheelGame';
 import { GraphGame } from './GraphGame';
 import { WorldGame } from './WorldGame';
 import { TowersGame } from './TowersGame';
+import { GoldmineGame } from './GoldmineGame';
 
 const BY_TEMPLATE: Record<Template, (c: GameConfig) => JSX.Element> = {
   dice: DiceGame,
@@ -23,6 +24,7 @@ const BY_TEMPLATE: Record<Template, (c: GameConfig) => JSX.Element> = {
   towers: TowersGame,
   graph: GraphGame,
   board: WorldGame, // board games render in the 3D World runtime
+  slots: GoldmineGame,
 };
 
 /**
