@@ -8,7 +8,6 @@ import { LiveWinsTicker } from '@/components/LiveWinsTicker';
 import { UgcRow } from '@/components/UgcRow';
 import { WorldsRow } from '@/components/WorldsRow';
 import { SectionHead } from '@/components/SectionHead';
-import { Icon } from '@/components/Icon';
 
 export default function LobbyPage() {
   return (
@@ -31,21 +30,6 @@ export default function LobbyPage() {
 
       <UgcRow />
       <WorldsRow />
-
-      <section className="grid gap-3 sm:grid-cols-3">
-        <Link href="/duel" className="glass glass-hover flex items-center gap-3 p-4">
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-neon-violet/15 text-neon-violet"><Icon name="target" size={20} /></span>
-          <div><div className="font-display text-sm font-bold text-white">Play PvP</div><div className="text-xs text-slate-500">Duel 1v1 or join the shared jackpot</div></div>
-        </Link>
-        <Link href="/live" className="glass glass-hover flex items-center gap-3 p-4">
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-neon-pink/15 text-neon-pink"><Icon name="trend" size={20} /></span>
-          <div><div className="font-display text-sm font-bold text-white">Live Crash</div><div className="text-xs text-slate-500">3D rocket, solo or shared rooms</div></div>
-        </Link>
-        <Link href="/market" className="glass glass-hover flex items-center gap-3 p-4">
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gold/15 text-gold"><Icon name="star" size={20} /></span>
-          <div><div className="font-display text-sm font-bold text-white">Asset market</div><div className="text-xs text-slate-500">Symbol packs + node modules</div></div>
-        </Link>
-      </section>
 
       <section className="glass overflow-hidden p-8 md:p-10">
         <div className="relative z-10 max-w-2xl">

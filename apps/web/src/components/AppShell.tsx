@@ -10,23 +10,25 @@ import { GeoNotice } from './GeoNotice';
 import { WinFx } from './WinFx';
 import { LevelChip } from './LevelChip';
 import { JackpotPill } from './JackpotPill';
+import { SectionTabs } from './SectionTabs';
+import { SECTIONS, sectionFor, type NavSection } from '@/lib/nav';
 import { useCasino } from '@/lib/store';
 import { setSoundOn } from '@/lib/sound';
 
-const NAV = [
-  { href: '/', label: 'Lobby', icon: LobbyIcon },
-  { href: '/live', label: 'Live', icon: LiveIcon },
-  { href: '/discover', label: 'Discover', icon: DiscoverIcon },
-  { href: '/studio', label: 'Create', icon: CreateIcon },
-  { href: '/rewards', label: 'Rewards', icon: RewardIcon },
-  { href: '/leaderboard', label: 'Ranks', icon: RankIcon },
-  { href: '/profile', label: 'Profile', icon: ProfileIcon },
-];
-const BOTTOM = NAV.filter((n) => n.href !== '/leaderboard');
+const ICONS: Record<NavSection['icon'], (p: IconP) => JSX.Element> = {
+  play: LobbyIcon,
+  live: LiveIcon,
+  create: CreateIcon,
+  earn: EarnIcon,
+  you: ProfileIcon,
+};
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const isActive = (href: string) => (href === '/' ? pathname === '/' : pathname.startsWith(href));
+  // One model for both navs: the primary item lights up for every page inside
+  // its section, so "where am I" is answerable from either layout.
+  const active = sectionFor(pathname);
+  const isActive = (href: string) => active?.href === href;
 
   const soundOn = useCasino((s) => s.soundOn);
   const setReferredBy = useCasino((s) => s.setReferredBy);
@@ -51,10 +53,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Link>
 
           <nav className="ml-4 hidden items-center gap-1 md:flex">
-            {NAV.slice(0, 6).map((n) => (
+            {SECTIONS.map((n) => (
               <Link
                 key={n.href}
                 href={n.href}
+                aria-current={isActive(n.href) ? 'page' : undefined}
                 className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
                   isActive(n.href) ? 'bg-white/[0.06] text-white' : 'text-slate-400 hover:text-white'
                 }`}
@@ -75,15 +78,18 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <GeoNotice />
 
-      {/* Content */}
-      <main className="mx-auto max-w-7xl px-4 pb-28 pt-6 md:pb-16">{children}</main>
+      {/* Content — every page inherits its section's sub-navigation */}
+      <main className="mx-auto max-w-7xl px-4 pb-28 pt-6 md:pb-16">
+        <SectionTabs />
+        {children}
+      </main>
 
-      {/* Bottom nav (mobile-first) */}
+      {/* Bottom nav (mobile) — the same five destinations as the header */}
       <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-white/[0.06] bg-void-950/85 backdrop-blur-xl md:hidden">
-        <div className="mx-auto grid max-w-lg grid-cols-6">
-          {BOTTOM.map((n) => {
+        <div className="mx-auto grid max-w-lg grid-cols-5">
+          {SECTIONS.map((n) => {
             const active = isActive(n.href);
-            const Icon = n.icon;
+            const Icon = ICONS[n.icon];
             return (
               <Link
                 key={n.href}
@@ -109,11 +115,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 }
 
-function RewardIcon({ active }: IconP) {
+/** Earn — a vault/coin stack, for staking and rewards. */
+function EarnIcon({ active }: IconP) {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-      <rect x="3" y="8" width="18" height="4" rx="1" stroke={c(active)} strokeWidth="2" />
-      <path d="M5 12v8h14v-8M12 8v12M12 8S9 3 6.5 4.5 8 8 12 8zM12 8s3-5 5.5-3.5S16 8 12 8z" stroke={c(active)} strokeWidth="2" strokeLinejoin="round" />
+      <ellipse cx="12" cy="6" rx="7" ry="3" stroke={c(active)} strokeWidth="2" />
+      <path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6" stroke={c(active)} strokeWidth="2" strokeLinecap="round" />
+      <path d="M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" stroke={c(active)} strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
 }
@@ -149,14 +157,6 @@ function LiveIcon({ active }: IconP) {
     </svg>
   );
 }
-function DiscoverIcon({ active }: IconP) {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-      <circle cx="12" cy="12" r="9" stroke={c(active)} strokeWidth="2" />
-      <path d="M15.5 8.5l-2 5-5 2 2-5z" stroke={c(active)} strokeWidth="2" strokeLinejoin="round" />
-    </svg>
-  );
-}
 function CreateIcon({ active }: IconP) {
   return (
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
@@ -168,13 +168,6 @@ function CreateIcon({ active }: IconP) {
           <stop offset="1" stopColor="#d946ef" />
         </linearGradient>
       </defs>
-    </svg>
-  );
-}
-function RankIcon({ active }: IconP) {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-      <path d="M4 20h4v-8H4zM10 20h4V4h-4zM16 20h4v-11h-4z" stroke={c(active)} strokeWidth="2" strokeLinejoin="round" />
     </svg>
   );
 }
