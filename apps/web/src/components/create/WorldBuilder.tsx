@@ -7,13 +7,14 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { useCasino } from '@/lib/store';
 import { Icon, STUDIO_ICONS, type IconName } from '@/components/Icon';
 import { ForgeEditor } from '@/components/forge/ForgeEditor';
+import { NexusEditor } from '@/components/create/NexusEditor';
 import { WorldGame } from '@/components/games/WorldGame';
 import {
   clampSpec, cellCount, BOARD_SKINS, BOARD_FX, BOARD_TEMPLATES, type BoardSkin, type BoardFx,
 } from '@/lib/forge/board';
 import {
   defaultWorld, worldStats, worldToParams, worldFromParams, normaliseLogic, newProp,
-  ascentLanes, ascentFloors, WORLD_MODES, ASCENT_TEMPLATES,
+  ascentLanes, ascentFloors, WORLD_MODES, ASCENT_TEMPLATES, NEXUS_TEMPLATES,
   ENVIRONMENTS, CAMERAS, PROP_TYPES, type WorldSpec, type EnvironmentId, type CameraId, type PropType, type WorldProp,
 } from '@/lib/forge/world';
 import { starterGraph, simulateGraph } from '@/lib/forge/model';
@@ -33,6 +34,11 @@ const World3D = dynamic(() => import('@/components/worlds/World3D'), {
 const Ascent3D = dynamic(() => import('@/components/worlds/Ascent3D'), {
   ssr: false,
   loading: () => <div className="grid h-[340px] place-items-center text-sm text-slate-500">Loading the tower…</div>,
+});
+
+const Nexus3D = dynamic(() => import('@/components/worlds/Nexus3D'), {
+  ssr: false,
+  loading: () => <div className="grid h-[340px] place-items-center text-sm text-slate-500">Mapping the Nexus…</div>,
 });
 
 const ACCENTS: GameMeta['accent'][] = ['violet', 'cyan', 'gold', 'pink', 'win'];
@@ -206,13 +212,15 @@ export function WorldBuilder() {
               <WorldGame meta={meta} edge={stats.edge} params={worldToParams(spec)} gameName={name || 'Preview'} />
             ) : (
               <div className="relative h-[340px] overflow-hidden rounded-2xl sm:h-[400px]">
-                {spec.mode === 'ascent' ? (
+                {spec.mode === 'nexus' && spec.nexus ? (
+                  <Nexus3D spec={spec.nexus} environment={spec.environment} skin={spec.board.skin} currentId={spec.nexus.startId} cleared={[]} hitId={null} reveal={false} playing={false} onEnter={() => {}} heat={0.4} />
+                ) : spec.mode === 'ascent' ? (
                   <Ascent3D spec={spec} level={demoLevel} traps={[]} picks={demoPicks} reveal={false} playing={false} hitLane={null} onPick={() => {}} heat={0.4} />
                 ) : (
                   <World3D spec={{ ...spec, camera: 'cinematic' }} revealed={demoRevealed} bombSet={new Set()} showBombs={false} playing={false} hitIndex={null} onReveal={() => {}} heat={0.4} />
                 )}
                 <div className="pointer-events-none absolute bottom-3 left-3 rounded-lg border border-white/10 bg-void-950/70 px-2.5 py-1 text-[0.62rem] uppercase tracking-[0.2em] text-slate-400 backdrop-blur">
-                  Live 3D preview · {spec.mode === 'ascent' ? 'the camera rises as you climb' : 'drag to orbit'}
+                  Live 3D preview · {spec.mode === 'nexus' ? 'your map, as players will see it' : spec.mode === 'ascent' ? 'the camera rises as you climb' : 'drag to orbit'}
                 </div>
               </div>
             )}
@@ -221,9 +229,13 @@ export function WorldBuilder() {
           {/* templates + play-test */}
           <div className="glass flex flex-wrap items-center gap-2 p-3">
             <span className="label-eyebrow mx-1">templates</span>
-            {(spec.mode === 'ascent' ? ASCENT_TEMPLATES : BOARD_TEMPLATES).map((t) => (
-              <button key={t.id} className="chip hover:border-neon-cyan/50" title={t.hint} onClick={() => loadTemplate(t)}>{t.label}</button>
-            ))}
+            {spec.mode === 'nexus'
+              ? NEXUS_TEMPLATES.map((t) => (
+                  <button key={t.id} className="chip hover:border-neon-cyan/50" title={t.hint} onClick={() => { setWorld({ nexus: t.build() }); sfx.click(); }}>{t.label}</button>
+                ))
+              : (spec.mode === 'ascent' ? ASCENT_TEMPLATES : BOARD_TEMPLATES).map((t) => (
+                  <button key={t.id} className="chip hover:border-neon-cyan/50" title={t.hint} onClick={() => loadTemplate(t)}>{t.label}</button>
+                ))}
             <button className="btn-ghost ml-auto !py-1.5 text-xs" onClick={() => setTesting((v) => !v)}>{testing ? 'Exit test' : 'Play test'}</button>
           </div>
 
@@ -241,7 +253,12 @@ export function WorldBuilder() {
                   {WORLD_MODES.map((m) => (
                     <button
                       key={m.id}
-                      onClick={() => { setWorld({ mode: m.id }); sfx.click(); }}
+                      onClick={() => {
+                        // Seed a starting map the first time they pick Nexus, so the
+                        // editor opens on something playable instead of an error.
+                        setWorld(m.id === 'nexus' && !spec.nexus ? { mode: m.id, nexus: NEXUS_TEMPLATES[0].build() } : { mode: m.id });
+                        sfx.click();
+                      }}
                       className={`rounded-xl px-3 py-2 text-left transition ${spec.mode === m.id ? 'bg-neon-cyan/15 text-white ring-1 ring-neon-cyan/50' : 'bg-void-900/60 text-slate-400 hover:text-white'}`}
                     >
                       <div className="text-sm font-semibold">{m.label}</div>
@@ -251,7 +268,9 @@ export function WorldBuilder() {
                 </div>
               </div>
 
-              {spec.mode === 'ascent' ? (
+              {spec.mode === 'nexus' ? (
+                <NexusEditor spec={spec.nexus ?? NEXUS_TEMPLATES[0].build()} onChange={(n) => setWorld({ nexus: n })} />
+              ) : spec.mode === 'ascent' ? (
                 <>
                   <Slider label="Floors" value={spec.board.rows} min={3} max={6} onChange={(v) => setBoard({ rows: v })} />
                   <Slider label="Lanes per floor" value={spec.board.cols} min={3} max={5} onChange={(v) => setBoard({ cols: v })} />

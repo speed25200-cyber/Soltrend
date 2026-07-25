@@ -18,6 +18,7 @@ import { runGraph, simulateGraph, type ForgeGraph } from './model';
 import { clampEdge, MIN_EDGE, MAX_EDGE } from '../games';
 import { MAX_PAYOUT } from './board';
 import { floatStream } from '../provably-fair';
+import { nexusStats, nexusFromParams, nexusToParams, NEXUS_TEMPLATES, type NexusSpec } from './nexus';
 
 export type EnvironmentId = 'void' | 'nebula' | 'grid' | 'sunset' | 'arena';
 export type CameraId = 'orbit' | 'iso' | 'cinematic';
@@ -29,11 +30,12 @@ export type CameraId = 'orbit' | 'iso' | 'cinematic';
  *   • ascent — climb a vertical tower one level at a time, each level hiding one
  *              trap among `cols` platforms. Escalating, vertigo-driven tension.
  */
-export type WorldMode = 'board' | 'ascent';
+export type WorldMode = 'board' | 'ascent' | 'nexus';
 
 export const WORLD_MODES: { id: WorldMode; label: string; hint: string }[] = [
   { id: 'board', label: 'Board', hint: 'Reveal tiles on a grid — explore and bank' },
   { id: 'ascent', label: 'Ascent', hint: 'Climb a tower level by level — one trap per floor' },
+  { id: 'nexus', label: 'Nexus', hint: 'Draw your own 3D map — players choose their route' },
 ];
 
 export const ENVIRONMENTS: { id: EnvironmentId; label: string; fog: string; ground: string; ambient: number }[] = [
@@ -82,10 +84,12 @@ export interface WorldSpec {
   logicScale: number;
   /** which spatial mechanic this world plays as */
   mode: WorldMode;
+  /** creator-drawn risk topology — only used by the 'nexus' mechanic */
+  nexus: NexusSpec | null;
 }
 
 export const defaultWorld = (board: BoardSpec): WorldSpec => ({
-  board, logic: null, environment: 'nebula', camera: 'orbit', props: [], logicScale: 1, mode: 'board',
+  board, logic: null, environment: 'nebula', camera: 'orbit', props: [], logicScale: 1, mode: 'board', nexus: null,
 });
 
 /* ------------------------------------------------------------------- ascent */
@@ -143,6 +147,31 @@ function ascentStats(spec: WorldSpec, edge: number): BoardStats {
   };
 }
 
+/**
+ * Adapt the Nexus validator to the shared BoardStats shape the builder renders.
+ * The "ladder" here is the richest route step by step, so a creator can see what
+ * the greediest possible player would earn on the way through their map.
+ */
+function nexusBoardStats(spec: WorldSpec, edge: number): BoardStats {
+  const e = clampEdge(edge);
+  if (!spec.nexus) {
+    return { cells: 0, safe: 0, maxMult: 1, ladder: [], edge: e, capped: false, ok: false, errors: ['Draw at least two rooms to build a Nexus.'] };
+  }
+  const n = nexusStats(spec.nexus, edge);
+  return {
+    cells: n.rooms,
+    safe: n.links,
+    maxMult: n.maxMult,
+    ladder: [{ picks: 1, mult: n.maxMult, survive: n.maxPathSurvival }],
+    edge: n.edge,
+    capped: n.capped,
+    ok: n.ok,
+    errors: n.errors,
+  };
+}
+
+export { NEXUS_TEMPLATES };
+
 let propCounter = 0;
 export const newProp = (type: PropType, color: string): WorldProp => ({
   id: `p${(propCounter++).toString(36)}`,
@@ -175,7 +204,12 @@ export interface WorldStats extends BoardStats {
 }
 
 export function worldStats(spec: WorldSpec, edge: number): WorldStats {
-  const base = spec.mode === 'ascent' ? ascentStats(spec, edge) : boardStats(spec.board, edge);
+  const base =
+    spec.mode === 'nexus'
+      ? nexusBoardStats(spec, edge)
+      : spec.mode === 'ascent'
+        ? ascentStats(spec, edge)
+        : boardStats(spec.board, edge);
   let logicRange: [number, number] | null = null;
   if (spec.logic) {
     let lo = Infinity, hi = 0;
@@ -201,6 +235,7 @@ export function worldToParams(spec: WorldSpec): Record<string, number | string> 
     logicScale: spec.logicScale,
     mode: spec.mode,
   };
+  if (spec.nexus) Object.assign(p, nexusToParams(spec.nexus));
   if (spec.logic) p.logic = JSON.stringify(spec.logic);
   if (spec.props.length) p.props = JSON.stringify(spec.props);
   return p;
@@ -221,8 +256,9 @@ export function worldFromParams(params?: Record<string, number | string>): World
   }
   const env = (params?.environment as EnvironmentId) || 'nebula';
   const cam = (params?.camera as CameraId) || 'orbit';
-  const mode: WorldMode = params?.mode === 'ascent' ? 'ascent' : 'board';
-  return { board, logic, environment: env, camera: cam, props, logicScale: Number(params?.logicScale) || 1, mode };
+  const mode: WorldMode = params?.mode === 'ascent' ? 'ascent' : params?.mode === 'nexus' ? 'nexus' : 'board';
+  const nexus = mode === 'nexus' ? nexusFromParams(params) : null;
+  return { board, logic, environment: env, camera: cam, props, logicScale: Number(params?.logicScale) || 1, mode, nexus };
 }
 
 export const envDef = (id: EnvironmentId) => ENVIRONMENTS.find((e) => e.id === id) ?? ENVIRONMENTS[1];
