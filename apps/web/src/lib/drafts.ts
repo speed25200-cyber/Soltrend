@@ -6,7 +6,7 @@
  * close. One draft slot per mode; publishing (or an explicit discard) clears it.
  */
 
-export type DraftMode = 'world' | 'node' | 'classic';
+export type DraftMode = 'world' | 'node' | 'classic' | 'slot';
 
 export interface Draft<T = unknown> {
   data: T;

@@ -7,9 +7,10 @@ import { WorldBuilder } from '@/components/create/WorldBuilder';
 import { NodeBuilder } from '@/components/create/NodeBuilder';
 import { SpriteEditor } from '@/components/create/SpriteEditor';
 import { ClassicsBuilder } from '@/components/create/ClassicsBuilder';
+import { SlotBuilder } from '@/components/create/SlotBuilder';
 import { sfx } from '@/lib/sound';
 
-type Mode = 'world' | 'node' | 'classic' | 'art';
+type Mode = 'slot' | 'world' | 'node' | 'classic' | 'art';
 
 /**
  * The single creation surface — 3D World and Node game builders merged behind one
@@ -17,12 +18,12 @@ type Mode = 'world' | 'node' | 'classic' | 'art';
  * /forge and /arcade routes redirect here.
  */
 export default function StudioPage() {
-  const [mode, setMode] = useState<Mode>('world');
+  const [mode, setMode] = useState<Mode>('slot');
   const [showTip, setShowTip] = useState(false);
 
   useEffect(() => {
     const m = new URLSearchParams(window.location.search).get('mode');
-    if (m === 'node' || m === 'world' || m === 'art' || m === 'classic') setMode(m);
+    if (m === 'slot' || m === 'node' || m === 'world' || m === 'art' || m === 'classic') setMode(m);
     try {
       setShowTip(!window.localStorage.getItem('soltrend-studio-tip'));
     } catch {
@@ -53,7 +54,7 @@ export default function StudioPage() {
       <SectionHead
         eyebrow="Create · Studio"
         title="Build a game"
-        sub="Design a 3D world, wire a node mechanic or reskin a classic — provably fair, vault-safe, published in a tap. Draw your own symbols in the Symbols tab."
+        sub="Build a slot, a 3D world, a node mechanic or a reskinned classic — provably fair, vault-safe, published in a tap."
       />
 
       {showTip && (
@@ -63,6 +64,7 @@ export default function StudioPage() {
           </button>
           <p className="font-display font-bold text-white">New here? Pick a mode:</p>
           <ul className="grid gap-1 text-xs text-slate-400 sm:grid-cols-2">
+            <li><b className="text-slate-200">Slot</b> — a cascading ore slot; choose the feel, the maths is handled.</li>
             <li><b className="text-slate-200">3D World</b> — a spatial board players reveal, with decor + optional logic.</li>
             <li><b className="text-slate-200">Node game</b> — invent a mechanic from a prompt, a feeling, or node-by-node.</li>
             <li><b className="text-slate-200">Classic</b> — reskin + retune the Towers climb, then ship it.</li>
@@ -72,7 +74,15 @@ export default function StudioPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <ModeCard
+          active={mode === 'slot'}
+          onClick={() => pick('slot')}
+          icon="gem"
+          title="Slot"
+          blurb="A cascading ore slot — pick the feel, the paytable is solved for you."
+          accent="#ffd25f"
+        />
         <ModeCard
           active={mode === 'world'}
           onClick={() => pick('world')}
@@ -107,7 +117,17 @@ export default function StudioPage() {
         />
       </div>
 
-      {mode === 'world' ? <WorldBuilder /> : mode === 'node' ? <NodeBuilder /> : mode === 'classic' ? <ClassicsBuilder /> : <SpriteEditor />}
+      {mode === 'slot' ? (
+        <SlotBuilder />
+      ) : mode === 'world' ? (
+        <WorldBuilder />
+      ) : mode === 'node' ? (
+        <NodeBuilder />
+      ) : mode === 'classic' ? (
+        <ClassicsBuilder />
+      ) : (
+        <SpriteEditor />
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { GameLayout } from '@/components/GameLayout';
 import { BetAmount } from '@/components/BetControls';
@@ -14,8 +14,8 @@ import { sfx } from '@/lib/sound';
 import { burstWin } from '@/lib/fx';
 import { MineSymbol, SYMBOL_COLORS } from './goldmine/MineSymbol';
 import {
-  COLS, ROWS, SCATTER, SYMBOLS, MIN_CLUSTER, SCATTERS_FOR_BONUS, MAX_WIN,
-  playRound, type Collapse, type RoundResult,
+  COLS, ROWS, SCATTER, SYMBOLS, MAX_WIN,
+  playRound, slotFromParams, type Collapse, type RoundResult, type SlotConfig,
 } from '@/lib/slots/goldmine';
 import type { GameConfig } from './types';
 
@@ -40,7 +40,10 @@ const BLAST_MS = 260;
  * rock in from above. That split is what lets the animation be as slow and
  * physical as it likes without ever being the thing that decides the money.
  */
-export function GoldmineGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, maxBet }: GameConfig) {
+export function GoldmineGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, maxBet }: GameConfig) {
+  // A creator-published slot carries its own tuned config; the Original uses the
+  // default. Malformed configs fall back rather than shipping a broken paytable.
+  const cfg = useMemo(() => slotFromParams(params), [params]);
   const { guard, reserveSeeds, settle } = usePlay(maxBet);
   const bumpUgc = useCasino((s) => s.bumpUgc);
   const recordBest = useCasino((s) => s.recordBest);
@@ -77,7 +80,7 @@ export function GoldmineGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, maxB
 
     const seeds = reserveSeeds();
     const stream = floatStream(seeds.serverSeed, seeds.clientSeed, seeds.nonce);
-    const round = playRound(() => stream.next());
+    const round = playRound(() => stream.next(), cfg);
 
     // Flatten every spin's collapses into one timeline the UI can walk.
     const flat: Frame[] = [];
@@ -124,7 +127,7 @@ export function GoldmineGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, maxB
         busyRef.current = false;
       });
       // Nothing paid, so show the opening grid the engine actually drew.
-      setGrid(dryGrid(seeds, bet));
+      setGrid(dryGrid(seeds, cfg));
       return;
     }
     after(420, () => step(0, flat, round));
@@ -307,7 +310,7 @@ export function GoldmineGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, maxB
             Dig ◎{bet}
           </BetButton>
 
-          <Paytable />
+          <Paytable cfg={cfg} />
         </div>
       }
     />
@@ -315,34 +318,34 @@ export function GoldmineGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, maxB
 }
 
 /** A losing spin still shows the grid the engine drew, rather than a blank seam. */
-function dryGrid(seeds: { serverSeed: string; clientSeed: string; nonce: number }, _bet: number): number[][] {
+function dryGrid(seeds: { serverSeed: string; clientSeed: string; nonce: number }, cfg: SlotConfig): number[][] {
   const stream = floatStream(seeds.serverSeed, seeds.clientSeed, seeds.nonce);
-  const total = SYMBOLS.reduce((s, d) => s + d.weight, 0);
+  const total = cfg.weights.reduce((a, b) => a + b, 0);
   const draw = () => {
     const u = stream.next() * total;
     let acc = 0;
-    for (const s of SYMBOLS) {
-      acc += s.weight;
-      if (u < acc) return s.id;
+    for (let i = 0; i < cfg.weights.length; i++) {
+      acc += cfg.weights[i];
+      if (u < acc) return i === cfg.weights.length - 1 ? SCATTER : i;
     }
     return 0;
   };
   return Array.from({ length: COLS }, () => Array.from({ length: ROWS }, draw));
 }
 
-function Paytable() {
+function Paytable({ cfg }: { cfg: SlotConfig }) {
   return (
     <div className="rounded-xl border border-white/[0.06] bg-void-900/40 p-3">
       <div className="flex items-center justify-between">
         <span className="label-eyebrow">Paytable</span>
-        <span className="text-[0.6rem] text-slate-600">{MIN_CLUSTER}+ anywhere</span>
+        <span className="text-[0.6rem] text-slate-600">{cfg.minCluster}+ anywhere</span>
       </div>
       <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5">
         {SYMBOLS.filter((s) => s.id !== SCATTER).slice().reverse().map((s) => (
           <div key={s.key} className="flex items-center gap-1.5">
             <MineSymbol sym={s.id} size={20} />
             <span className="font-mono text-[0.62rem] text-slate-400">
-              {s.pays[0]} / {s.pays[1]} / {s.pays[2]}
+              {(cfg.pays[s.id][0] * cfg.payScale).toFixed(1)} / {(cfg.pays[s.id][1] * cfg.payScale).toFixed(1)} / {(cfg.pays[s.id][2] * cfg.payScale).toFixed(1)}
             </span>
           </div>
         ))}
@@ -350,7 +353,7 @@ function Paytable() {
       <div className="mt-2.5 flex items-center gap-1.5 border-t border-white/[0.05] pt-2">
         <MineSymbol sym={SCATTER} size={20} />
         <span className="text-[0.62rem] text-slate-400">
-          {SCATTERS_FOR_BONUS}+ dynamite opens the Express run — the multiplier never resets
+          {cfg.scattersForBonus}+ dynamite opens the Express run — the multiplier never resets
         </span>
       </div>
     </div>
