@@ -303,8 +303,46 @@ export const seededUgc = (): UgcGame[] => [
     plays: 24012,
     rating: 4.9,
     tvl: 96,
-    maxWin: 50,
+    // Clearing all 22 safe tiles reaches the 1000x vault cap, so that — not a
+    // "typical" win — is what the bet cap has to be sized against.
+    maxWin: 1000,
     createdAt: Date.now() - 86400000 * 9,
+  },
+  // Two seeded 3D worlds — one per spatial mechanic — so the Worlds shelf and
+  // both genres are discoverable on a fresh install.
+  {
+    id: 'ugc-crystal-field',
+    name: 'Crystal Field',
+    template: 'board',
+    creator: 'Nova',
+    edge: 0.02,
+    params: { rows: 3, cols: 3, bombs: 4, skin: 'gems', fx: 'flip', environment: 'nebula', camera: 'orbit', logicScale: 1, mode: 'board' },
+    theme: { accent: 'cyan', icon: 'gem', tagline: 'Walk the field, bank the light', background: 'aurora', soundPack: 'crystal', winEffect: 'coins' },
+    volume: 41250,
+    players: 764,
+    plays: 11840,
+    rating: 4.7,
+    tvl: 74,
+    // A full clear pays 123.48x; maxWin must be the TRUE top so the
+    // bankroll-relative bet cap stays safe (maxBet = bankroll / RUIN_K / maxWin).
+    maxWin: 124,
+    createdAt: Date.now() - 86400000 * 5,
+  },
+  {
+    id: 'ugc-obsidian-spire',
+    name: 'Obsidian Spire',
+    template: 'board',
+    creator: 'Vertigo',
+    edge: 0.025,
+    params: { rows: 6, cols: 3, bombs: 1, skin: 'inferno', fx: 'shatter', environment: 'void', camera: 'cinematic', logicScale: 1, mode: 'ascent' },
+    theme: { accent: 'pink', icon: 'flame', tagline: 'Six floors. One way down.', background: 'aurora', soundPack: 'crystal', winEffect: 'coins' },
+    volume: 33780,
+    players: 612,
+    plays: 9260,
+    rating: 4.8,
+    tvl: 58,
+    maxWin: 11,
+    createdAt: Date.now() - 86400000 * 2,
   },
 ];
 

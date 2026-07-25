@@ -76,7 +76,7 @@ function UgcInner() {
           )}
         </div>
         <GameScreen
-          config={{ meta, edge: game.edge, gameId: game.id, gameName: game.name, params: game.params, maxBet: maxBetFor(game.tvl ?? 0, game.maxWin ?? 100) }}
+          config={{ meta, edge: game.edge, gameId: game.id, gameName: game.name, params: game.params, maxBet: maxBetFor(game.tvl ?? 0, game.maxWin ?? 100), maxWin: game.maxWin }}
         />
       </div>
       <div className="lg:sticky lg:top-24 lg:self-start">

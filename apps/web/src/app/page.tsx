@@ -6,6 +6,7 @@ import { GameCard } from '@/components/GameCard';
 import { Hero } from '@/components/Hero';
 import { LiveWinsTicker } from '@/components/LiveWinsTicker';
 import { UgcRow } from '@/components/UgcRow';
+import { WorldsRow } from '@/components/WorldsRow';
 import { SectionHead } from '@/components/SectionHead';
 import { Icon } from '@/components/Icon';
 
@@ -29,6 +30,7 @@ export default function LobbyPage() {
       </section>
 
       <UgcRow />
+      <WorldsRow />
 
       <section className="grid gap-3 sm:grid-cols-3">
         <Link href="/duel" className="glass glass-hover flex items-center gap-3 p-4">

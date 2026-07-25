@@ -10,15 +10,22 @@ import { ModeTabs } from './ModeTabs';
 import { usePlay } from '@/hooks/usePlay';
 import { useCasino } from '@/lib/store';
 import { playLimbo, clampEdge, DEFAULT_EDGE } from '@/lib/games';
+import { MAX_PAYOUT } from '@/lib/forge/board';
 import { fmtMult } from '@/lib/format';
 import type { GameConfig } from './types';
 
-export function LimboGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params }: GameConfig) {
-  const { guard, reserveSeeds, settle } = usePlay();
+export function LimboGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, maxBet, maxWin }: GameConfig) {
+  const { guard: rawGuard, reserveSeeds, settle } = usePlay();
   const bumpUgc = useCasino((s) => s.bumpUgc);
 
+  // The player picks their own multiplier here, so it must be capped: the
+  // bankroll-relative bet cap is sized against this ceiling, and the vault
+  // itself never pays beyond MAX_PAYOUT.
+  const targetCeiling = Math.max(1.01, Math.min(maxWin ?? MAX_PAYOUT, MAX_PAYOUT));
+  const clampTarget = (t: number) => Math.max(1.01, Math.min(t, targetCeiling));
+
   const [bet, setBet] = useState(0.1);
-  const [target, setTarget] = useState((params?.target as number) ?? 2);
+  const [target, setTarget] = useState(() => clampTarget((params?.target as number) ?? 2));
   const [result, setResult] = useState<number | null>(null);
   const [win, setWin] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
@@ -26,6 +33,7 @@ export function LimboGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params 
   const controls = useAnimationControls();
 
   const winChance = ((1 - clampEdge(edge)) / target) * 100;
+  const guard = (b: number) => (maxBet != null && b > maxBet ? { ok: false, reason: `Max bet ◎${maxBet} — this game's bankroll cap` } : rawGuard(b));
   const g = guard(bet);
 
   const playRound = (amount: number, quiet: boolean) => {
@@ -108,13 +116,13 @@ export function LimboGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params 
                 inputMode="decimal"
                 onChange={(e) => {
                   const n = parseFloat(e.target.value.replace(/[^0-9.]/g, ''));
-                  setTarget(Math.max(1.01, Number.isFinite(n) ? n : 1.01));
+                  setTarget(clampTarget(Number.isFinite(n) ? n : 1.01));
                 }}
               />
               <span className="font-mono text-slate-500">×</span>
             </div>
             <div className="mt-2 flex gap-1.5">
-              {[1.5, 2, 5, 10, 100].map((v) => (
+              {[1.5, 2, 5, 10, 100].filter((v) => v <= targetCeiling).map((v) => (
                 <button
                   key={v}
                   onClick={() => setTarget(v)}
@@ -124,6 +132,7 @@ export function LimboGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params 
                 </button>
               ))}
             </div>
+            <p className="mt-1.5 text-[0.62rem] text-slate-600">Max {fmtMult(targetCeiling)} — this game&apos;s payout ceiling.</p>
           </div>
 
           {mode === 'manual' ? (
