@@ -160,6 +160,7 @@ export function WorldBuilder() {
       ...shared,
       template: 'board',
       creator: publicKey ? shortAddr(publicKey.toBase58()) : 'anon',
+      creatorWallet: publicKey?.toBase58(),
       parentId: remixParent ?? undefined,
     });
     draft.clear();

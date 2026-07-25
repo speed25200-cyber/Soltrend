@@ -5,6 +5,7 @@ import { useCasino } from '@/lib/store';
 import { Icon } from '@/components/Icon';
 import { maxBetFor, stakerApr, RUIN_K, EDGE_SPLIT } from '@/lib/economics';
 import { fmtSol } from '@/lib/format';
+import { useOnchainVault } from '@/hooks/useOnchainVault';
 
 /**
  * "Stake behind a game" — the community bankroll UI. A game's house is funded by
@@ -22,6 +23,42 @@ export function GameStakePanel({ gameId }: { gameId: string }) {
 
   const [amt, setAmt] = useState(0.5);
   const [daily, setDaily] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [flash, setFlash] = useState('');
+
+  const chain = useOnchainVault();
+  // Real on-chain staking needs the program configured AND the game's creator
+  // wallet (it seeds the pool PDA). Otherwise we settle on the local ledger.
+  const onchain = chain.enabled && !!game?.creatorWallet && !!game?.specHash;
+
+  const run = async (kind: 'stake' | 'unstake') => {
+    if (!game) return;
+    if (!onchain) {
+      if (kind === 'stake') stakeBankroll(gameId, amt);
+      else unstakeBankroll(gameId, amt);
+      return;
+    }
+    setBusy(true);
+    setFlash('');
+    try {
+      const args = { gameCreatorWallet: game.creatorWallet!, specHash: game.specHash! };
+      if (kind === 'stake') {
+        const sig = await chain.stake({ ...args, amountSol: amt });
+        stakeBankroll(gameId, amt); // mirror locally so the UI reflects the new position
+        setFlash(`Staked on-chain · ${sig.slice(0, 8)}…`);
+      } else {
+        // Shares are pro-rata; unstake the share of the position this amount represents.
+        const shares = BigInt(Math.max(1, Math.round((amt / Math.max(myStake, amt)) * 1e9)));
+        const sig = await chain.unstake({ ...args, shares });
+        unstakeBankroll(gameId, amt);
+        setFlash(`Unstaked on-chain · ${sig.slice(0, 8)}…`);
+      }
+    } catch (e) {
+      setFlash(e instanceof Error ? e.message : 'Transaction failed');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   if (!game) return null;
   const tvl = game.tvl ?? 0;
@@ -66,9 +103,13 @@ export function GameStakePanel({ gameId }: { gameId: string }) {
         <input type="range" min={0.05} max={Math.max(1, Math.min(balance, myStake + balance))} step={0.05} value={amt} onChange={(e) => setAmt(parseFloat(e.target.value))} className="mt-2 w-full accent-neon-violet" />
         <div className="mt-1 text-center font-mono text-sm font-bold text-white">◎{fmtSol(amt, 2)}</div>
         <div className="mt-2 grid grid-cols-2 gap-2">
-          <button onClick={() => stakeBankroll(gameId, amt)} disabled={amt > balance} className="btn-primary !py-2 text-xs disabled:opacity-40">Stake</button>
-          <button onClick={() => unstakeBankroll(gameId, amt)} disabled={amt > myStake} className="btn-ghost !py-2 text-xs disabled:opacity-40">Unstake</button>
+          <button onClick={() => run('stake')} disabled={busy || (!onchain && amt > balance)} className="btn-primary !py-2 text-xs disabled:opacity-40">{busy ? 'Confirming…' : 'Stake'}</button>
+          <button onClick={() => run('unstake')} disabled={busy || amt > myStake} className="btn-ghost !py-2 text-xs disabled:opacity-40">Unstake</button>
         </div>
+        <p className="mt-1.5 text-center text-[0.58rem] text-slate-600">
+          {onchain ? 'Signed on-chain — your SOL sits in the game vault' : 'Demo ledger — connect on a configured network to stake real SOL'}
+        </p>
+        {flash && <p className="mt-1 break-all text-center text-[0.6rem] text-win">{flash}</p>}
       </div>
 
       {pendingYield > 0 && (

@@ -2,6 +2,7 @@
 
 import { PublicKey, SystemProgram, TransactionInstruction } from '@solana/web3.js';
 import { sha256Bytes } from '@/lib/sha256';
+import { configPda, creatorVaultPda, discriminator, programId as vaultProgramId, treasuryPda, u64le } from './program';
 
 /**
  * On-chain asset purchase — a hand-built `house_vault::buy_asset` instruction
@@ -11,24 +12,7 @@ import { sha256Bytes } from '@/lib/sha256';
  * vault. Unset → the app falls back to free installs, so the static demo still
  * works. Mirrors the graceful-degradation pattern used by the realtime hooks.
  */
-export const HOUSE_VAULT_PROGRAM = process.env.NEXT_PUBLIC_HOUSE_VAULT_PROGRAM || '';
-
-export const onchainEnabled = () => !!HOUSE_VAULT_PROGRAM;
-
-/** Anchor's instruction discriminator: sha256("global:<name>")[..8]. */
-function discriminator(name: string): Uint8Array {
-  return sha256Bytes(new TextEncoder().encode(`global:${name}`)).slice(0, 8);
-}
-
-const u64le = (n: bigint): Uint8Array => {
-  const b = new Uint8Array(8);
-  let v = n;
-  for (let i = 0; i < 8; i++) {
-    b[i] = Number(v & 0xffn);
-    v >>= 8n;
-  }
-  return b;
-};
+export { HOUSE_VAULT_PROGRAM, onchainEnabled } from './program';
 
 /**
  * Build the `buy_asset(asset_id: [u8;32], price: u64)` instruction. `assetId` is a
@@ -42,10 +26,10 @@ export function buyAssetInstruction(params: {
   assetId: Uint8Array; // 32 bytes
   priceLamports: bigint;
 }): TransactionInstruction {
-  const programId = new PublicKey(HOUSE_VAULT_PROGRAM);
-  const [config] = PublicKey.findProgramAddressSync([Buffer.from('config')], programId);
-  const [treasury] = PublicKey.findProgramAddressSync([Buffer.from('treasury')], programId);
-  const [creatorVault] = PublicKey.findProgramAddressSync([Buffer.from('creator'), params.seller.toBuffer()], programId);
+  const programId = vaultProgramId();
+  const config = configPda();
+  const treasury = treasuryPda();
+  const creatorVault = creatorVaultPda(params.seller);
 
   const assetId = params.assetId.length === 32 ? params.assetId : sha256Bytes(params.assetId); // normalise to 32 bytes
   const data = Buffer.concat([discriminator('buy_asset'), Buffer.from(assetId), Buffer.from(u64le(params.priceLamports))]);

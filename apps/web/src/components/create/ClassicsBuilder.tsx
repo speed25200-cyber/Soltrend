@@ -120,6 +120,7 @@ export function ClassicsBuilder() {
       ...shared,
       template: 'towers',
       creator: publicKey ? shortAddr(publicKey.toBase58()) : 'anon',
+      creatorWallet: publicKey?.toBase58(),
       parentId: remixParent ?? undefined,
     });
     draft.clear();

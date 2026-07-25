@@ -12,6 +12,7 @@ import { Collection } from '@/components/Collection';
 import { fmtSol, fmtMult, fmtCompact, shortAddr, timeAgo } from '@/lib/format';
 import { creatorEarnings } from '@/lib/store';
 import { vipFromWagered, levelFromXp } from '@/lib/progression';
+import { useOnchainVault } from '@/hooks/useOnchainVault';
 
 export default function ProfilePage() {
   const { connected, publicKey } = useWallet();
@@ -244,6 +245,8 @@ function CreatorDashboard() {
   const claimable = Math.max(0, Math.round((earnings - claimedRoyalties) * 10000) / 10000);
   const totalVolume = mine.reduce((s, g) => s + g.volume, 0);
   const [flash, setFlash] = useState('');
+  const [claiming, setClaiming] = useState(false);
+  const chain = useOnchainVault();
 
   return (
     <div className="glass p-6">
@@ -300,18 +303,33 @@ function CreatorDashboard() {
           <div className="mt-4 flex items-center gap-3">
             <button
               className="btn-primary flex-1"
-              disabled={claimable <= 0}
-              onClick={() => {
+              disabled={claimable <= 0 || claiming}
+              onClick={async () => {
+                if (chain.enabled) {
+                  setClaiming(true);
+                  try {
+                    const sig = await chain.claimRoyalties();
+                    claimRoyalties(); // mirror locally so the dashboard reflects the claim
+                    setFlash(`Claimed on-chain · ${sig.slice(0, 8)}…`);
+                  } catch (e) {
+                    setFlash(e instanceof Error ? e.message : 'Claim failed');
+                  } finally {
+                    setClaiming(false);
+                  }
+                  return;
+                }
                 const c = claimRoyalties();
                 if (c > 0) setFlash(`Claimed ◎${fmtSol(c, 3)} to balance`);
               }}
             >
-              {claimable > 0 ? `Claim ◎${fmtSol(claimable, 3)}` : 'Nothing to claim'}
+              {claiming ? 'Confirming…' : claimable > 0 ? `Claim ◎${fmtSol(claimable, 3)}` : 'Nothing to claim'}
             </button>
           </div>
-          {flash && <p className="mt-2 text-center text-xs text-win">{flash}</p>}
+          {flash && <p className="mt-2 break-all text-center text-xs text-win">{flash}</p>}
           <p className="mt-3 text-[0.68rem] leading-relaxed text-slate-600">
-            Claims require KYC on mainnet (enforced on-chain). This is a demo payout of accrued design royalties.
+            {chain.enabled
+              ? 'Claims are signed by your wallet and paid from your on-chain creator vault. Mainnet claims require KYC (enforced on-chain).'
+              : 'Claims require KYC on mainnet (enforced on-chain). This is a demo payout of accrued design royalties.'}
           </p>
         </>
       )}

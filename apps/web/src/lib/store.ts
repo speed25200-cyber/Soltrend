@@ -47,7 +47,10 @@ export interface UgcGame {
   id: string;
   name: string;
   template: Template;
+  /** Display handle (shortened address). */
   creator: string;
+  /** Full base58 wallet of the creator — seeds the on-chain game/pool PDAs. */
+  creatorWallet?: string;
   edge: number;
   params: Record<string, number | string>;
   theme: {
