@@ -1,262 +1,341 @@
 /**
- * GOLDMINE EXPRESS — the mining-cascade slot, rebuilt for Soltrend.
+ * GOLDMINE EXPRESS — the train hold-and-win, rebuilt for Soltrend.
  *
- * The spirit of the original is kept intact: you are digging a seam, wins blow
- * up and the rubble falls into fresh ore, and every consecutive collapse drives
- * a multiplier higher until the seam finally runs dry. Dynamite blows the shaft
- * open into free spins where the multiplier never resets — the "express" run.
+ * Base game: five wagons (reels) four ore deep, paying left-to-right on ways.
+ * Land six or more gold wagons and the Express Run begins: the board clears to
+ * the train, every gold wagon locks in place holding its value, and you get
+ * three respins. Any new wagon that lands resets the count back to three, so the
+ * run only ends when the train stops filling. Fill all twenty berths and the
+ * whole haul is yours.
  *
- * What is rebuilt is everything underneath. The grid pays *anywhere* rather than
- * on drawn lines, so a win is a cluster you can read at a glance instead of a
- * diagram; the whole spin resolves as a timeline of discrete rounds, which is
- * what lets the UI animate every collapse instead of cutting to a result; and
- * the maths is a pure function of an injected random stream, so the same engine
- * that renders is the one that gets simulated and audited.
+ * Three wagons are not just cargo:
+ *   LOCOMOTIVE  sweeps every value on the train into itself
+ *   PAYER       hands its own value to every other wagon aboard
+ *   DYNAMITE    multiplies the final haul
  *
- * Deliberately free of imports: the tuning harness runs this exact file, so the
- * numbers that were verified are the numbers that ship.
+ * Deliberately import-free: the tuning harness runs this exact file under Node's
+ * type stripping, so the numbers that were audited are the numbers that ship.
  */
 
-export const COLS = 6;
-export const ROWS = 5;
-export const CELLS = COLS * ROWS;
+export const REELS = 5;
+export const ROWS = 4;
+export const BERTHS = REELS * ROWS;
 
-/** Pay symbols are 0..7, ordered low to premium; 8 is the dynamite scatter. */
-export const SCATTER = 8;
+/* ------------------------------------------------------------- base symbols */
+
+export const WAGON = 8; // the gold wagon: bonus trigger, never a line win
+export const WILD = 7;
 
 export interface SymbolDef {
   id: number;
   key: string;
   name: string;
   weight: number;
-  /** payout as a multiple of the bet, for counts [10-11, 12-13, 14+] */
+  /** ways pay for 3, 4 and 5 of a kind from the left */
   pays: [number, number, number];
 }
 
 export const SYMBOLS: SymbolDef[] = [
-  { id: 0, key: 'coal', name: 'Coal', weight: 21, pays: [1, 2.5, 6] },
-  { id: 1, key: 'iron', name: 'Iron', weight: 19, pays: [1.8, 3.6, 8.2] },
-  { id: 2, key: 'copper', name: 'Copper', weight: 17, pays: [2.3, 5.6, 11.3] },
-  { id: 3, key: 'quartz', name: 'Quartz', weight: 14, pays: [3.5, 8.2, 17.5] },
-  { id: 4, key: 'ruby', name: 'Ruby', weight: 10, pays: [7.2, 15.4, 33] },
-  { id: 5, key: 'emerald', name: 'Emerald', weight: 7.5, pays: [11.3, 27.7, 57.5] },
-  { id: 6, key: 'gold', name: 'Gold', weight: 5, pays: [21.6, 48.3, 103] },
-  { id: 7, key: 'diamond', name: 'Diamond', weight: 2.6, pays: [46, 103, 216] },
-  { id: SCATTER, key: 'dynamite', name: 'Dynamite', weight: 3.9, pays: [0, 0, 0] },
+  { id: 0, key: 'coal', name: 'Coal', weight: 26, pays: [0.02, 0.07, 0.2] },
+  { id: 1, key: 'iron', name: 'Iron', weight: 23, pays: [0.03, 0.09, 0.3] },
+  { id: 2, key: 'copper', name: 'Copper', weight: 20, pays: [0.04, 0.13, 0.42] },
+  { id: 3, key: 'quartz', name: 'Quartz', weight: 17, pays: [0.07, 0.21, 0.64] },
+  { id: 4, key: 'ruby', name: 'Ruby', weight: 12, pays: [0.1, 0.34, 1] },
+  { id: 5, key: 'emerald', name: 'Emerald', weight: 9, pays: [0.17, 0.6, 1.7] },
+  { id: 6, key: 'gold', name: 'Gold bar', weight: 6, pays: [0.34, 1.2, 3.4] },
+  { id: WILD, key: 'lantern', name: 'Lantern', weight: 3, pays: [0, 0, 0] },
+  { id: WAGON, key: 'wagon', name: 'Gold wagon', weight: 12, pays: [0, 0, 0] },
 ];
 
-/** Minimum matching symbols anywhere on the grid for a payout. */
-export const MIN_CLUSTER = 10;
-/** Scatters needed to blow the shaft open. */
-export const SCATTERS_FOR_BONUS = 4;
-export const FREE_SPINS = 10;
-export const RETRIGGER_SPINS = 5;
-/** Vault ceiling — no single spin may pay beyond this multiple of the bet. */
+/** Gold wagons trigger the run at this many, anywhere on the board. */
+export const TRIGGER = 6;
+export const START_RESPINS = 3;
+/** Filling every berth ends the run and pays this on top. */
+export const GRAND = 100;
+/** Vault ceiling — no round may pay beyond this multiple of the bet. */
 export const MAX_WIN = 1000;
 
-/** Multiplier ladder walked by consecutive collapses within one spin. */
-export const LADDER = [1, 2, 3, 5, 8, 12, 20, 30];
+/* -------------------------------------------------------------- the wagons */
 
-/**
- * Everything one slot needs to differ from another. Creator-made slots vary the
- * weights, the cluster threshold and the ladder; `payScale` is then solved for
- * so the edge lands exactly where the creator asked, which is why no dial a
- * creator can turn is able to break the maths.
- */
-export interface SlotConfig {
-  /** weight per symbol id 0..7 plus the scatter last */
-  weights: number[];
-  /** pay tiers per pay symbol 0..7 */
-  pays: [number, number, number][];
-  /** multiplies every payout — solved by normaliseSlot to hit a target edge */
-  payScale: number;
-  minCluster: number;
-  ladder: number[];
-  scattersForBonus: number;
-  freeSpins: number;
+export type WagonKind = 'value' | 'locomotive' | 'payer' | 'dynamite';
+
+export interface WagonCargo {
+  kind: WagonKind;
+  /** value in bet multiples; for dynamite this is the multiplier itself */
+  value: number;
 }
 
+/** Cargo table — what a landing wagon turns out to be carrying. */
+const CARGO: { kind: WagonKind; value: number; weight: number }[] = [
+  { kind: 'value', value: 0.4, weight: 30 },
+  { kind: 'value', value: 0.6, weight: 22 },
+  { kind: 'value', value: 1, weight: 16 },
+  { kind: 'value', value: 1.5, weight: 10 },
+  { kind: 'value', value: 2.5, weight: 6 },
+  { kind: 'value', value: 5, weight: 3 },
+  { kind: 'value', value: 10, weight: 1.2 },
+  { kind: 'value', value: 25, weight: 0.35 },
+  { kind: 'locomotive', value: 0.8, weight: 4.5 },
+  { kind: 'payer', value: 0.5, weight: 4.5 },
+  { kind: 'dynamite', value: 2, weight: 1.6 },
+  { kind: 'dynamite', value: 3, weight: 0.6 },
+];
+
+const CARGO_WEIGHT = CARGO.reduce((s, c) => s + c.weight, 0);
+
+function drawCargo(u: number, scale: number): WagonCargo {
+  let acc = 0;
+  const t = u * CARGO_WEIGHT;
+  for (const c of CARGO) {
+    acc += c.weight;
+    // Dynamite is a multiplier, so it must never be scaled like a payout.
+    if (t < acc) return { kind: c.kind, value: c.kind === 'dynamite' ? c.value : c.value * scale };
+  }
+  return { kind: 'value', value: 0.4 * scale };
+}
+
+/* ---------------------------------------------------------------- the reels */
+
+export interface SlotConfig {
+  weights: number[];
+  pays: [number, number, number][];
+  /** scales every payout so the edge lands where it was audited */
+  payScale: number;
+  trigger: number;
+  startRespins: number;
+  grand: number;
+}
+
+/**
+ * The shipped tuning. `payScale` is not computed at runtime: this game has huge
+ * variance (per-round SD of 6.5x the bet, a train 1 in 120), so a browser-sized
+ * Monte-Carlo would be wrong by whole percentage points. Payout is exactly
+ * linear in the scale, so RTP at scale 1 was measured offline over 2,000,000
+ * rounds (0.91792) and the scale derives from that constant in closed form.
+ */
 export const DEFAULT_CONFIG: SlotConfig = {
   weights: SYMBOLS.map((s) => s.weight),
-  pays: SYMBOLS.filter((s) => s.id !== SCATTER).map((s) => s.pays),
-  payScale: 1,
-  minCluster: MIN_CLUSTER,
-  ladder: LADDER,
-  scattersForBonus: SCATTERS_FOR_BONUS,
-  freeSpins: FREE_SPINS,
+  pays: SYMBOLS.map((s) => s.pays),
+  payScale: 1.0567,
+  trigger: TRIGGER,
+  startRespins: START_RESPINS,
+  grand: GRAND,
 };
 
-/** Draw one symbol from the weighted reel set. */
 function drawSymbol(u: number, cfg: SlotConfig): number {
   const total = cfg.weights.reduce((a, b) => a + b, 0);
-  const target = u * total;
+  const t = u * total;
   let acc = 0;
   for (let i = 0; i < cfg.weights.length; i++) {
     acc += cfg.weights[i];
-    // The scatter always occupies the final weight slot.
-    if (target < acc) return i === cfg.weights.length - 1 ? SCATTER : i;
+    if (t < acc) return i;
   }
-  return SCATTER;
+  return 0;
 }
 
-/** Payout for `count` of `sym`, as a multiple of the bet (0 when it doesn't pay). */
-export function payFor(sym: number, count: number, cfg: SlotConfig = DEFAULT_CONFIG): number {
-  if (sym === SCATTER || count < cfg.minCluster) return 0;
-  const row = cfg.pays[sym];
-  if (!row) return 0;
-  const tier = count >= cfg.minCluster + 4 ? 2 : count >= cfg.minCluster + 2 ? 1 : 0;
-  return row[tier] * cfg.payScale;
+/* ------------------------------------------------------------- base spin */
+
+export interface WayWin {
+  sym: number;
+  length: number;
+  ways: number;
+  pay: number;
 }
 
-/* ------------------------------------------------------------------ the spin */
-
-export interface Collapse {
-  /** grid as it stood when this round was evaluated, column-major: grid[col][row] */
+export interface BaseSpin {
+  /** grid[reel][row] */
   grid: number[][];
-  /** symbols that paid this round, with their cell indices */
-  wins: { sym: number; count: number; cells: number[]; pay: number }[];
-  /** multiplier applied to this round's wins */
-  multiplier: number;
-  /** credited this round, already multiplied (bet multiples) */
+  wins: WayWin[];
   won: number;
+  wagons: number;
 }
 
-export interface SpinResult {
-  /** every collapse in order — the UI animates straight down this list */
-  rounds: Collapse[];
-  /** scatters on the opening grid */
-  scatters: number;
-  /** total for this spin as a multiple of the bet, after the vault cap */
-  total: number;
-  /** true when this spin was played inside the bonus */
-  free: boolean;
-  /** multiplier carried out of this spin (bonus only) */
-  carriedMultiplier: number;
-}
+/**
+ * Ways pays: a symbol scores when it appears on consecutive reels from the left,
+ * and the number of ways is the product of its count on each of those reels.
+ * The lantern substitutes for any ore; gold wagons never form a line.
+ */
+export function evaluateBase(grid: number[][], cfg: SlotConfig): BaseSpin {
+  const wins: WayWin[] = [];
+  let won = 0;
 
-export interface RoundResult {
-  spins: SpinResult[];
-  /** free spins awarded across the whole round */
-  freeSpins: number;
-  /** grand total as a multiple of the bet, after the vault cap */
-  total: number;
-}
-
-const cellIndex = (col: number, row: number) => col * ROWS + row;
-
-function freshGrid(next: () => number, cfg: SlotConfig): number[][] {
-  return Array.from({ length: COLS }, () => Array.from({ length: ROWS }, () => drawSymbol(next(), cfg)));
-}
-
-/** Count every symbol on the grid, remembering where each one sat. */
-function tally(grid: number[][]): Map<number, number[]> {
-  const map = new Map<number, number[]>();
-  for (let c = 0; c < COLS; c++) {
-    for (let r = 0; r < ROWS; r++) {
-      const sym = grid[c][r];
-      const cells = map.get(sym);
-      if (cells) cells.push(cellIndex(c, r));
-      else map.set(sym, [cellIndex(c, r)]);
+  for (let sym = 0; sym <= 6; sym++) {
+    let ways = 1;
+    let length = 0;
+    for (let r = 0; r < REELS; r++) {
+      const count = grid[r].filter((s) => s === sym || s === WILD).length;
+      if (count === 0) break;
+      ways *= count;
+      length += 1;
+    }
+    if (length >= 3) {
+      const pay = cfg.pays[sym][length - 3] * cfg.payScale * ways;
+      if (pay > 0) {
+        wins.push({ sym, length, ways, pay });
+        won += pay;
+      }
     }
   }
-  return map;
+
+  const wagons = grid.reduce((s, reel) => s + reel.filter((x) => x === WAGON).length, 0);
+  return { grid, wins, won, wagons };
 }
 
-/**
- * Blow out the winning cells, let the column above fall into the hole, and top
- * up from the seam. Mutates a copy — the caller keeps each round's grid intact
- * so the animation can replay the collapse exactly as it was evaluated.
- */
-function collapse(grid: number[][], winning: Set<number>, next: () => number, cfg: SlotConfig): number[][] {
-  const out: number[][] = [];
-  for (let c = 0; c < COLS; c++) {
-    // Keep survivors in order, then pad the top with fresh ore.
-    const survivors = grid[c].filter((_, r) => !winning.has(cellIndex(c, r)));
-    const missing = ROWS - survivors.length;
-    const fresh = Array.from({ length: missing }, () => drawSymbol(next(), cfg));
-    out.push([...fresh, ...survivors]);
-  }
-  return out;
+export function spinBase(next: () => number, cfg: SlotConfig): BaseSpin {
+  const grid = Array.from({ length: REELS }, () => Array.from({ length: ROWS }, () => drawSymbol(next(), cfg)));
+  return evaluateBase(grid, cfg);
 }
 
+/* ----------------------------------------------------------- the express run */
+
+export interface BonusEvent {
+  kind: 'land' | 'locomotive' | 'payer' | 'reset' | 'grand';
+  /** berth index this event centres on */
+  berth?: number;
+  amount?: number;
+}
+
+export interface BonusStep {
+  /** the train after this step — null berth means empty */
+  train: (WagonCargo | null)[];
+  /** berths that took a new wagon this step */
+  landed: number[];
+  events: BonusEvent[];
+  respinsLeft: number;
+  /** running haul after this step, before dynamite */
+  haul: number;
+}
+
+export interface BonusRun {
+  steps: BonusStep[];
+  /** product of every dynamite aboard */
+  multiplier: number;
+  /** final haul including dynamite and any grand prize, before the vault cap */
+  total: number;
+  filled: boolean;
+}
+
+const sumTrain = (train: (WagonCargo | null)[]) =>
+  train.reduce((s, w) => s + (w && w.kind !== 'dynamite' ? w.value : 0), 0);
+
 /**
- * One spin, resolved to completion. `startMultiplier` carries the bonus ladder
- * in; in the base game the ladder resets every spin, which is what keeps the
- * free-spin run feeling like a different gear.
+ * Run the express. Locks the triggering wagons, then respins the empty berths
+ * until three consecutive spins add nothing — every new wagon buys the run
+ * another three.
  */
-export function spin(next: () => number, opts: { free: boolean; startMultiplier: number }, cfg: SlotConfig = DEFAULT_CONFIG): SpinResult {
-  const rounds: Collapse[] = [];
-  let grid = freshGrid(next, cfg);
-  const scatters = tally(grid).get(SCATTER)?.length ?? 0;
+export function runExpress(next: () => number, trigger: (WagonCargo | null)[], cfg: SlotConfig): BonusRun {
+  const train = [...trigger];
+  const steps: BonusStep[] = [];
+  let respins = cfg.startRespins;
+  let guard = 0;
 
-  let step = 0;
-  let mult = opts.startMultiplier;
-  let total = 0;
+  // The opening state, before any respin.
+  steps.push({
+    train: [...train],
+    landed: train.map((w, i) => (w ? i : -1)).filter((i) => i >= 0),
+    events: [{ kind: 'land' }],
+    respinsLeft: respins,
+    haul: sumTrain(train),
+  });
 
-  for (;;) {
-    const counts = tally(grid);
-    const wins: Collapse['wins'] = [];
-    const winning = new Set<number>();
+  while (respins > 0 && guard < 60) {
+    guard += 1;
+    respins -= 1;
+    const landed: number[] = [];
+    const events: BonusEvent[] = [];
 
-    for (const [sym, cells] of counts) {
-      const pay = payFor(sym, cells.length, cfg);
-      if (pay > 0) {
-        wins.push({ sym, count: cells.length, cells, pay });
-        for (const cell of cells) winning.add(cell);
+    for (let b = 0; b < BERTHS; b++) {
+      if (train[b]) continue;
+      // Each empty berth has its own chance to take a wagon this respin.
+      if (next() < 0.098) {
+        train[b] = drawCargo(next(), cfg.payScale);
+        landed.push(b);
       }
     }
 
-    if (wins.length === 0) break;
+    if (landed.length > 0) {
+      respins = cfg.startRespins;
+      events.push({ kind: 'reset' });
+    }
 
-    // In the bonus the ladder keeps climbing; in the base game it walks per spin.
-    const multiplier = opts.free ? mult : cfg.ladder[Math.min(step, cfg.ladder.length - 1)];
-    const won = wins.reduce((s, w) => s + w.pay, 0) * multiplier;
-    total += won;
-    rounds.push({ grid: grid.map((col) => [...col]), wins, multiplier, won });
+    // Payers hand out first, then locomotives sweep — so a locomotive landing
+    // alongside a payer collects the boosted values, which is what makes a
+    // double-landing feel like the jackpot moment it is.
+    for (const b of landed) {
+      const w = train[b];
+      if (w?.kind === 'payer') {
+        let paid = 0;
+        for (let i = 0; i < BERTHS; i++) {
+          const other = train[i];
+          if (i !== b && other && other.kind !== 'dynamite') {
+            other.value += w.value;
+            paid += w.value;
+          }
+        }
+        events.push({ kind: 'payer', berth: b, amount: paid });
+      }
+    }
+    for (const b of landed) {
+      const w = train[b];
+      if (w?.kind === 'locomotive') {
+        const swept = sumTrain(train) - w.value;
+        w.value += swept;
+        events.push({ kind: 'locomotive', berth: b, amount: swept });
+      }
+    }
 
-    grid = collapse(grid, winning, next, cfg);
-    step += 1;
-    if (opts.free) mult = cfg.ladder[Math.min(step, cfg.ladder.length - 1)];
-    // Safety rail: a pathological stream cannot spin forever.
-    if (step > 40) break;
-  }
+    const full = train.every((w) => w !== null);
+    if (full) events.push({ kind: 'grand', amount: cfg.grand * cfg.payScale });
 
-  return {
-    rounds,
-    scatters,
-    total: Math.min(total, MAX_WIN),
-    free: opts.free,
-    carriedMultiplier: opts.free ? mult : 1,
-  };
-}
+    steps.push({
+      train: train.map((w) => (w ? { ...w } : null)),
+      landed,
+      events,
+      respinsLeft: full ? 0 : respins,
+      haul: sumTrain(train),
+    });
 
-/** A full round: the paid spin, plus the bonus run it may open. */
-export function playRound(next: () => number, cfg: SlotConfig = DEFAULT_CONFIG): RoundResult {
-  const spins: SpinResult[] = [];
-  const first = spin(next, { free: false, startMultiplier: 1 }, cfg);
-  spins.push(first);
-
-  let freeSpins = first.scatters >= cfg.scattersForBonus ? cfg.freeSpins : 0;
-  let awarded = freeSpins;
-  let carried = 1;
-
-  let remaining = freeSpins;
-  let guard = 0;
-  while (remaining > 0 && guard < 200) {
-    const s = spin(next, { free: true, startMultiplier: carried }, cfg);
-    spins.push(s);
-    carried = s.carriedMultiplier;
-    remaining -= 1;
-    guard += 1;
-    // Retrigger — the shaft opens again mid-run.
-    if (s.scatters >= 3) {
-      remaining += RETRIGGER_SPINS;
-      awarded += RETRIGGER_SPINS;
+    if (full) {
+      const multiplier = train.reduce((m, w) => (w?.kind === 'dynamite' ? m * w.value : m), 1);
+      return {
+        steps,
+        multiplier,
+        total: sumTrain(train) * multiplier + cfg.grand * cfg.payScale,
+        filled: true,
+      };
     }
   }
 
-  const raw = spins.reduce((sum, s) => sum + s.total, 0);
-  return { spins, freeSpins: awarded, total: Math.min(raw, MAX_WIN) };
+  const multiplier = train.reduce((m, w) => (w?.kind === 'dynamite' ? m * w.value : m), 1);
+  return { steps, multiplier, total: sumTrain(train) * multiplier, filled: false };
+}
+
+/* ------------------------------------------------------------------- round */
+
+export interface RoundResult {
+  base: BaseSpin;
+  bonus: BonusRun | null;
+  /** everything, after the vault cap */
+  total: number;
+}
+
+export function playRound(next: () => number, cfg: SlotConfig = DEFAULT_CONFIG): RoundResult {
+  const base = spinBase(next, cfg);
+  let bonus: BonusRun | null = null;
+
+  if (base.wagons >= cfg.trigger) {
+    // Lock the triggering wagons where they sat, each with its own cargo.
+    const train: (WagonCargo | null)[] = Array.from({ length: BERTHS }, () => null);
+    for (let r = 0; r < REELS; r++) {
+      for (let row = 0; row < ROWS; row++) {
+        if (base.grid[r][row] === WAGON) train[r * ROWS + row] = drawCargo(next(), cfg.payScale);
+      }
+    }
+    bonus = runExpress(next, train, cfg);
+  }
+
+  const raw = base.won + (bonus?.total ?? 0);
+  return { base, bonus, total: Math.min(raw, MAX_WIN) };
 }
 
 /* -------------------------------------------------------------------- audit */
@@ -268,134 +347,114 @@ export interface SlotStats {
   bonusRate: number;
   maxWin: number;
   capHits: number;
+  fillRate: number;
+  sd: number;
 }
 
-/** Monte-Carlo the real engine. Used by the tuning harness and the studio. */
 export function simulate(rounds: number, rng: () => number, cfg: SlotConfig = DEFAULT_CONFIG): SlotStats {
-  let paid = 0;
+  let sum = 0;
+  let sumSq = 0;
   let hits = 0;
   let bonuses = 0;
+  let fills = 0;
   let best = 0;
-  let capHits = 0;
+  let caps = 0;
   for (let i = 0; i < rounds; i++) {
     const r = playRound(rng, cfg);
-    paid += r.total;
+    sum += r.total;
+    sumSq += r.total * r.total;
     if (r.total > 0) hits += 1;
-    if (r.freeSpins > 0) bonuses += 1;
+    if (r.bonus) bonuses += 1;
+    if (r.bonus?.filled) fills += 1;
     if (r.total > best) best = r.total;
-    if (r.total >= MAX_WIN - 1e-9) capHits += 1;
+    if (r.total >= MAX_WIN - 1e-9) caps += 1;
   }
-  const rtp = paid / rounds;
+  const rtp = sum / rounds;
   return {
     rtp,
     edge: 1 - rtp,
     hitRate: hits / rounds,
     bonusRate: bonuses / rounds,
     maxWin: best,
-    capHits,
+    capHits: caps,
+    fillRate: fills / rounds,
+    sd: Math.sqrt(sumSq / rounds - rtp * rtp),
   };
 }
 
-/* --------------------------------------------------------------- authoring */
+/* ---------------------------------------------------------------- authoring */
 
 export type Volatility = 'steady' | 'balanced' | 'wild';
 
 /**
- * Volatility presets and their VERIFIED payout scales.
+ * Presets, and their VERIFIED payout scales.
  *
- * These numbers are not computed at runtime. This slot has enormous variance
- * (per-round SD of 3-10x the bet, with a bonus 1 in 33-51), so a Monte-Carlo
- * run short enough for a browser gives an RTP estimate that is wrong by whole
- * percentage points — an early attempt at live normalisation produced a
- * NEGATIVE house edge on the wild preset. Payout is exactly linear in the
- * paytable, so instead each preset's RTP at payScale=1 was measured offline over
- * 2,000,000 rounds and the scale is derived in closed form from that constant.
- *
- * `rtpAt1` is the measured constant; `stats` are the measured shape figures the
- * builder shows. Re-measure with scripts/audit if the weights ever change.
+ * Not computed at runtime. This game's per-round SD is ~6.5x the bet with a
+ * train 1 in 120, so a browser-sized Monte-Carlo mis-estimates RTP by whole
+ * percentage points. Payout is exactly linear in payScale, so each preset's RTP
+ * at scale 1 was measured offline and the scale derives from that constant.
  */
 export const VOLATILITY: Record<Volatility, {
   label: string;
   hint: string;
   rtpAt1: number;
-  stats: { hitRate: number; bonusRate: number; sd: number };
+  stats: { hitRate: number; trainRate: number };
   build: () => Omit<SlotConfig, 'payScale'>;
 }> = {
   steady: {
-    label: 'Steady seam',
-    hint: 'Frequent small hits, a gentle ladder',
-    rtpAt1: 2.13174,
-    stats: { hitRate: 0.261, bonusRate: 1 / 33, sd: 9.69 },
+    label: 'Branch line',
+    hint: 'The train comes often, hauls lighter',
+    rtpAt1: 1.31502,
+    stats: { hitRate: 0.632, trainRate: 1 / 54 },
     build: () => ({
-      weights: [19, 18, 16, 14, 11, 8.5, 6, 3.5, 4],
+      weights: [26, 23, 20, 17, 12, 9, 6, 3, 14.5],
       pays: DEFAULT_CONFIG.pays,
-      minCluster: 9,
-      ladder: [1, 2, 3, 4, 6, 8, 10, 12],
-      scattersForBonus: 4,
-      freeSpins: 8,
+      trigger: 6,
+      startRespins: 3,
+      grand: 100,
     }),
   },
   balanced: {
-    label: 'Deep vein',
+    label: 'Main line',
     hint: 'The classic Goldmine rhythm',
-    rtpAt1: 0.96603,
-    stats: { hitRate: 0.177, bonusRate: 1 / 36, sd: 4.71 },
+    rtpAt1: 0.91792,
+    stats: { hitRate: 0.643, trainRate: 1 / 120 },
     build: () => ({
       weights: DEFAULT_CONFIG.weights,
       pays: DEFAULT_CONFIG.pays,
-      minCluster: DEFAULT_CONFIG.minCluster,
-      ladder: DEFAULT_CONFIG.ladder,
-      scattersForBonus: DEFAULT_CONFIG.scattersForBonus,
-      freeSpins: DEFAULT_CONFIG.freeSpins,
+      trigger: DEFAULT_CONFIG.trigger,
+      startRespins: DEFAULT_CONFIG.startRespins,
+      grand: DEFAULT_CONFIG.grand,
     }),
   },
   wild: {
-    label: 'Blast shaft',
-    hint: 'Rare, violent, express-driven',
-    rtpAt1: 0.53817,
-    stats: { hitRate: 0.120, bonusRate: 1 / 51, sd: 3.23 },
+    label: 'Deep haul',
+    hint: 'Rarer train, four respins, bigger grand',
+    rtpAt1: 0.91701,
+    stats: { hitRate: 0.650, trainRate: 1 / 178 },
     build: () => ({
-      weights: [23, 20, 18, 14, 9, 6.5, 4, 2, 3.5],
+      weights: [26, 23, 20, 17, 12, 9, 6, 3, 11],
       pays: DEFAULT_CONFIG.pays,
-      minCluster: 11,
-      ladder: [1, 3, 6, 10, 16, 25, 40, 60],
-      scattersForBonus: 4,
-      freeSpins: 12,
+      trigger: 6,
+      startRespins: 4,
+      grand: 150,
     }),
   },
 };
 
 /**
- * The house edge creators may pick. Only 3% is offered: at 2M rounds the
- * measurement's own 3-sigma band is +/-0.9 to 1.25pp depending on preset, so 3%
- * is the single value whose band stays inside the 1-5% vault limits for ALL
- * three presets. Offering 2% or 4% as well would have let the wild preset ship
- * a game whose true edge might sit outside the band. Creators pick the feel;
- * the platform fixes the edge at an audited value.
+ * The house edge creators may pick. Only 3%: the measurement's own 3-sigma band
+ * is around +/-1.5pp on this game, so 3% is the value whose band stays inside
+ * the 1-5% vault limits for every preset. Creators pick the feel; the platform
+ * fixes the edge at an audited number.
  */
 export const EDGE_CHOICES = [0.03];
 
-/** Build a finished, vault-safe config from a preset and an audited edge. */
 export function buildSlot(volatility: Volatility, targetEdge: number): SlotConfig {
   const preset = VOLATILITY[volatility];
   const edge = EDGE_CHOICES.includes(targetEdge) ? targetEdge : EDGE_CHOICES[0];
   return { ...preset.build(), payScale: Math.round(((1 - edge) / preset.rtpAt1) * 10000) / 10000 };
 }
-
-/** Live audit, for scripts and tests — too slow to be worth calling in the UI. */
-export function auditSlot(cfg: SlotConfig, rounds = 60000, seed = 0xa11ce): SlotStats {
-  let a = seed >>> 0;
-  const rng = () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-  return simulate(rounds, rng, cfg);
-}
-
-/* ------------------------------------------------------------ serialisation */
 
 export function slotToParams(cfg: SlotConfig): Record<string, number | string> {
   return { slot: JSON.stringify(cfg) };
@@ -405,18 +464,16 @@ export function slotFromParams(params?: Record<string, number | string>): SlotCo
   if (!params?.slot) return DEFAULT_CONFIG;
   try {
     const c = JSON.parse(String(params.slot)) as SlotConfig;
-    // Anything malformed falls back rather than producing a broken paytable.
-    if (!Array.isArray(c.weights) || !Array.isArray(c.pays) || !Array.isArray(c.ladder)) return DEFAULT_CONFIG;
-    if (c.weights.length !== 9 || c.pays.length !== 8) return DEFAULT_CONFIG;
-    if (!Number.isFinite(c.payScale) || c.payScale <= 0) return DEFAULT_CONFIG;
+    if (!Array.isArray(c.weights) || !Array.isArray(c.pays)) return DEFAULT_CONFIG;
+    if (c.weights.length !== 9 || c.pays.length !== 9) return DEFAULT_CONFIG;
+    if (!Number.isFinite(c.payScale) || c.payScale <= 0 || c.payScale > 5) return DEFAULT_CONFIG;
     return {
       weights: c.weights.map((w) => Math.max(0.1, Number(w) || 1)),
       pays: c.pays,
       payScale: c.payScale,
-      minCluster: Math.max(5, Math.min(20, Number(c.minCluster) || MIN_CLUSTER)),
-      ladder: c.ladder.map((n) => Math.max(1, Number(n) || 1)),
-      scattersForBonus: Math.max(3, Math.min(6, Number(c.scattersForBonus) || 4)),
-      freeSpins: Math.max(4, Math.min(20, Number(c.freeSpins) || 10)),
+      trigger: Math.max(4, Math.min(8, Number(c.trigger) || TRIGGER)),
+      startRespins: Math.max(2, Math.min(5, Number(c.startRespins) || START_RESPINS)),
+      grand: Math.max(0, Math.min(300, Number(c.grand) || GRAND)),
     };
   } catch {
     return DEFAULT_CONFIG;

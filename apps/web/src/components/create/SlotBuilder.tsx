@@ -15,7 +15,7 @@ import { burstWin } from '@/lib/fx';
 import { useDraft } from '@/hooks/useDraft';
 import { draftAge } from '@/lib/drafts';
 import {
-  SYMBOLS, SCATTER, MAX_WIN, VOLATILITY, EDGE_CHOICES, buildSlot, slotToParams, slotFromParams,
+  SYMBOLS, MAX_WIN, VOLATILITY, EDGE_CHOICES, buildSlot, slotToParams,
   type Volatility,
 } from '@/lib/slots/goldmine';
 
@@ -141,7 +141,7 @@ export function SlotBuilder() {
       )}
 
       <p className="text-sm text-slate-400">
-        Pick how the seam behaves and how it looks — the paytable is solved for you from audited numbers,
+        Pick how the line runs and how it looks — the paytable is solved for you from audited numbers,
         so your slot is vault-safe whatever you choose. Play-test it live below.
       </p>
 
@@ -153,7 +153,7 @@ export function SlotBuilder() {
         <div className="space-y-4">
           <div className="glass space-y-3 p-4">
             <div>
-              <span className="label-eyebrow">How the seam behaves</span>
+              <span className="label-eyebrow">How the line runs</span>
               <div className="mt-1.5 space-y-1.5">
                 {(Object.keys(VOLATILITY) as Volatility[]).map((v) => {
                   const preset = VOLATILITY[v];
@@ -170,7 +170,7 @@ export function SlotBuilder() {
                         <span className="block text-[0.62rem] text-slate-500">{preset.hint}</span>
                       </span>
                       <span className="shrink-0 text-right font-mono text-[0.6rem] text-slate-500">
-                        {(preset.stats.hitRate * 100).toFixed(0)}% hit<br />1/{Math.round(1 / preset.stats.bonusRate)} bonus
+                        {(preset.stats.hitRate * 100).toFixed(0)}% hit<br />1/{Math.round(1 / preset.stats.trainRate)} train
                       </span>
                     </button>
                   );
@@ -184,7 +184,7 @@ export function SlotBuilder() {
                 <span className="font-mono text-sm font-bold text-white">{edgePct}%</span>
               </div>
               <div className="mt-1.5 flex gap-1.5">
-                {EDGE_CHOICES.map((e) => (
+                {EDGE_CHOICES.map((e: number) => (
                   <button
                     key={e}
                     onClick={() => { setEdgePct(Math.round(e * 100)); sfx.click(); }}
@@ -203,7 +203,7 @@ export function SlotBuilder() {
 
             <div className="grid grid-cols-3 gap-2">
               <Readout label="RTP" value={`${((1 - edgePct / 100) * 100).toFixed(0)}%`} />
-              <Readout label="Hit rate" value={`${(stats.hitRate * 100).toFixed(0)}%`} />
+              <Readout label="Train" value={`1/${Math.round(1 / stats.trainRate)}`} />
               <Readout label="Top win" value={`${MAX_WIN}x`} />
             </div>
           </div>
@@ -234,11 +234,11 @@ export function SlotBuilder() {
           <div className="glass p-4">
             <span className="label-eyebrow">Your paytable</span>
             <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5">
-              {SYMBOLS.filter((s) => s.id !== SCATTER).slice().reverse().map((s) => (
+              {SYMBOLS.filter((s) => s.id <= 6).slice().reverse().map((s) => (
                 <div key={s.key} className="flex items-center gap-1.5">
                   <MineSymbol sym={s.id} size={20} />
                   <span className="font-mono text-[0.6rem] text-slate-400">
-                    {(cfg.pays[s.id][0] * cfg.payScale).toFixed(1)} / {(cfg.pays[s.id][2] * cfg.payScale).toFixed(1)}
+                    {(cfg.pays[s.id][0] * cfg.payScale).toFixed(2)} / {(cfg.pays[s.id][2] * cfg.payScale).toFixed(2)}
                   </span>
                 </div>
               ))}

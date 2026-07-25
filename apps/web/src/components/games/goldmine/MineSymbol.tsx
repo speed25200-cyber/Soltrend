@@ -1,7 +1,7 @@
 'use client';
 
 import { useId } from 'react';
-import { SCATTER } from '@/lib/slots/goldmine';
+import { WAGON, WILD } from '@/lib/slots/goldmine';
 
 /**
  * The ore set, drawn as faceted vector minerals rather than illustrations: each
@@ -18,8 +18,8 @@ export const SYMBOL_COLORS: Record<number, { a: string; b: string; glow: string 
   4: { a: '#fb7185', b: '#9f1239', glow: '#fda4af' }, // ruby
   5: { a: '#34d399', b: '#065f46', glow: '#6ee7b7' }, // emerald
   6: { a: '#fcd34d', b: '#b45309', glow: '#fde68a' }, // gold
-  7: { a: '#67e8f9', b: '#0e7490', glow: '#a5f3fc' }, // diamond
-  [SCATTER]: { a: '#ff5a3c', b: '#7f1d1d', glow: '#ff8a5c' }, // dynamite
+  [WILD]: { a: '#fde68a', b: '#b45309', glow: '#fef3c7' }, // lantern (wild)
+  [WAGON]: { a: '#fcd34d', b: '#78350f', glow: '#fde68a' }, // gold wagon
 };
 
 /** Facets in a 0..100 box. `face` is the lit gradient, `side` the shaded one. */
@@ -86,23 +86,29 @@ function facets(sym: number, face: string, side: string) {
           <path d="M30 34 L86 34 L78 41 L26 41 Z" fill="#fff" opacity="0.35" />
         </>
       );
-    case 7: // diamond — brilliant
+    case WILD: // miner's lantern — substitutes for any ore
       return (
         <>
-          <path d="M50 8 L88 38 L50 92 L12 38 Z" fill={face} />
-          <path d="M50 8 L88 38 L50 38 Z" fill="#fff" opacity="0.4" />
-          <path d="M50 8 L12 38 L50 38 Z" fill="#fff" opacity="0.22" />
-          <path d="M50 38 L88 38 L50 92 Z" fill="#000" opacity="0.16" />
+          <path d="M38 30 L62 30 L66 74 L34 74 Z" fill={face} />
+          <ellipse cx="50" cy="52" rx="12" ry="16" fill="#fffbeb" opacity="0.9" />
+          <rect x="34" y="24" width="32" height="8" rx="3" fill={side} />
+          <path d="M44 18 C44 10 56 10 56 18" stroke="#fbbf24" strokeWidth="4" fill="none" strokeLinecap="round" />
+          <rect x="32" y="72" width="36" height="8" rx="3" fill={side} />
         </>
       );
-    default: // dynamite — the scatter
+    default: // the gold wagon — a loaded minecart
       return (
         <>
-          <rect x="30" y="34" width="16" height="46" rx="4" fill={face} />
-          <rect x="52" y="34" width="16" height="46" rx="4" fill={face} />
-          <rect x="26" y="46" width="46" height="9" rx="2" fill="#000" opacity="0.35" />
-          <path d="M50 34 C50 22 62 22 60 12" stroke="#fbbf24" strokeWidth="4" fill="none" strokeLinecap="round" />
-          <circle cx="60" cy="10" r="5" fill="#fde68a" />
+          <path d="M18 40 L82 40 L74 70 L26 70 Z" fill={face} />
+          <path d="M18 40 L82 40 L78 47 L22 47 Z" fill="#fff" opacity="0.3" />
+          <circle cx="26" cy="46" r="5" fill="#fde68a" />
+          <circle cx="40" cy="42" r="6" fill="#fef3c7" />
+          <circle cx="56" cy="43" r="5" fill="#fde68a" />
+          <circle cx="70" cy="46" r="4" fill="#fef3c7" />
+          <circle cx="36" cy="78" r="8" fill="#1f2937" />
+          <circle cx="64" cy="78" r="8" fill="#1f2937" />
+          <circle cx="36" cy="78" r="3" fill="#6b7280" />
+          <circle cx="64" cy="78" r="3" fill="#6b7280" />
         </>
       );
   }
