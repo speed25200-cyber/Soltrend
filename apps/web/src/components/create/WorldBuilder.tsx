@@ -13,6 +13,7 @@ import {
 } from '@/lib/forge/board';
 import {
   defaultWorld, worldStats, worldToParams, worldFromParams, normaliseLogic, newProp,
+  ascentLanes, ascentFloors, WORLD_MODES,
   ENVIRONMENTS, CAMERAS, PROP_TYPES, type WorldSpec, type EnvironmentId, type CameraId, type PropType, type WorldProp,
 } from '@/lib/forge/world';
 import { starterGraph, simulateGraph } from '@/lib/forge/model';
@@ -27,6 +28,11 @@ import { draftAge } from '@/lib/drafts';
 const World3D = dynamic(() => import('@/components/worlds/World3D'), {
   ssr: false,
   loading: () => <div className="grid h-[340px] place-items-center text-sm text-slate-500">Loading 3D world…</div>,
+});
+
+const Ascent3D = dynamic(() => import('@/components/worlds/Ascent3D'), {
+  ssr: false,
+  loading: () => <div className="grid h-[340px] place-items-center text-sm text-slate-500">Loading the tower…</div>,
 });
 
 const ACCENTS: GameMeta['accent'][] = ['violet', 'cyan', 'gold', 'pink', 'win'];
@@ -139,6 +145,12 @@ export function WorldBuilder() {
     const n = cellCount(spec.board);
     return new Set([1, Math.floor(n / 2), n - 2].filter((i) => i >= 0 && i < n));
   }, [spec.board]);
+  // Ascent preview: show a partial climb so the tower reads as a journey.
+  const demoLevel = Math.min(2, ascentFloors(spec));
+  const demoPicks = useMemo(
+    () => Array.from({ length: demoLevel }, (_, i) => i % ascentLanes(spec)),
+    [demoLevel, spec],
+  );
 
   const canPublish = stats.ok && connected && name.trim().length >= 3;
   const publish = () => {
@@ -194,8 +206,14 @@ export function WorldBuilder() {
               <WorldGame meta={meta} edge={stats.edge} params={worldToParams(spec)} gameName={name || 'Preview'} />
             ) : (
               <div className="relative h-[340px] overflow-hidden rounded-2xl sm:h-[400px]">
-                <World3D spec={{ ...spec, camera: 'cinematic' }} revealed={demoRevealed} bombSet={new Set()} showBombs={false} playing={false} hitIndex={null} onReveal={() => {}} heat={0.4} />
-                <div className="pointer-events-none absolute bottom-3 left-3 rounded-lg border border-white/10 bg-void-950/70 px-2.5 py-1 text-[0.62rem] uppercase tracking-[0.2em] text-slate-400 backdrop-blur">Live 3D preview · drag to orbit</div>
+                {spec.mode === 'ascent' ? (
+                  <Ascent3D spec={spec} level={demoLevel} traps={[]} picks={demoPicks} reveal={false} playing={false} hitLane={null} onPick={() => {}} heat={0.4} />
+                ) : (
+                  <World3D spec={{ ...spec, camera: 'cinematic' }} revealed={demoRevealed} bombSet={new Set()} showBombs={false} playing={false} hitIndex={null} onReveal={() => {}} heat={0.4} />
+                )}
+                <div className="pointer-events-none absolute bottom-3 left-3 rounded-lg border border-white/10 bg-void-950/70 px-2.5 py-1 text-[0.62rem] uppercase tracking-[0.2em] text-slate-400 backdrop-blur">
+                  Live 3D preview · {spec.mode === 'ascent' ? 'the camera rises as you climb' : 'drag to orbit'}
+                </div>
               </div>
             )}
           </div>
@@ -217,9 +235,35 @@ export function WorldBuilder() {
 
           {tab === 'world' ? (
             <div className="glass space-y-4 p-4">
-              <Slider label="Rows" value={spec.board.rows} min={3} max={6} onChange={(v) => setBoard({ rows: v })} />
-              <Slider label="Columns" value={spec.board.cols} min={3} max={6} onChange={(v) => setBoard({ cols: v })} />
-              <Slider label="Hazards" value={spec.board.bombs} min={1} max={cellCount(spec.board) - 1} onChange={(v) => setBoard({ bombs: v })} accent={skin.bomb} />
+              <div>
+                <span className="label-eyebrow">Mechanic</span>
+                <div className="mt-1.5 grid grid-cols-2 gap-2">
+                  {WORLD_MODES.map((m) => (
+                    <button
+                      key={m.id}
+                      onClick={() => { setWorld({ mode: m.id }); sfx.click(); }}
+                      className={`rounded-xl px-3 py-2 text-left transition ${spec.mode === m.id ? 'bg-neon-cyan/15 text-white ring-1 ring-neon-cyan/50' : 'bg-void-900/60 text-slate-400 hover:text-white'}`}
+                    >
+                      <div className="text-sm font-semibold">{m.label}</div>
+                      <div className="text-[0.62rem] leading-tight text-slate-500">{m.hint}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {spec.mode === 'ascent' ? (
+                <>
+                  <Slider label="Floors" value={spec.board.rows} min={3} max={6} onChange={(v) => setBoard({ rows: v })} />
+                  <Slider label="Lanes per floor" value={spec.board.cols} min={3} max={5} onChange={(v) => setBoard({ cols: v })} />
+                  <p className="text-[0.62rem] text-slate-500">One trap hides on every floor — fewer lanes means a steeper, tenser climb.</p>
+                </>
+              ) : (
+                <>
+                  <Slider label="Rows" value={spec.board.rows} min={3} max={6} onChange={(v) => setBoard({ rows: v })} />
+                  <Slider label="Columns" value={spec.board.cols} min={3} max={6} onChange={(v) => setBoard({ cols: v })} />
+                  <Slider label="Hazards" value={spec.board.bombs} min={1} max={cellCount(spec.board) - 1} onChange={(v) => setBoard({ bombs: v })} accent={skin.bomb} />
+                </>
+              )}
 
               <PickGrid label="Skin" items={Object.values(BOARD_SKINS).map((s) => ({ id: s.id, label: s.label, color: s.gem }))} value={spec.board.skin} onPick={(v) => { setBoard({ skin: v as BoardSkin }); setIcon(BOARD_SKINS[v as BoardSkin].icon); sfx.click(); }} />
               <PickRow label="Reveal effect" items={BOARD_FX} value={spec.board.fx} onPick={(v) => { setBoard({ fx: v as BoardFx }); sfx.click(); }} />
