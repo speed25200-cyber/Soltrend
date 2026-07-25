@@ -39,6 +39,7 @@ export function WorldGame(config: GameConfig) {
 function BoardWorldGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, maxBet }: GameConfig) {
   const { guard, reserveSeeds, settle } = usePlay();
   const bumpUgc = useCasino((s) => s.bumpUgc);
+  const recordBest = useCasino((s) => s.recordBest);
 
   const spec = useMemo(() => worldFromParams(params), [params]);
   const board = spec.board;
@@ -113,6 +114,7 @@ function BoardWorldGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, m
       setBonus(null);
     }
     setPhase('cashed');
+    recordBest(gameId ?? meta.slug, m);
     settle({ game: gameName ?? meta.name, template: 'board', bet, multiplier: m, payout: round2(bet * m), win: true, meta: { picks: p, bonus }, seeds }, { quiet: true });
     sfx.packWin(soundPack, m);
     burstWin(m, { style: winEffect, colors: [skin.gem, skin.gemGlow, '#ffffff'] });
@@ -223,7 +225,13 @@ function AscentGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, maxBe
   const [hitLane, setHitLane] = useState<number | null>(null);
   const [bonus, setBonus] = useState<number | null>(null);
   const [seeds, setSeeds] = useState<ReturnType<typeof reserveSeeds> | null>(null);
+  const [newBest, setNewBest] = useState(false);
   const settledRef = useRef(false);
+
+  // Visible personal best — a concrete target to beat on the next run.
+  const bestKey = gameId ?? meta.slug;
+  const best = useCasino((s) => s.bests[bestKey] ?? 0);
+  const recordBest = useCasino((s) => s.recordBest);
 
   const curMult = level > 0 ? ascentMultiplier(spec, level, edge) : 1;
   const nextMult = ascentMultiplier(spec, Math.min(level + 1, floors), edge);
@@ -240,6 +248,7 @@ function AscentGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, maxBe
     setPicks([]);
     setHitLane(null);
     setBonus(null);
+    setNewBest(false);
     settledRef.current = false;
     setPhase('playing');
   };
@@ -255,6 +264,7 @@ function AscentGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, maxBe
       m = round2(m * b);
     }
     setPhase('cashed');
+    setNewBest(recordBest(bestKey, m));
     settle({ game: gameName ?? meta.name, template: 'board', bet, multiplier: m, payout: round2(bet * m), win: true, meta: { level: clearedLevel, mode: 'ascent' }, seeds: activeSeeds }, { quiet: true });
     sfx.packWin(soundPack, m);
     burstWin(m, { style: winEffect, colors: [skin.gem, skin.gemGlow, '#ffffff'] });
@@ -312,6 +322,11 @@ function AscentGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, maxBe
             <div className="rounded-xl border border-white/10 bg-void-950/70 px-3 py-2 text-right backdrop-blur">
               <div className="font-mono text-lg font-bold text-white">{level}/{floors}</div>
               <div className="text-[0.62rem] uppercase tracking-[0.2em] text-slate-400">floor</div>
+              {best > 0 && (
+                <div className={`mt-1 font-mono text-[0.62rem] ${newBest && phase === 'cashed' ? 'text-gold' : 'text-slate-500'}`}>
+                  {newBest && phase === 'cashed' ? 'NEW BEST' : `best ${best.toFixed(2)}×`}
+                </div>
+              )}
             </div>
           </div>
         </div>

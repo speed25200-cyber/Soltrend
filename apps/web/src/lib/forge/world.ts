@@ -110,6 +110,13 @@ export function ascentLayout(spec: WorldSpec, seeds: { serverSeed: string; clien
   return Array.from({ length: ascentFloors(spec) }, () => Math.floor(stream.next() * lanes));
 }
 
+/** Starter towers — tuned so each has a distinct risk feel and a legal top payout. */
+export const ASCENT_TEMPLATES: { id: string; label: string; hint: string; spec: BoardSpec; edge: number }[] = [
+  { id: 'spire', label: 'Spire', hint: '5 floors, 4 lanes — a steady climb', spec: { rows: 5, cols: 4, bombs: 1, skin: 'gems', fx: 'flip' }, edge: 0.02 },
+  { id: 'gauntlet', label: 'Gauntlet', hint: '6 floors, 3 lanes — steep and tense', spec: { rows: 6, cols: 3, bombs: 1, skin: 'inferno', fx: 'shatter' }, edge: 0.03 },
+  { id: 'skyvault', label: 'Sky Vault', hint: '4 floors, 5 lanes — forgiving', spec: { rows: 4, cols: 5, bombs: 1, skin: 'vault', fx: 'bloom' }, edge: 0.02 },
+];
+
 function ascentStats(spec: WorldSpec, edge: number): BoardStats {
   const lanes = ascentLanes(spec);
   const floors = ascentFloors(spec);

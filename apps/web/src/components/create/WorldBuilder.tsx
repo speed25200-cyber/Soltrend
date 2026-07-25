@@ -13,7 +13,7 @@ import {
 } from '@/lib/forge/board';
 import {
   defaultWorld, worldStats, worldToParams, worldFromParams, normaliseLogic, newProp,
-  ascentLanes, ascentFloors, WORLD_MODES,
+  ascentLanes, ascentFloors, WORLD_MODES, ASCENT_TEMPLATES,
   ENVIRONMENTS, CAMERAS, PROP_TYPES, type WorldSpec, type EnvironmentId, type CameraId, type PropType, type WorldProp,
 } from '@/lib/forge/world';
 import { starterGraph, simulateGraph } from '@/lib/forge/model';
@@ -221,7 +221,7 @@ export function WorldBuilder() {
           {/* templates + play-test */}
           <div className="glass flex flex-wrap items-center gap-2 p-3">
             <span className="label-eyebrow mx-1">templates</span>
-            {BOARD_TEMPLATES.map((t) => (
+            {(spec.mode === 'ascent' ? ASCENT_TEMPLATES : BOARD_TEMPLATES).map((t) => (
               <button key={t.id} className="chip hover:border-neon-cyan/50" title={t.hint} onClick={() => loadTemplate(t)}>{t.label}</button>
             ))}
             <button className="btn-ghost ml-auto !py-1.5 text-xs" onClick={() => setTesting((v) => !v)}>{testing ? 'Exit test' : 'Play test'}</button>

@@ -157,6 +157,11 @@ interface CasinoState {
    *  Drives collection tiers + emblems. Purely cosmetic: never affects odds,
    *  payouts or the bankroll (vault-safety is untouched). */
   journeys: Record<string, number>;
+  /** Best multiplier this player has ever banked on each game. Cosmetic bragging
+   *  rights + a visible goal to beat; never affects odds or payouts. */
+  bests: Record<string, number>;
+  /** Record a banked multiplier; keeps the max. Returns true if it's a new best. */
+  recordBest: (gameKey: string, multiplier: number) => boolean;
 
   setAgeVerified: (v: boolean) => void;
   setSoundOn: (v: boolean) => void;
@@ -321,6 +326,7 @@ export const useCasino = create<CasinoState>()(
       bankrollStakes: {},
       bankrollYield: 0,
       journeys: {},
+      bests: {},
 
       setAgeVerified: (v) => set({ ageVerified: v }),
       setSoundOn: (v) => set({ soundOn: v }),
@@ -504,6 +510,12 @@ export const useCasino = create<CasinoState>()(
         });
         return game;
       },
+      recordBest: (gameKey, multiplier) => {
+        const prev = get().bests[gameKey] ?? 0;
+        if (!(multiplier > prev)) return false;
+        set((s) => ({ bests: { ...s.bests, [gameKey]: round4(multiplier) } }));
+        return true;
+      },
       updateUgc: (id, patch) =>
         set((s) => ({
           ugc: s.ugc.map((g) => {
@@ -595,6 +607,7 @@ export const useCasino = create<CasinoState>()(
         bankrollStakes: s.bankrollStakes,
         bankrollYield: s.bankrollYield,
         journeys: s.journeys,
+        bests: s.bests,
       }),
     },
   ),
