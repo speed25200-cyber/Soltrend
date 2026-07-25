@@ -34,7 +34,13 @@ export function WorldsRow() {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {worlds.map(({ game, spec }) => {
           const skin = BOARD_SKINS[spec.board.skin];
-          const ascent = spec.mode === 'ascent';
+          const label = spec.mode === 'nexus' ? 'Nexus' : spec.mode === 'ascent' ? 'Ascent' : 'Board';
+          const shape =
+            spec.mode === 'nexus'
+              ? `${spec.nexus?.rooms.length ?? 0} rooms`
+              : spec.mode === 'ascent'
+                ? `${spec.board.rows} floors`
+                : `${spec.board.rows}x${spec.board.cols}`;
           return (
             <Link
               key={game.id}
@@ -48,7 +54,7 @@ export function WorldsRow() {
               />
               <div className="relative z-10">
                 <span className="chip !border-white/10 !text-[0.6rem]" style={{ color: skin.gemGlow }}>
-                  {ascent ? 'Ascent' : 'Board'}
+                  {label}
                 </span>
                 <div className="mt-3" style={{ color: skin.gem, filter: `drop-shadow(0 6px 18px ${skin.gem}88)` }}>
                   <Icon name={skin.icon} size={34} strokeWidth={1.5} />
@@ -56,7 +62,7 @@ export function WorldsRow() {
                 <h3 className="mt-2 truncate font-display font-bold text-white">{game.name}</h3>
                 <p className="truncate text-xs text-slate-500">by {game.creator}</p>
                 <div className="mt-2 flex items-center justify-between text-[0.66rem] text-slate-500">
-                  <span>{ascent ? `${spec.board.rows} floors` : `${spec.board.rows}×${spec.board.cols}`}</span>
+                  <span>{shape}</span>
                   <span className="font-mono">◎{fmtCompact(game.volume)}</span>
                 </div>
               </div>

@@ -344,6 +344,38 @@ export const seededUgc = (): UgcGame[] => [
     maxWin: 11,
     createdAt: Date.now() - 86400000 * 2,
   },
+  {
+    id: 'ugc-sunken-keep',
+    name: 'Sunken Keep',
+    template: 'board',
+    creator: 'Cartographer',
+    edge: 0.025,
+    params: {
+      rows: 3, cols: 3, bombs: 1, skin: 'vault', fx: 'bloom',
+      environment: 'void', camera: 'orbit', logicScale: 1, mode: 'nexus',
+      nexus: JSON.stringify({
+        rooms: [
+          { id: 'n0', x: 0, z: 3.2, y: 0, risk: 0.08, label: 'Gate' },
+          { id: 'n1', x: -2.4, z: 1.2, y: 0, risk: 0.14, label: 'Hall' },
+          { id: 'n2', x: -2.6, z: -1.4, y: 0.5, risk: 0.42, label: 'Key vault', key: 'amber' },
+          { id: 'n3', x: 0.4, z: -0.4, y: 0, risk: 0.16, label: 'Crossing' },
+          { id: 'n4', x: 2.6, z: -2.2, y: 0.9, risk: 0.34, label: 'Treasury' },
+        ],
+        links: [['n0', 'n1'], ['n0', 'n3'], ['n1', 'n2'], ['n2', 'n3'], ['n3', 'n4']],
+        startId: 'n0',
+        gates: { 'n3>n4': 'amber' },
+      }),
+    },
+    theme: { accent: 'gold', icon: 'shield', tagline: 'The treasury only opens for the brave', background: 'aurora', soundPack: 'crystal', winEffect: 'coins' },
+    volume: 21400,
+    players: 388,
+    plays: 5210,
+    rating: 4.9,
+    tvl: 44,
+    // Richest route (via the key vault to the treasury) pays 3.53x.
+    maxWin: 4,
+    createdAt: Date.now() - 86400000,
+  },
 ];
 
 export const useCasino = create<CasinoState>()(

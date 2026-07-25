@@ -12,9 +12,18 @@ games with no code, and earn from them. This tracks the vision and what's shippe
   chance, segments, ladder (risk tower), multidraw, clamp, **reel (slot)**,
   **scratch (card)**, payout. Mobile pan/zoom + duplicate.
 - **3D Worlds** — Three.js, PBR tiles, bloom, 5 environments, editable decor
-  props, ship skins, optional node "logic core" (edge-neutral bonus). Two
-  spatial mechanics: **Board** (reveal tiles on a grid) and **Ascent** (climb a
-  tower floor by floor, camera rising with you).
+  props, ship skins, optional node "logic core" (edge-neutral bonus). Three
+  spatial mechanics: **Board** (reveal tiles on a grid), **Ascent** (climb a
+  tower floor by floor, camera rising with you), and **Nexus**.
+- **Nexus — creators author the topology, not the parameters.** Every other
+  casino hands the creator a fixed shape and lets them tune numbers on it. Here
+  they draw the structure itself: rooms in 3D space, each with its own danger,
+  wired by one-way paths, sealed behind **keys and gates**. Players walk the map
+  and choose their route — safe corridor or lethal shortcut — and bank anywhere.
+  A room pays exactly 1/survival and the edge applies once at cash-out, so the
+  house edge is **identical down every route through any topology**; no drawing
+  a creator can make is able to tilt the game. Only the vault cap needs checking,
+  and the richest-route search is exact, not sampled.
 
 **Genres unlocked**
 - Dice, Coinflip, Limbo, Crash, Mines/board, Wheel, **Towers (interactive
