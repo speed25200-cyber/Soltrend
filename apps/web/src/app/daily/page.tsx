@@ -331,6 +331,36 @@ function DailyInner({ now }: { now: number }) {
             </div>
           )}
 
+          {/* The last week, so a streak is something you can see and not want to break. */}
+          <div className="glass p-4">
+            <div className="flex items-center justify-between">
+              <span className="label-eyebrow">Your last 7 days</span>
+              <span className="font-mono text-[0.62rem] text-slate-500">{streak} day streak</span>
+            </div>
+            <div className="mt-2 flex gap-1.5">
+              {Array.from({ length: 7 }, (_, i) => {
+                const d = new Date(now - (6 - i) * 86_400_000).toISOString().slice(0, 10);
+                const run = runs[d];
+                const label = d.slice(5);
+                return (
+                  <div
+                    key={d}
+                    title={run ? `${label} - ${run.banked ? `${run.multiplier.toFixed(2)}x` : 'lost'}` : `${label} - not played`}
+                    className={`grid h-9 flex-1 place-items-center rounded-lg border text-[0.58rem] font-bold ${
+                      !run
+                        ? 'border-white/[0.06] bg-void-950/50 text-slate-700'
+                        : run.banked
+                          ? 'border-win/40 bg-win/10 text-win'
+                          : 'border-loss/40 bg-loss/10 text-loss'
+                    }`}
+                  >
+                    {run ? (run.banked ? `${run.multiplier.toFixed(1)}x` : '-') : ''}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
           <div className="glass p-4 text-xs leading-relaxed text-slate-500">
             <b className="text-slate-300">Same map, your own luck.</b> The layout is derived from today&apos;s date so
             everyone sees it, but each room&apos;s trap is rolled from your personal provably-fair seed chain —
