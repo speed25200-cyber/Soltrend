@@ -15,7 +15,7 @@ import { fmtMult } from '@/lib/format';
 import type { GameConfig } from './types';
 
 export function LimboGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, maxBet, maxWin }: GameConfig) {
-  const { guard: rawGuard, reserveSeeds, settle } = usePlay();
+  const { guard, reserveSeeds, settle } = usePlay(maxBet);
   const bumpUgc = useCasino((s) => s.bumpUgc);
 
   // The player picks their own multiplier here, so it must be capped: the
@@ -33,7 +33,6 @@ export function LimboGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params,
   const controls = useAnimationControls();
 
   const winChance = ((1 - clampEdge(edge)) / target) * 100;
-  const guard = (b: number) => (maxBet != null && b > maxBet ? { ok: false, reason: `Max bet ◎${maxBet} — this game's bankroll cap` } : rawGuard(b));
   const g = guard(bet);
 
   const playRound = (amount: number, quiet: boolean) => {

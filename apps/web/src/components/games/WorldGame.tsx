@@ -37,7 +37,7 @@ export function WorldGame(config: GameConfig) {
 
 /** Runtime for a 3D board world — spatial board (body) + optional logic core (brain). */
 function BoardWorldGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, maxBet }: GameConfig) {
-  const { guard, reserveSeeds, settle } = usePlay();
+  const { guard, reserveSeeds, settle } = usePlay(maxBet);
   const bumpUgc = useCasino((s) => s.bumpUgc);
   const recordBest = useCasino((s) => s.recordBest);
 
@@ -63,9 +63,7 @@ function BoardWorldGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, m
   const curMult = picks > 0 ? boardMultiplier(board, picks, edge) : 1;
   const nextMult = boardMultiplier(board, Math.min(picks + 1, safe), edge);
   const heat = Math.min(1, Math.log10(Math.max(1, curMult)) / 2);
-  const base = guard(bet);
-  const overCap = maxBet != null && bet > maxBet;
-  const g = overCap ? { ok: false, reason: `Max bet ◎${maxBet} — this game's bankroll cap` } : base;
+  const g = guard(bet);
 
   const start = () => {
     const s = reserveSeeds();
@@ -207,7 +205,7 @@ function BoardWorldGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, m
  * it stays provably fair, and the optional logic core still applies on cash-out.
  */
 function AscentGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, maxBet }: GameConfig) {
-  const { guard, reserveSeeds, settle } = usePlay();
+  const { guard, reserveSeeds, settle } = usePlay(maxBet);
   const bumpUgc = useCasino((s) => s.bumpUgc);
 
   const spec = useMemo(() => worldFromParams(params), [params]);
@@ -236,9 +234,7 @@ function AscentGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, maxBe
   const curMult = level > 0 ? ascentMultiplier(spec, level, edge) : 1;
   const nextMult = ascentMultiplier(spec, Math.min(level + 1, floors), edge);
   const heat = Math.min(1, Math.log10(Math.max(1, curMult)) / 2);
-  const base = guard(bet);
-  const overCap = maxBet != null && bet > maxBet;
-  const g = overCap ? { ok: false, reason: `Max bet ◎${maxBet} — this game's bankroll cap` } : base;
+  const g = guard(bet);
 
   const start = () => {
     const s = reserveSeeds();

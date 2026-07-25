@@ -22,9 +22,7 @@ import type { GameConfig } from './types';
 
 /** Runtime for a node-graph ("Forge") game — same interpreter as the editor. */
 export function GraphGame({ meta, gameId, gameName, params, maxBet }: GameConfig) {
-  const { guard: rawGuard, reserveSeeds, settle } = usePlay();
-  // Bankroll cap (enforced on-chain; mirrored here so the UI blocks over-cap bets).
-  const guard = (b: number) => (maxBet != null && b > maxBet ? { ok: false, reason: `Max bet ◎${maxBet} — this game's bankroll cap` } : rawGuard(b));
+  const { guard, reserveSeeds, settle } = usePlay(maxBet);
   const bumpUgc = useCasino((s) => s.bumpUgc);
 
   const graph = useMemo<ForgeGraph | null>(() => {

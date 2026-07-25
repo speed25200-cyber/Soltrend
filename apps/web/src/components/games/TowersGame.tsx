@@ -32,8 +32,7 @@ const ROWS = 8;
  * Provably fair: the whole tower is fixed by the reserved seed at start.
  */
 export function TowersGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, maxBet }: GameConfig) {
-  const { guard: rawGuard, reserveSeeds, settle } = usePlay();
-  const guard = (b: number) => (maxBet != null && b > maxBet ? { ok: false, reason: `Max bet ◎${maxBet} — this game's bankroll cap` } : rawGuard(b));
+  const { guard, reserveSeeds, settle } = usePlay(maxBet);
   const bumpUgc = useCasino((s) => s.bumpUgc);
 
   const [bet, setBet] = useState(0.1);

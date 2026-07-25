@@ -22,10 +22,15 @@ interface SeedsSnapshot {
 
 /**
  * Central betting guard + settlement. Every game funnels through here so that
- * balance checks, responsible-gaming limits and self-exclusion are enforced
- * uniformly — exactly one code path can move funds.
+ * balance checks, responsible-gaming limits, self-exclusion and the per-game
+ * bankroll cap are enforced uniformly — exactly one code path can move funds.
+ *
+ * `maxBet` is the game's bankroll-relative ceiling (bankroll / RUIN_K / maxWin,
+ * also enforced on-chain). Passing it here rather than re-implementing the check
+ * per game is what keeps a community game from being drained by one lucky round:
+ * a game that forgets the check simply cannot exist.
  */
-export function usePlay() {
+export function usePlay(maxBet?: number) {
   const { connected } = useWallet();
   const balance = useCasino((s) => s.balance);
   const rg = useCasino((s) => s.rg);
@@ -42,11 +47,12 @@ export function usePlay() {
       if (bet <= 0) return { ok: false, reason: 'Enter a bet amount' };
       if (bet > balance) return { ok: false, reason: 'Insufficient balance' };
       if (rg.maxBet && bet > rg.maxBet) return { ok: false, reason: `Max bet limit is ${rg.maxBet} SOL` };
+      if (maxBet != null && bet > maxBet) return { ok: false, reason: `Max bet ◎${maxBet} — this game's bankroll cap` };
       if (rg.dailyLossLimit && sessionLossToday >= rg.dailyLossLimit)
         return { ok: false, reason: 'Daily loss limit reached — take a break' };
       return { ok: true };
     },
-    [connected, balance, rg, sessionLossToday],
+    [connected, balance, rg, sessionLossToday, maxBet],
   );
 
   /** Increment the nonce and return the seed snapshot for this bet/round. */

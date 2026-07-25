@@ -15,8 +15,8 @@ import type { GameConfig } from './types';
 const GRID = 25;
 type Phase = 'idle' | 'playing' | 'busted' | 'cashed';
 
-export function MinesGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params }: GameConfig) {
-  const { guard, reserveSeeds, settle } = usePlay();
+export function MinesGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params , maxBet}: GameConfig) {
+  const { guard, reserveSeeds, settle } = usePlay(maxBet);
   const bumpUgc = useCasino((s) => s.bumpUgc);
 
   const [bet, setBet] = useState(0.1);
