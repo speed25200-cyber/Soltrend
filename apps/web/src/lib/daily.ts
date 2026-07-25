@@ -169,6 +169,58 @@ export interface DailyResult {
   keysFound: number;
 }
 
+/* ------------------------------------------------------------- challenge links */
+
+/**
+ * A run encoded into a link. Broadcasting a card reaches a feed; handing one
+ * person a "beat this" link reaches them directly and arrives with context —
+ * they land on the same map already knowing the number to chase.
+ *
+ * Deliberately unauthenticated and deliberately attached to the FREE daily: a
+ * challenge is a friendly target, never a wager, so there is nothing to gain by
+ * forging one. The UI says so rather than implying a verified score.
+ */
+export interface Challenge {
+  day: number;
+  rooms: number;
+  multiplier: number;
+  banked: boolean;
+  from?: string;
+}
+
+const b64e = (s: string) =>
+  typeof window === 'undefined' ? Buffer.from(s, 'utf8').toString('base64') : window.btoa(unescape(encodeURIComponent(s)));
+const b64d = (s: string) =>
+  typeof window === 'undefined' ? Buffer.from(s, 'base64').toString('utf8') : decodeURIComponent(escape(window.atob(s)));
+
+export function encodeChallenge(c: Challenge): string {
+  // Compact positional form so the link stays short enough to paste anywhere.
+  const raw = [c.day, c.rooms, Math.round(c.multiplier * 100), c.banked ? 1 : 0, c.from ?? ''].join('|');
+  return b64e(raw).replace(/=+$/, '');
+}
+
+export function decodeChallenge(token: string): Challenge | null {
+  try {
+    const parts = b64d(token).split('|');
+    if (parts.length < 4) return null;
+    const day = Number(parts[0]);
+    const rooms = Number(parts[1]);
+    const mult = Number(parts[2]) / 100;
+    if (!Number.isFinite(day) || !Number.isFinite(rooms) || !Number.isFinite(mult)) return null;
+    if (day < 1 || rooms < 0 || mult < 0) return null;
+    return { day, rooms, multiplier: mult, banked: parts[3] === '1', from: parts[4] || undefined };
+  } catch {
+    return null;
+  }
+}
+
+/** Did this run beat the challenge it was played against? */
+export function beatsChallenge(r: DailyResult, c: Challenge): boolean {
+  if (!r.banked) return false;
+  if (!c.banked) return true; // they busted; banking anything at all wins
+  return r.multiplier > c.multiplier;
+}
+
 /**
  * The artifact that actually travels. Deliberately plain text with geometric
  * glyphs (never emoji) so it survives a paste into any chat, and carries no

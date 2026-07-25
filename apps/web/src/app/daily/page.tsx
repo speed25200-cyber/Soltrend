@@ -10,7 +10,8 @@ import { sfx } from '@/lib/sound';
 import { burstWin } from '@/lib/fx';
 import { floatStream } from '@/lib/provably-fair';
 import {
-  dailyPuzzle, dayKey, msUntilNextDay, shareCard, type DailyResult,
+  beatsChallenge, dailyPuzzle, dayKey, decodeChallenge, encodeChallenge, msUntilNextDay,
+  shareCard, type Challenge, type DailyResult,
 } from '@/lib/daily';
 import {
   exitsFrom, findRoom, isTrap, keysAfter, nexusMultiplier, nexusRolls, roomGain, KEY_HEX,
@@ -50,6 +51,15 @@ function DailyInner({ now }: { now: number }) {
   const recordDailyRun = useCasino((s) => s.recordDailyRun);
   const done = runs[key];
 
+  // An incoming "beat this" link — only honoured for today's map.
+  const [challenge, setChallenge] = useState<Challenge | null>(null);
+  useEffect(() => {
+    const token = new URLSearchParams(window.location.search).get('c');
+    if (!token) return;
+    const c = decodeChallenge(token);
+    if (c && c.day === puzzle.number) setChallenge(c);
+  }, [puzzle.number]);
+
   const spec = puzzle.spec;
   const [phase, setPhase] = useState<Phase>('idle');
   const [currentId, setCurrentId] = useState(spec.startId);
@@ -57,6 +67,7 @@ function DailyInner({ now }: { now: number }) {
   const [hitId, setHitId] = useState<string | null>(null);
   const [rolls, setRolls] = useState<Record<string, number>>({});
   const [copied, setCopied] = useState(false);
+  const [copiedChallenge, setCopiedChallenge] = useState(false);
   const settledRef = useRef(false);
 
   const held = useMemo(() => keysAfter(spec, [spec.startId, ...cleared]), [spec, cleared]);
@@ -122,6 +133,24 @@ function DailyInner({ now }: { now: number }) {
     ? { rooms: done.rooms, total: done.total, multiplier: done.multiplier, banked: done.banked, keysFound: done.keysFound }
     : null;
 
+  const challengeUrl = () => {
+    if (!result) return '';
+    const token = encodeChallenge({ day: puzzle.number, rooms: result.rooms, multiplier: result.multiplier, banked: result.banked });
+    const base = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : 'https://soltrend.io/daily';
+    return `${base}?c=${token}`;
+  };
+
+  const copyChallenge = async () => {
+    if (!result) return;
+    try {
+      await navigator.clipboard.writeText(shareCard(puzzle, result, streak, challengeUrl()));
+      setCopiedChallenge(true);
+      setTimeout(() => setCopiedChallenge(false), 2200);
+    } catch {
+      window.prompt('Copy your challenge link', shareCard(puzzle, result, streak, challengeUrl()));
+    }
+  };
+
   const copyShare = async () => {
     if (!result) return;
     const text = shareCard(puzzle, result, streak);
@@ -145,6 +174,27 @@ function DailyInner({ now }: { now: number }) {
         title={`Daily Nexus #${puzzle.number}`}
         sub="One map. Everyone on earth. One free run a day — no stake, just the route you choose and how far you dare push it."
       />
+
+      {challenge && (
+        <div className="glass flex flex-wrap items-center gap-3 border-l-2 border-l-gold/60 p-4">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gold/15 text-gold"><Icon name="target" size={18} /></span>
+          <div className="min-w-0 flex-1">
+            <div className="font-display text-sm font-bold text-white">
+              You were challenged{challenge.from ? ` by ${challenge.from}` : ''}
+            </div>
+            <div className="text-xs text-slate-400">
+              {challenge.banked
+                ? `They banked ${challenge.multiplier.toFixed(2)}x at ${challenge.rooms} room${challenge.rooms === 1 ? '' : 's'} deep. Same map — beat it.`
+                : `They fell at room ${challenge.rooms + 1}. Bank anything and you win.`}
+            </div>
+          </div>
+          {result && (
+            <span className={`chip ${beatsChallenge(result, challenge) ? '!border-win/50 !text-win' : '!border-loss/40 !text-loss'}`}>
+              {beatsChallenge(result, challenge) ? 'You beat them' : 'They held'}
+            </span>
+          )}
+        </div>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
         <div className="glass relative min-h-[380px] overflow-hidden rounded-2xl p-0">
@@ -198,9 +248,17 @@ function DailyInner({ now }: { now: number }) {
               <pre className="whitespace-pre-wrap rounded-xl border border-white/10 bg-void-950/70 p-3 font-mono text-[0.72rem] leading-relaxed text-slate-200">
 {shareCard(puzzle, result!, streak)}
               </pre>
-              <button onClick={copyShare} className="btn-primary w-full">
-                {copied ? 'Copied — go paste it' : 'Copy result'}
-              </button>
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={copyShare} className="btn-ghost !py-2 text-xs">
+                  {copied ? 'Copied' : 'Copy result'}
+                </button>
+                <button onClick={copyChallenge} className="btn-primary !py-2 text-xs">
+                  {copiedChallenge ? 'Link copied' : 'Challenge a friend'}
+                </button>
+              </div>
+              <p className="text-center text-[0.58rem] text-slate-600">
+                A challenge link is a friendly target on the free daily, not a verified score.
+              </p>
               <p className="text-center text-[0.62rem] text-slate-600">
                 Everyone played this exact map today. Compare routes, not luck.
               </p>
