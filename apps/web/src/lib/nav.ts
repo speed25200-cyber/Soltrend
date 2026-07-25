@@ -39,6 +39,7 @@ export const SECTIONS: NavSection[] = [
     icon: 'play',
     children: [
       { href: '/', label: 'Lobby', hint: 'Originals, worlds and trending games' },
+      { href: '/daily', label: 'Daily', hint: "Today's Nexus — same map for everyone, free" },
       { href: '/discover', label: 'Community', hint: 'Everything the community has built' },
       { href: '/floor', label: 'The Floor', hint: 'A spatial view you can walk' },
       { href: '/leaderboard', label: 'Ranks', hint: 'Top players and creators' },

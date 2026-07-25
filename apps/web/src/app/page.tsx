@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { CATALOG } from '@/lib/catalog';
 import { GameCard } from '@/components/GameCard';
 import { Hero } from '@/components/Hero';
+import { DailyBanner } from '@/components/DailyBanner';
 import { LiveWinsTicker } from '@/components/LiveWinsTicker';
 import { UgcRow } from '@/components/UgcRow';
 import { WorldsRow } from '@/components/WorldsRow';
@@ -13,6 +14,7 @@ export default function LobbyPage() {
   return (
     <div className="space-y-10">
       <Hero />
+      <DailyBanner />
       <LiveWinsTicker />
 
       <section>

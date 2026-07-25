@@ -83,6 +83,16 @@ export interface UgcGame {
   parentId?: string;
 }
 
+/** One completed Daily Nexus run — the thing that becomes a share card. */
+export interface DailyRun {
+  rooms: number;
+  total: number;
+  multiplier: number;
+  banked: boolean;
+  keysFound: number;
+  ts: number;
+}
+
 export interface RgLimits {
   maxBet: number | null;
   dailyLossLimit: number | null;
@@ -162,6 +172,13 @@ interface CasinoState {
   bests: Record<string, number>;
   /** Record a banked multiplier; keeps the max. Returns true if it's a new best. */
   recordBest: (gameKey: string, multiplier: number) => boolean;
+
+  /** Daily Nexus — one free run per UTC day, keyed by day. */
+  dailyRuns: Record<string, DailyRun>;
+  dailyStreak: number;
+  /** Last day played, so the streak can tell "yesterday" from a broken chain. */
+  lastDailyRun: string;
+  recordDailyRun: (dayKey: string, run: DailyRun) => void;
 
   setAgeVerified: (v: boolean) => void;
   setSoundOn: (v: boolean) => void;
@@ -580,6 +597,18 @@ export const useCasino = create<CasinoState>()(
         });
         return game;
       },
+      dailyRuns: {},
+      dailyStreak: 0,
+      lastDailyRun: '',
+      recordDailyRun: (key, run) =>
+        set((s) => {
+          if (s.dailyRuns[key]) return {}; // one run per day, first result stands
+          // A streak survives only if the previous run was the day before.
+          const prev = new Date(`${key}T00:00:00Z`).getTime() - 86_400_000;
+          const yesterday = new Date(prev).toISOString().slice(0, 10);
+          const streak = s.lastDailyRun === yesterday ? s.dailyStreak + 1 : 1;
+          return { dailyRuns: { ...s.dailyRuns, [key]: run }, dailyStreak: streak, lastDailyRun: key };
+        }),
       recordBest: (gameKey, multiplier) => {
         const prev = get().bests[gameKey] ?? 0;
         if (!(multiplier > prev)) return false;
@@ -678,6 +707,9 @@ export const useCasino = create<CasinoState>()(
         bankrollYield: s.bankrollYield,
         journeys: s.journeys,
         bests: s.bests,
+        dailyRuns: s.dailyRuns,
+        dailyStreak: s.dailyStreak,
+        lastDailyRun: s.lastDailyRun,
       }),
     },
   ),
