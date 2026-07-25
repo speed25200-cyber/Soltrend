@@ -11,8 +11,10 @@ games with no code, and earn from them. This tracks the vision and what's shippe
 - **Node Forge** — 15 node kinds: rng, const, math, branch, curve, randint, map,
   chance, segments, ladder (risk tower), multidraw, clamp, **reel (slot)**,
   **scratch (card)**, payout. Mobile pan/zoom + duplicate.
-- **3D Worlds** — Three.js board, PBR tiles, bloom, 5 environments, editable
-  decor props, ship skins, optional node "logic core" (edge-neutral bonus).
+- **3D Worlds** — Three.js, PBR tiles, bloom, 5 environments, editable decor
+  props, ship skins, optional node "logic core" (edge-neutral bonus). Two
+  spatial mechanics: **Board** (reveal tiles on a grid) and **Ascent** (climb a
+  tower floor by floor, camera rising with you).
 
 **Genres unlocked**
 - Dice, Coinflip, Limbo, Crash, Mines/board, Wheel, **Towers (interactive
@@ -61,6 +63,16 @@ games with no code, and earn from them. This tracks the vision and what's shippe
   platform, rest to the seller's creator vault); no house exposure.
 - On-chain: `house_vault` program with commit-reveal, authority-gated + native
   trustless settlement, per-pool kill-switch.
+- **Wallet-signed money loop** — staking, unstaking and royalty claims are real
+  transactions (no settlement authority involved), with the local demo ledger
+  as a fallback when the program is unconfigured. The cashier reads the wallet's
+  live on-chain balance.
+
+**Safety**
+- One funnel (`usePlay`) enforces balance, responsible-gaming limits and the
+  bankroll-relative bet cap for every game, so a game cannot forget the check.
+- Player-chosen multipliers (Limbo) are capped at the game's payout ceiling, so
+  worst-case payout stays within bankroll / RUIN_K.
 
 ## Planned (the rest of the vision)
 
