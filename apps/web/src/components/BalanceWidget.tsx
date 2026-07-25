@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { useCasino } from '@/lib/store';
 import { fmtSol, SOL_USD } from '@/lib/format';
 import { Modal } from './Modal';
+import { useWalletBalance } from '@/hooks/useWalletBalance';
 
 export function BalanceWidget() {
   const { connected } = useWallet();
@@ -31,6 +32,7 @@ export function BalanceWidget() {
 
 function CashierModal({ onClose }: { onClose: () => void }) {
   const { balance, deposit, withdraw } = useCasino();
+  const onChainSol = useWalletBalance();
   const [tab, setTab] = useState<'deposit' | 'withdraw'>('deposit');
   const [amt, setAmt] = useState('1');
   const value = Math.max(0, parseFloat(amt) || 0);
@@ -72,14 +74,34 @@ function CashierModal({ onClose }: { onClose: () => void }) {
         </div>
       </div>
 
+      <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+        <div className="rounded-xl border border-white/[0.06] bg-void-900/50 p-2.5">
+          <div className="label-eyebrow">In wallet (on-chain)</div>
+          <div className="font-mono text-sm font-bold text-white">
+            {onChainSol === null ? '—' : `◎${fmtSol(onChainSol, 3)}`}
+          </div>
+        </div>
+        <div className="rounded-xl border border-white/[0.06] bg-void-900/50 p-2.5">
+          <div className="label-eyebrow">Play balance</div>
+          <div className="font-mono text-sm font-bold text-white">◎{fmtSol(balance, 3)}</div>
+        </div>
+      </div>
+
       <p className="mt-3 text-xs leading-relaxed text-slate-500">
-        Demo hot-balance on devnet flow. On mainnet, deposits move SOL into the audited{' '}
-        <span className="text-slate-300">House Vault</span> PDA and every bet settles on-chain in &lt;1s.
+        {onChainSol === null
+          ? 'Wallet balance unavailable — check your network. The play balance below is a local demo ledger.'
+          : 'Your wallet balance is read live from the chain. Deposits move SOL into the audited '}
+        {onChainSol !== null && <span className="text-slate-300">House Vault</span>}
+        {onChainSol !== null && ' PDA; staking and royalty claims already settle on-chain.'}
       </p>
 
       <button
         className={`btn-primary mt-4 w-full ${tab === 'withdraw' ? '!bg-none btn-win' : ''}`}
-        disabled={value <= 0 || (tab === 'withdraw' && value > balance)}
+        disabled={
+          value <= 0 ||
+          (tab === 'withdraw' && value > balance) ||
+          (tab === 'deposit' && onChainSol !== null && value > onChainSol)
+        }
         onClick={() => {
           tab === 'deposit' ? deposit(value) : withdraw(value);
           onClose();
