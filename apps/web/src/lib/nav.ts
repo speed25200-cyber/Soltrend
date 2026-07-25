@@ -60,6 +60,7 @@ export const SECTIONS: NavSection[] = [
     icon: 'create',
     children: [
       { href: '/studio', label: 'Studio', hint: 'Build a game' },
+      { href: '/studio/games', label: 'My games', hint: 'Edit, unpublish and claim royalties' },
       { href: '/market', label: 'Assets', hint: 'Symbol packs and node modules' },
     ],
     owns: ['/forge', '/worlds', '/arcade'],
@@ -106,5 +107,8 @@ export function sectionFor(pathname: string): NavSection | undefined {
 
 export const showsTabs = (pathname: string) => !IMMERSIVE.some((p) => pathname.startsWith(p));
 
-export const isChildActive = (pathname: string, href: string) =>
-  href === '/' ? pathname === '/' : pathname === href || pathname.startsWith(href + '/');
+/**
+ * Tabs match exactly. Nesting matters here: '/studio/games' must light only the
+ * "My games" tab, not "Studio" as well, so a prefix match would be wrong.
+ */
+export const isChildActive = (pathname: string, href: string) => pathname === href;

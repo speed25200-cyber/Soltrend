@@ -36,7 +36,7 @@ export default function RewardsPage() {
 
   return (
     <div className="space-y-8">
-      <SectionHead eyebrow="Rewards" title="Your progress" sub="Level up, clear missions, climb the VIP ladder — and feed the community jackpot" />
+      <SectionHead eyebrow="Earn · Rewards" title="Your progress" sub="Level up, clear missions, climb the VIP ladder — and feed the community jackpot" />
 
       {flash && (
         <div className="glass flex items-center gap-2 border-win/30 p-3 text-sm text-win animate-float-up">

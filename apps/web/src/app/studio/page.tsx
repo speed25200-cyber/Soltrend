@@ -51,7 +51,7 @@ export default function StudioPage() {
   return (
     <div className="space-y-6">
       <SectionHead
-        eyebrow="Create"
+        eyebrow="Create · Studio"
         title="Build a game"
         sub="Design a 3D world, wire a node mechanic or reskin a classic — provably fair, vault-safe, published in a tap. Draw your own symbols in the Symbols tab."
       />
@@ -68,7 +68,7 @@ export default function StudioPage() {
             <li><b className="text-slate-200">Classic</b> — reskin + retune the Towers climb, then ship it.</li>
             <li><b className="text-slate-200">Symbols</b> — draw pixel art for slot/scratch games (an asset tool, not a game).</li>
           </ul>
-          <p className="text-xs text-slate-500">Every builder autosaves a draft. Published a game? Edit, duplicate or unpublish it from your <span className="text-neon-violet">Profile → Creator dashboard</span>.</p>
+          <p className="text-xs text-slate-500">Every builder autosaves a draft. Published a game? Manage it and claim royalties under <span className="text-neon-violet">My games</span>.</p>
         </div>
       )}
 

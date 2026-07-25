@@ -27,7 +27,7 @@ export default function VaultPage() {
   return (
     <div className="space-y-6">
       <SectionHead
-        eyebrow="Vaults"
+        eyebrow="Earn · Vaults"
         title="Fund games, earn the edge"
         sub="Stake SOL into a game's bankroll to become the house — you earn a share of every bet's edge, pro-rata."
       />

@@ -41,7 +41,7 @@ function VerifyInner() {
   return (
     <div className="space-y-6">
       <SectionHead
-        eyebrow="Provably fair"
+        eyebrow="You · Verify"
         title="Verify any bet"
         sub="Recompute a result from the revealed seeds. This runs entirely in your browser — the same function the server used."
       />

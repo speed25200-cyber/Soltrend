@@ -28,7 +28,7 @@ export default function DuelPage() {
   const [mode, setMode] = useState<Mode>('duel');
   return (
     <div className="space-y-6">
-      <SectionHead eyebrow="PvP · Multiplayer" title={SUBS[mode].title} sub={SUBS[mode].sub} />
+      <SectionHead eyebrow="Live · Duels" title={SUBS[mode].title} sub={SUBS[mode].sub} />
       <div className="mx-auto grid w-full max-w-md grid-cols-4 gap-1 rounded-xl bg-void-900/80 p-1">
         <TabBtn active={mode === 'duel'} onClick={() => setMode('duel')} icon="target" label="Duel" />
         <TabBtn active={mode === 'jackpot'} onClick={() => setMode('jackpot')} icon="crown" label="Jackpot" />

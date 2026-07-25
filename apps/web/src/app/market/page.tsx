@@ -78,7 +78,7 @@ export default function MarketPage() {
   return (
     <div className="space-y-8">
       <SectionHead
-        eyebrow="Marketplace"
+        eyebrow="Create · Assets"
         title="Asset market"
         sub="Install symbol packs into your library, then use them in slot and scratch games"
       />

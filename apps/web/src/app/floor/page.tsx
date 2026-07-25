@@ -41,7 +41,7 @@ export default function FloorPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <SectionHead eyebrow="Discover · The Floor" title="Walk the floor" sub="A spatial view of the community's games — drag to pan, hover to lift, tap to play." />
+        <SectionHead eyebrow="Play · The Floor" title="Walk the floor" sub="A spatial view of the community's games — drag to pan, hover to lift, tap to play." />
         <Link href="/discover" className="btn-ghost mb-1">List view</Link>
       </div>
 

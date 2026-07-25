@@ -30,7 +30,7 @@ export default function LeaderboardPage() {
 
   return (
     <div className="space-y-6">
-      <SectionHead eyebrow="Rankings" title="Leaderboards" sub="Ranked by real wagered volume — the boucle virale in action" />
+      <SectionHead eyebrow="Play · Ranks" title="Leaderboards" sub="Ranked by real wagered volume — players and the creators they play" />
 
       <div className="flex gap-1 rounded-xl bg-void-900/80 p-1 max-w-xs">
         {(['games', 'creators'] as const).map((t) => (
