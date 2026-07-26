@@ -1,5 +1,7 @@
 'use client';
 
+import { Buffer } from 'buffer';
+
 import { PublicKey, SystemProgram, TransactionInstruction } from '@solana/web3.js';
 import {
   discriminator,

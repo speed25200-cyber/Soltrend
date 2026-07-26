@@ -4,6 +4,7 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { useState } from 'react';
 import { shortAddr } from '@/lib/format';
+import { clusterName, useWalletError } from './WalletProviders';
 
 /**
  * Custom connect button. We drive wallet-adapter's modal directly so the trigger
@@ -12,14 +13,30 @@ import { shortAddr } from '@/lib/format';
 export function ConnectButton({ compact = false }: { compact?: boolean }) {
   const { publicKey, connected, disconnect, connecting, wallet } = useWallet();
   const { setVisible } = useWalletModal();
+  const { error, clear } = useWalletError();
   const [open, setOpen] = useState(false);
 
   if (!connected) {
     return (
-      <button className="btn-primary !py-2.5 !px-4 text-sm" onClick={() => setVisible(true)}>
-        <PhantomGlyph />
-        {connecting ? 'Connecting…' : compact ? 'Connect' : 'Connect Wallet'}
-      </button>
+      <div className="relative">
+        <button
+          className="btn-primary !py-2.5 !px-4 text-sm"
+          onClick={() => { clear(); setVisible(true); }}
+        >
+          <PhantomGlyph />
+          {connecting ? 'Connecting…' : compact ? 'Connect' : 'Connect Wallet'}
+        </button>
+        {/* A failed connection used to be completely silent. */}
+        {error && (
+          <div className="absolute right-0 z-50 mt-2 w-64 rounded-xl border border-loss/40 bg-void-950/95 p-3 text-xs text-slate-200 shadow-lg backdrop-blur">
+            <div className="flex items-start gap-2">
+              <span className="mt-0.5 font-bold text-loss">!</span>
+              <span className="flex-1">{error}</span>
+              <button onClick={clear} className="text-slate-500 hover:text-white" aria-label="Dismiss">&times;</button>
+            </div>
+          </div>
+        )}
+      </div>
     );
   }
 
@@ -35,6 +52,9 @@ export function ConnectButton({ compact = false }: { compact?: boolean }) {
           <img src={wallet.adapter.icon} alt="" className="h-4 w-4 rounded" />
         )}
         {shortAddr(addr)}
+        <span className="hidden rounded px-1.5 py-0.5 text-[0.58rem] font-bold uppercase text-slate-400 ring-1 ring-white/10 sm:inline">
+          {clusterName()}
+        </span>
         <svg width="12" height="12" viewBox="0 0 24 24" className="opacity-60">
           <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" fill="none" />
         </svg>

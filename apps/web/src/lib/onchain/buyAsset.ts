@@ -1,5 +1,7 @@
 'use client';
 
+import { Buffer } from 'buffer';
+
 import { PublicKey, SystemProgram, TransactionInstruction } from '@solana/web3.js';
 import { sha256Bytes } from '@/lib/sha256';
 import { configPda, creatorVaultPda, discriminator, programId as vaultProgramId, treasuryPda, u64le } from './program';

@@ -1,5 +1,7 @@
 'use client';
 
+import { Buffer } from 'buffer';
+
 import { PublicKey, TransactionInstruction } from '@solana/web3.js';
 import { configPda, creatorVaultPda, discriminator, programId, treasuryPda } from './program';
 
