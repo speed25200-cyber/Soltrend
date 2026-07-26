@@ -43,8 +43,8 @@ export function WorldGame(config: GameConfig) {
 }
 
 /** Runtime for a 3D board world — spatial board (body) + optional logic core (brain). */
-function BoardWorldGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, maxBet }: GameConfig) {
-  const { guard, reserveSeeds, settle } = usePlay(maxBet);
+function BoardWorldGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, maxBet, demo}: GameConfig) {
+  const { guard, reserveSeeds, settle } = usePlay(maxBet, demo);
   const bumpUgc = useCasino((s) => s.bumpUgc);
   const recordBest = useCasino((s) => s.recordBest);
 
@@ -134,16 +134,21 @@ function BoardWorldGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, m
       meta={meta}
       stage={
         <div className="relative h-full min-h-[340px] overflow-hidden rounded-2xl">
-          <World3D
-            spec={spec}
-            revealed={revealed}
-            bombSet={bombSet}
-            showBombs={showBombs}
-            playing={phase === 'playing'}
-            hitIndex={hitIndex}
-            onReveal={reveal}
-            heat={heat}
-          />
+          {/* The renderer is absolutely positioned: a percentage height resolves
+              against the parent's height, not its min-height, so a plain h-full
+              child collapses wherever the stage is only sized by min-h. */}
+          <div className="absolute inset-0">
+            <World3D
+              spec={spec}
+              revealed={revealed}
+              bombSet={bombSet}
+              showBombs={showBombs}
+              playing={phase === 'playing'}
+              hitIndex={hitIndex}
+              onReveal={reveal}
+              heat={heat}
+            />
+          </div>
           {/* HUD overlay */}
           <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-4">
             <div className="rounded-xl border border-white/10 bg-void-950/70 px-3 py-2 backdrop-blur">
@@ -211,8 +216,8 @@ function BoardWorldGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, m
  * raises the camera. The whole tower is fixed by the reserved seed at Start, so
  * it stays provably fair, and the optional logic core still applies on cash-out.
  */
-function AscentGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, maxBet }: GameConfig) {
-  const { guard, reserveSeeds, settle } = usePlay(maxBet);
+function AscentGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, maxBet, demo }: GameConfig) {
+  const { guard, reserveSeeds, settle } = usePlay(maxBet, demo);
   const bumpUgc = useCasino((s) => s.bumpUgc);
 
   const spec = useMemo(() => worldFromParams(params), [params]);
@@ -302,17 +307,22 @@ function AscentGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, maxBe
       meta={meta}
       stage={
         <div className="relative h-full min-h-[340px] overflow-hidden rounded-2xl">
-          <Ascent3D
-            spec={spec}
-            level={level}
-            traps={traps}
-            picks={picks}
-            reveal={reveal}
-            playing={phase === 'playing'}
-            hitLane={hitLane}
-            onPick={step}
-            heat={heat}
-          />
+          {/* The renderer is absolutely positioned: a percentage height resolves
+              against the parent's height, not its min-height, so a plain h-full
+              child collapses wherever the stage is only sized by min-h. */}
+          <div className="absolute inset-0">
+            <Ascent3D
+              spec={spec}
+              level={level}
+              traps={traps}
+              picks={picks}
+              reveal={reveal}
+              playing={phase === 'playing'}
+              hitLane={hitLane}
+              onPick={step}
+              heat={heat}
+            />
+          </div>
           <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-4">
             <div className="rounded-xl border border-white/10 bg-void-950/70 px-3 py-2 backdrop-blur">
               <div className="font-mono text-2xl font-black" style={{ color: phase === 'busted' ? '#ff3b6b' : skin.gemGlow, textShadow: `0 0 ${14 + heat * 26}px ${skin.gem}` }}>
@@ -383,8 +393,8 @@ function AscentGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, maxBe
  * outcome cannot depend on which way the player walks, and the house edge is
  * identical down every possible route (see lib/forge/nexus.ts).
  */
-function NexusGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, maxBet }: GameConfig) {
-  const { guard, reserveSeeds, settle } = usePlay(maxBet);
+function NexusGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, maxBet, demo }: GameConfig) {
+  const { guard, reserveSeeds, settle } = usePlay(maxBet, demo);
   const bumpUgc = useCasino((s) => s.bumpUgc);
   const recordBest = useCasino((s) => s.recordBest);
 
@@ -477,18 +487,23 @@ function NexusGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, maxBet
       meta={meta}
       stage={
         <div className="relative h-full min-h-[340px] overflow-hidden rounded-2xl">
-          <Nexus3D
-            spec={nexus}
-            environment={spec.environment}
-            skin={spec.board.skin}
-            currentId={currentId || nexus.startId}
-            cleared={cleared}
-            hitId={hitId}
-            reveal={reveal}
-            playing={phase === 'playing'}
-            onEnter={enter}
-            heat={heat}
-          />
+          {/* The renderer is absolutely positioned: a percentage height resolves
+              against the parent's height, not its min-height, so a plain h-full
+              child collapses wherever the stage is only sized by min-h. */}
+          <div className="absolute inset-0">
+            <Nexus3D
+              spec={nexus}
+              environment={spec.environment}
+              skin={spec.board.skin}
+              currentId={currentId || nexus.startId}
+              cleared={cleared}
+              hitId={hitId}
+              reveal={reveal}
+              playing={phase === 'playing'}
+              onEnter={enter}
+              heat={heat}
+            />
+          </div>
           <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-4">
             <div className="rounded-xl border border-white/10 bg-void-950/70 px-3 py-2 backdrop-blur">
               <div className="font-mono text-2xl font-black" style={{ color: phase === 'busted' ? '#ff3b6b' : skin.gemGlow, textShadow: `0 0 ${14 + heat * 26}px ${skin.gem}` }}>

@@ -6,6 +6,7 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { useCasino } from '@/lib/store';
 import { Icon, STUDIO_ICONS, type IconName } from '@/components/Icon';
 import { GameScreen } from '@/components/games/GameScreen';
+import { DemoBar } from '@/components/games/DemoBar';
 import { towersMultiplier, clampEdge, DEFAULT_EDGE } from '@/lib/games';
 import { ACCENT_HEX, type GameMeta } from '@/lib/catalog';
 import { shortAddr } from '@/lib/format';
@@ -146,8 +147,9 @@ export function ClassicsBuilder() {
       )}
       <p className="text-sm text-slate-400">Reskin the Towers dungeon-climb into your own game — pick a difficulty, tune the edge and a look, play-test it live, publish. Provably fair, vault-safe.</p>
       <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
-        <div className="glass min-w-0 overflow-hidden p-2">
-          <GameScreen config={{ meta, edge, gameName: name || 'Preview' }} />
+        <div className="glass min-w-0 space-y-2 overflow-hidden p-2">
+          <DemoBar theoreticalRtp={1 - edge} />
+          <GameScreen config={{ meta, edge, gameName: name || 'Preview', demo: true }} />
         </div>
 
         <div className="space-y-4">

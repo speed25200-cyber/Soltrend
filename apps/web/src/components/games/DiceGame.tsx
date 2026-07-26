@@ -13,8 +13,8 @@ import { playDice, diceMultiplier, DEFAULT_EDGE } from '@/lib/games';
 import { fmtMult } from '@/lib/format';
 import type { GameConfig } from './types';
 
-export function DiceGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params , maxBet}: GameConfig) {
-  const { guard, reserveSeeds, settle } = usePlay(maxBet);
+export function DiceGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params , maxBet, demo}: GameConfig) {
+  const { guard, reserveSeeds, settle } = usePlay(maxBet, demo);
   const bumpUgc = useCasino((s) => s.bumpUgc);
 
   const [bet, setBet] = useState(0.1);

@@ -6,6 +6,7 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { useCasino } from '@/lib/store';
 import { Icon, STUDIO_ICONS, type IconName } from '@/components/Icon';
 import { GameScreen } from '@/components/games/GameScreen';
+import { DemoBar } from '@/components/games/DemoBar';
 import { MineSymbol } from '@/components/games/goldmine/MineSymbol';
 import { ACCENT_HEX, type GameMeta } from '@/lib/catalog';
 import { clampEdge } from '@/lib/games';
@@ -88,7 +89,7 @@ export function SlotBuilder() {
     slug: 'slot-preview',
     name: name || 'Untitled slot',
     icon,
-    tagline: tagline || 'A cascading ore slot',
+    tagline: tagline || 'A gold-wagon train slot',
     template: 'slots',
     tier: 2,
     accent,
@@ -146,8 +147,9 @@ export function SlotBuilder() {
       </p>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
-        <div className="glass min-w-0 overflow-hidden p-2">
-          <GameScreen config={{ meta, edge: edgePct / 100, gameName: name || 'Preview', params: { ...slotToParams(cfg), volatility } }} />
+        <div className="glass min-w-0 space-y-2 overflow-hidden p-2">
+          <DemoBar theoreticalRtp={1 - edgePct / 100} />
+          <GameScreen config={{ meta, edge: edgePct / 100, gameName: name || 'Preview', params: { ...slotToParams(cfg), volatility }, maxWin: MAX_WIN, demo: true }} />
         </div>
 
         <div className="space-y-4">

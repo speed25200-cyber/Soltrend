@@ -9,6 +9,7 @@ import { Icon, STUDIO_ICONS, type IconName } from '@/components/Icon';
 import { ForgeEditor } from '@/components/forge/ForgeEditor';
 import { NexusEditor } from '@/components/create/NexusEditor';
 import { WorldGame } from '@/components/games/WorldGame';
+import { DemoBar } from '@/components/games/DemoBar';
 import {
   clampSpec, cellCount, BOARD_SKINS, BOARD_FX, BOARD_TEMPLATES, type BoardSkin, type BoardFx,
 } from '@/lib/forge/board';
@@ -73,7 +74,9 @@ export function WorldBuilder({ mechanic = 'board' }: { mechanic?: WorldMode }) {
   const [background, setBackground] = useState<BackgroundId>('aurora');
   const [soundPack, setSoundPack] = useState<SoundPackId>('crystal');
   const [winEffect, setWinEffect] = useState<WinEffectId>('coins');
-  const [testing, setTesting] = useState(false);
+  // Open on the play-test: a creator should be able to play their own world
+  // for free the moment it exists, without hunting for a button.
+  const [testing, setTesting] = useState(true);
   const [published, setPublished] = useState<{ id: string } | null>(null);
   const [remixParent, setRemixParent] = useState<string | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
@@ -220,7 +223,10 @@ export function WorldBuilder({ mechanic = 'board' }: { mechanic?: WorldMode }) {
           {/* 3D preview / play-test */}
           <div className="glass overflow-hidden p-2">
             {testing ? (
-              <WorldGame meta={meta} edge={stats.edge} params={worldToParams(spec)} gameName={name || 'Preview'} />
+              <div className="space-y-2">
+                <DemoBar theoreticalRtp={1 - stats.edge} />
+                <WorldGame meta={meta} edge={stats.edge} params={worldToParams(spec)} gameName={name || 'Preview'} demo />
+              </div>
             ) : (
               <div className="relative h-[340px] overflow-hidden rounded-2xl sm:h-[400px]">
                 {spec.mode === 'nexus' && spec.nexus ? (
@@ -247,7 +253,7 @@ export function WorldBuilder({ mechanic = 'board' }: { mechanic?: WorldMode }) {
               : (spec.mode === 'ascent' ? ASCENT_TEMPLATES : BOARD_TEMPLATES).map((t) => (
                   <button key={t.id} className="chip hover:border-neon-cyan/50" title={t.hint} onClick={() => loadTemplate(t)}>{t.label}</button>
                 ))}
-            <button className="btn-ghost ml-auto !py-1.5 text-xs" onClick={() => setTesting((v) => !v)}>{testing ? 'Exit test' : 'Play test'}</button>
+            <button className="btn-ghost ml-auto !py-1.5 text-xs" onClick={() => setTesting((v) => !v)}>{testing ? 'Back to preview' : 'Play test (free demo)'}</button>
           </div>
 
           {/* tabs: World / Logic */}

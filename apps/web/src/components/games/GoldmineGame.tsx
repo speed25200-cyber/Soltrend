@@ -12,16 +12,16 @@ import { floatStream } from '@/lib/provably-fair';
 import { Icon } from '@/components/Icon';
 import { sfx } from '@/lib/sound';
 import { burstWin } from '@/lib/fx';
-import { MineSymbol, SYMBOL_COLORS } from './goldmine/MineSymbol';
+import { MineSymbol } from './goldmine/MineSymbol';
+import { ReelWindow, Cabinet, reelPlan } from './goldmine/ReelMachine';
 import {
-  REELS, ROWS, BERTHS, WAGON, SYMBOLS, MAX_WIN, DEFAULT_CONFIG,
+  REELS, ROWS, BERTHS, WAGON, SYMBOLS, MAX_WIN,
   playRound, slotFromParams, type RoundResult, type SlotConfig, type WagonCargo,
 } from '@/lib/slots/goldmine';
 import type { GameConfig } from './types';
 
 type Phase = 'idle' | 'spinning' | 'base' | 'boarding' | 'express' | 'done';
 
-const SPIN_MS = 700;
 const STEP_MS = 950;
 
 /**
@@ -29,13 +29,14 @@ const STEP_MS = 950;
  *
  * The whole round is resolved by the engine the instant you spin, so the outcome
  * is fixed by the reserved seed and nothing on screen can move it. The board
- * then replays it: reels drop, and if six wagons land the rig converts into a
- * train — wagons lock into berths holding their gold, and each respin is a step
- * down the track that only ends when three go by without a new wagon.
+ * then replays it: the bands travel and brake one reel at a time, hanging on the
+ * last ones while the wagons are still on pace, and if enough land the rig
+ * converts into a train — wagons lock into berths holding their gold, and each
+ * respin is a step down the track that only ends when three go by empty.
  */
-export function GoldmineGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, maxBet }: GameConfig) {
+export function GoldmineGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, maxBet, demo}: GameConfig) {
   const cfg: SlotConfig = useMemo(() => slotFromParams(params), [params]);
-  const { guard, reserveSeeds, settle } = usePlay(maxBet);
+  const { guard, reserveSeeds, settle } = usePlay(maxBet, demo);
   const bumpUgc = useCasino((s) => s.bumpUgc);
   const recordBest = useCasino((s) => s.recordBest);
 
@@ -45,6 +46,7 @@ export function GoldmineGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, para
   const [grid, setGrid] = useState<number[][] | null>(null);
   const [stepIdx, setStepIdx] = useState(0);
   const [spinKey, setSpinKey] = useState(0);
+  const [plan, setPlan] = useState(() => reelPlan(null, cfg.trigger));
   const timers = useRef<number[]>([]);
   const busy = useRef(false);
 
@@ -68,12 +70,20 @@ export function GoldmineGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, para
     const stream = floatStream(seeds.serverSeed, seeds.clientSeed, seeds.nonce);
     const round = playRound(() => stream.next(), cfg);
 
+    // The braking schedule is derived from the grid the engine just produced, so
+    // the reels hang exactly when the wagons really were still on pace.
+    const rp = reelPlan(round.base.grid, cfg.trigger);
     setResult(round);
     setGrid(round.base.grid);
     setStepIdx(0);
+    setPlan(rp);
     setSpinKey((k) => k + 1);
     setPhase('spinning');
     sfx.bet();
+    rp.stops.forEach((t, r) => {
+      if (rp.antic[r]) after(Math.max(0, t - 820), () => sfx.anticipate(820));
+      after(t, () => sfx.reelStop(r));
+    });
 
     // Settle now — the seed decided this, not the replay.
     settle(
@@ -92,19 +102,19 @@ export function GoldmineGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, para
     if (gameId) bumpUgc(gameId, bet);
     if (round.total > 0) recordBest(gameId ?? meta.slug, round.total);
 
-    after(SPIN_MS, () => {
+    after(rp.total, () => {
       setPhase('base');
       if (round.base.won > 0) sfx.tick(round.base.wins.length);
 
       if (round.bonus) {
         // The rig converts into a train.
-        after(900, () => {
+        after(1200, () => {
           setPhase('boarding');
           sfx.jackpot();
           after(1100, () => runSteps(1, round));
         });
       } else {
-        after(700, () => finish(round));
+        after(round.base.won > 0 ? 1000 : 500, () => finish(round));
       }
     });
   };
@@ -141,12 +151,12 @@ export function GoldmineGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, para
     <GameLayout
       meta={meta}
       stage={
-        <div className="relative h-full min-h-[400px] overflow-hidden rounded-2xl">
+        <div className="relative h-full min-h-[420px] overflow-hidden rounded-2xl sm:min-h-[480px]">
           {/* the shaft */}
           <div className="absolute inset-0 bg-[radial-gradient(120%_90%_at_50%_0%,#2a1d0d_0%,#0e0a06_55%,#05060f_100%)]" />
           <MineDust running={onTrain} />
 
-          <div className="relative z-10 flex h-full flex-col items-center justify-center gap-3 p-3">
+          <div className="relative z-10 flex h-full flex-col items-center justify-center gap-3 p-3 pb-14">
             <AnimatePresence mode="wait">
               {onTrain && train ? (
                 <motion.div
@@ -155,9 +165,13 @@ export function GoldmineGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, para
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -90 }}
                   transition={{ type: 'spring', stiffness: 160, damping: 22 }}
-                  className="w-full"
+                  className="flex w-full justify-center"
                 >
-                  <TrainBoard train={train} landed={step?.landed ?? []} />
+                  <Cabinet title="Express Run" lit>
+                    <div className="rounded-xl bg-[#06040a] p-2">
+                      <TrainBoard train={train} landed={step?.landed ?? []} />
+                    </div>
+                  </Cabinet>
                 </motion.div>
               ) : (
                 <motion.div
@@ -165,34 +179,17 @@ export function GoldmineGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, para
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0, scale: 0.94 }}
-                  className="flex gap-1.5 rounded-2xl border border-white/[0.07] bg-void-950/40 p-2 backdrop-blur-sm sm:gap-2 sm:p-3"
+                  className="flex w-full justify-center"
                 >
-                  {Array.from({ length: REELS }).map((_, r) => (
-                    <div key={r} className="flex flex-col gap-1.5 sm:gap-2">
-                      {Array.from({ length: ROWS }).map((_, row) => {
-                        const sym = grid?.[r]?.[row];
-                        return (
-                          <div key={row} className="relative grid h-11 w-11 place-items-center rounded-xl border border-white/[0.05] bg-black/25 sm:h-14 sm:w-14">
-                            <motion.div
-                              key={`${spinKey}-${r}-${row}`}
-                              initial={{ y: -70, opacity: 0 }}
-                              animate={{ y: 0, opacity: 1 }}
-                              transition={{ type: 'spring', stiffness: 380, damping: 24, delay: r * 0.07 + row * 0.02 }}
-                            >
-                              {sym !== undefined && <MineSymbol sym={sym} size={40} />}
-                            </motion.div>
-                            {sym === WAGON && phase === 'base' && (
-                              <motion.div
-                                className="pointer-events-none absolute inset-0 rounded-xl ring-2 ring-gold"
-                                animate={{ opacity: [0.3, 1, 0.3] }}
-                                transition={{ repeat: Infinity, duration: 1.1 }}
-                              />
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ))}
+                  <ReelWindow
+                    grid={grid}
+                    weights={cfg.weights}
+                    plan={plan}
+                    spinning={phase === 'spinning'}
+                    spinKey={spinKey}
+                    wins={result?.base.wins ?? []}
+                    showWins={phase === 'base' || phase === 'done'}
+                  />
                 </motion.div>
               )}
             </AnimatePresence>
@@ -217,8 +214,25 @@ export function GoldmineGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, para
                   )}
                 </>
               )}
-              {!onTrain && phase === 'base' && result && result.base.won > 0 && (
-                <span className="font-mono text-xl font-black text-white">{result.base.won.toFixed(2)}×</span>
+              {!onTrain && (phase === 'base' || phase === 'done') && result && result.base.wins.length > 0 && (
+                <>
+                  {result.base.wins.map((w) => (
+                    <motion.span
+                      key={w.sym}
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="flex items-center gap-1 rounded-lg border border-gold/25 bg-gold/[0.07] px-2 py-0.5"
+                    >
+                      <MineSymbol sym={w.sym} size={16} />
+                      <span className="font-mono text-[0.62rem] text-amber-200">
+                        {w.length}× · {w.ways} ways · {w.pay.toFixed(2)}
+                      </span>
+                    </motion.span>
+                  ))}
+                  <motion.span key={result.base.won} initial={{ scale: 1.25 }} animate={{ scale: 1 }} className="font-mono text-xl font-black text-white">
+                    {result.base.won.toFixed(2)}×
+                  </motion.span>
+                </>
               )}
             </div>
           </div>

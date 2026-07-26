@@ -3,9 +3,10 @@
 @tailwind utilities;
 
 :root {
-  --font-sans: 'Sora', system-ui, -apple-system, sans-serif;
-  --font-display: 'Space Grotesk', 'Sora', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+  /* The -src variables are injected by next/font in the root layout. */
+  --font-sans: var(--font-sans-src), system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: var(--font-display-src), var(--font-sans-src), system-ui, sans-serif;
+  --font-mono: var(--font-mono-src), ui-monospace, 'SF Mono', monospace;
 }
 
 @layer base {
@@ -13,8 +14,23 @@
     -webkit-tap-highlight-color: transparent;
     scroll-behavior: smooth;
   }
+  /* Headlines sit tighter than the body — a grotesque at display size needs the
+     air taken out of it, or it reads as a paragraph that happens to be large. */
+  h1,
+  h2,
+  h3,
+  .font-display {
+    letter-spacing: -0.021em;
+  }
+  /* Every figure in this product is compared against another figure: balances
+     against balances, multipliers down a column. They must not shift width. */
+  code,
+  .font-mono {
+    font-variant-numeric: tabular-nums;
+  }
   body {
     @apply bg-void-950 text-slate-200 font-sans antialiased;
+    text-rendering: optimizeLegibility;
     background-image:
       radial-gradient(60% 50% at 20% -5%, rgba(139, 92, 246, 0.14), transparent 60%),
       radial-gradient(50% 45% at 95% 0%, rgba(217, 70, 239, 0.1), transparent 55%),

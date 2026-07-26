@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useCasino } from '@/lib/store';
 import { shortAddr } from '@/lib/format';
 import { Icon } from './Icon';
@@ -18,6 +18,13 @@ export function FairnessBar() {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(seeds.clientSeed);
 
+  // The seed pair is generated in the browser (and restored from storage), so it
+  // cannot exist in the prerendered HTML. Rendering it before hydration finishes
+  // mismatches and makes React throw the whole server tree away — on every game
+  // page. Hold the values back for one paint instead.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   return (
     <div className="glass mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 px-4 py-3 text-xs">
       <div className="flex items-center gap-2">
@@ -28,7 +35,7 @@ export function FairnessBar() {
       </div>
 
       <Field label="Server seed (hashed)">
-        <code className="font-mono text-slate-400">{shortAddr(seeds.serverSeedHash, 6)}</code>
+        <code className="font-mono text-slate-400">{mounted ? shortAddr(seeds.serverSeedHash, 6) : '••••••'}</code>
       </Field>
 
       <Field label="Client seed">
@@ -46,13 +53,13 @@ export function FairnessBar() {
           />
         ) : (
           <button className="inline-flex items-center gap-1 font-mono text-slate-400 hover:text-white" onClick={() => setEditing(true)}>
-            {seeds.clientSeed} <Icon name="pencil" size={11} />
+            {mounted ? seeds.clientSeed : '••••••'} <Icon name="pencil" size={11} />
           </button>
         )}
       </Field>
 
       <Field label="Nonce">
-        <code className="font-mono text-slate-400">{seeds.nonce}</code>
+        <code className="font-mono text-slate-400">{mounted ? seeds.nonce : '—'}</code>
       </Field>
 
       <div className="ml-auto flex items-center gap-2">

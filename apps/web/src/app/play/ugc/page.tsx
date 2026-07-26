@@ -4,7 +4,7 @@ import { Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useCasino } from '@/lib/store';
-import { GameScreen } from '@/components/games/GameScreen';
+import { PlayModeGame } from '@/components/games/PlayModeGame';
 import { GameStakePanel } from '@/components/GameStakePanel';
 import { JourneyChip } from '@/components/Collection';
 import { maxBetFor } from '@/lib/economics';
@@ -75,7 +75,7 @@ function UgcInner() {
             </Link>
           )}
         </div>
-        <GameScreen
+        <PlayModeGame
           config={{ meta, edge: game.edge, gameId: game.id, gameName: game.name, params: game.params, maxBet: maxBetFor(game.tvl ?? 0, game.maxWin ?? 100), maxWin: game.maxWin }}
         />
       </div>

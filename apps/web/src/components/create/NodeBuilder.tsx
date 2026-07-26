@@ -8,6 +8,7 @@ import { useCasino } from '@/lib/store';
 import { Icon, STUDIO_ICONS, type IconName } from '@/components/Icon';
 import { ForgeEditor } from '@/components/forge/ForgeEditor';
 import { GraphGame } from '@/components/games/GraphGame';
+import { DemoBar } from '@/components/games/DemoBar';
 import { simulateGraph, normaliseEdge, starterGraph, FORGE_TEMPLATES, type ForgeGraph } from '@/lib/forge/model';
 import { generateDistinct, noveltyScore, FEELINGS, type Feeling, type Candidate } from '@/lib/forge/generator';
 import { describeWithAI, aiEnabled } from '@/lib/forge/aiCreate';
@@ -99,7 +100,8 @@ export function NodeBuilder() {
     applyPreset(STYLE_PRESETS[(Math.random() * STYLE_PRESETS.length) | 0].style);
     setName(randomName());
   };
-  const [testing, setTesting] = useState(false);
+  // Open on the play-test — the graph means nothing until you play it.
+  const [testing, setTesting] = useState(true);
   const [published, setPublished] = useState<{ id: string } | null>(null);
   const [remixParent, setRemixParent] = useState<string | null>(null);
   const [editId, setEditId] = useState<string | null>(null); // editing one of my games in place
@@ -367,13 +369,13 @@ export function NodeBuilder() {
                 {t.label}
               </button>
             ))}
-            <button className="btn-ghost ml-auto !py-1.5 text-xs" onClick={() => setTesting((t) => !t)}>{testing ? 'Hide test' : 'Test drive'}</button>
+            <button className="btn-ghost ml-auto !py-1.5 text-xs" onClick={() => setTesting((t) => !t)}>{testing ? 'Hide test' : 'Play test (free demo)'}</button>
           </div>
 
           {testing && (
-            <div className="glass p-2">
-              <p className="px-3 pb-2 pt-1 text-xs text-slate-500">Live demo of your current graph — plays with your balance.</p>
-              <GraphGame meta={meta} params={{ graph: JSON.stringify(graph) }} gameName={name || 'Preview'} />
+            <div className="glass space-y-2 p-2">
+              <DemoBar theoreticalRtp={sim.rtp} />
+              <GraphGame meta={meta} params={{ graph: JSON.stringify(graph) }} gameName={name || 'Preview'} demo />
             </div>
           )}
         </div>

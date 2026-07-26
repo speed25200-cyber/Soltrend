@@ -21,8 +21,8 @@ import { burstWin } from '@/lib/fx';
 import type { GameConfig } from './types';
 
 /** Runtime for a node-graph ("Forge") game — same interpreter as the editor. */
-export function GraphGame({ meta, gameId, gameName, params, maxBet }: GameConfig) {
-  const { guard, reserveSeeds, settle } = usePlay(maxBet);
+export function GraphGame({ meta, gameId, gameName, params, maxBet, demo}: GameConfig) {
+  const { guard, reserveSeeds, settle } = usePlay(maxBet, demo);
   const bumpUgc = useCasino((s) => s.bumpUgc);
 
   const graph = useMemo<ForgeGraph | null>(() => {

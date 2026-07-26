@@ -119,6 +119,20 @@ export const sfx = {
     void resume();
     [440, 587.33, 880].forEach((f, i) => tone(f, i * 0.09, 0.22, { type: 'triangle', gain: 0.1 }));
   },
+  /** A reel braking: the mechanical thunk, pitched down reel by reel. */
+  reelStop(index = 0) {
+    if (!guard()) return;
+    tone(300 - index * 22, 0, 0.05, { type: 'square', gain: 0.07, to: 120 - index * 8 });
+    tone(1300 + index * 60, 0.005, 0.025, { type: 'triangle', gain: 0.025 });
+  },
+  /** The hang: a rising tone while a reel is still live for the trigger. */
+  anticipate(ms = 800) {
+    if (!guard()) return;
+    void resume();
+    const d = Math.max(0.2, ms / 1000);
+    tone(300, 0, d, { type: 'sawtooth', gain: 0.05, to: 760 });
+    tone(452, 0, d, { type: 'sine', gain: 0.03, to: 1140 });
+  },
   /** Per-game sound pack — win arpeggio flavoured by the creator's chosen pack. */
   packWin(pack: string, mult = 2) {
     if (!guard() || pack === 'none') return;

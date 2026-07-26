@@ -14,8 +14,8 @@ import { MAX_PAYOUT } from '@/lib/forge/board';
 import { fmtMult } from '@/lib/format';
 import type { GameConfig } from './types';
 
-export function LimboGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, maxBet, maxWin }: GameConfig) {
-  const { guard, reserveSeeds, settle } = usePlay(maxBet);
+export function LimboGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, maxBet, maxWin, demo}: GameConfig) {
+  const { guard, reserveSeeds, settle } = usePlay(maxBet, demo);
   const bumpUgc = useCasino((s) => s.bumpUgc);
 
   // The player picks their own multiplier here, so it must be capped: the

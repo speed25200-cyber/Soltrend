@@ -40,8 +40,8 @@ function genPlayers(): Player[] {
   }));
 }
 
-export function CrashGame({ meta, edge = DEFAULT_EDGE, gameId, gameName }: GameConfig) {
-  const { guard, reserveSeeds, settle } = usePlay();
+export function CrashGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, maxBet, demo }: GameConfig) {
+  const { guard, reserveSeeds, settle } = usePlay(maxBet, demo);
   const bumpUgc = useCasino((s) => s.bumpUgc);
 
   const [bet, setBet] = useState(0.1);

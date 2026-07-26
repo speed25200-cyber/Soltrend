@@ -66,8 +66,8 @@ function buildRing(risk: Risk, edge: number): { mult: number; color: string }[] 
   return ring;
 }
 
-export function WheelGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params , maxBet}: GameConfig) {
-  const { guard, reserveSeeds, settle } = usePlay(maxBet);
+export function WheelGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params , maxBet, demo}: GameConfig) {
+  const { guard, reserveSeeds, settle } = usePlay(maxBet, demo);
   const bumpUgc = useCasino((s) => s.bumpUgc);
 
   const [bet, setBet] = useState(0.1);

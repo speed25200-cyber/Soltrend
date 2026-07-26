@@ -14,8 +14,8 @@ import { fmtMult } from '@/lib/format';
 import { Icon } from '@/components/Icon';
 import type { GameConfig } from './types';
 
-export function CoinflipGame({ meta, edge = DEFAULT_EDGE, gameId, gameName , maxBet}: GameConfig) {
-  const { guard, reserveSeeds, settle } = usePlay(maxBet);
+export function CoinflipGame({ meta, edge = DEFAULT_EDGE, gameId, gameName , maxBet, demo}: GameConfig) {
+  const { guard, reserveSeeds, settle } = usePlay(maxBet, demo);
   const bumpUgc = useCasino((s) => s.bumpUgc);
 
   const [bet, setBet] = useState(0.1);

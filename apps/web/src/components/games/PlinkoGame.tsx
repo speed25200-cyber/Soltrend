@@ -21,8 +21,8 @@ interface Ball {
   bucket: number;
 }
 
-export function PlinkoGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params , maxBet}: GameConfig) {
-  const { guard, reserveSeeds, settle } = usePlay(maxBet);
+export function PlinkoGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params , maxBet, demo}: GameConfig) {
+  const { guard, reserveSeeds, settle } = usePlay(maxBet, demo);
   const bumpUgc = useCasino((s) => s.bumpUgc);
 
   const [bet, setBet] = useState(0.1);
