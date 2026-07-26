@@ -1,10 +1,10 @@
 'use client';
 
 import { useWallet } from '@solana/wallet-adapter-react';
-import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { useState } from 'react';
 import { shortAddr } from '@/lib/format';
 import { clusterName, useWalletError } from './WalletProviders';
+import { WalletPicker } from './WalletPicker';
 
 /**
  * Custom connect button. We drive wallet-adapter's modal directly so the trigger
@@ -12,16 +12,16 @@ import { clusterName, useWalletError } from './WalletProviders';
  */
 export function ConnectButton({ compact = false }: { compact?: boolean }) {
   const { publicKey, connected, disconnect, connecting, wallet } = useWallet();
-  const { setVisible } = useWalletModal();
   const { error, clear } = useWalletError();
   const [open, setOpen] = useState(false);
+  const [picking, setPicking] = useState(false);
 
   if (!connected) {
     return (
       <div className="relative">
         <button
           className="btn-primary !py-2.5 !px-4 text-sm"
-          onClick={() => { clear(); setVisible(true); }}
+          onClick={() => { clear(); setPicking(true); }}
         >
           <PhantomGlyph />
           {connecting ? 'Connecting…' : compact ? 'Connect' : 'Connect Wallet'}
@@ -36,6 +36,7 @@ export function ConnectButton({ compact = false }: { compact?: boolean }) {
             </div>
           </div>
         )}
+        {picking && <WalletPicker onClose={() => setPicking(false)} />}
       </div>
     );
   }
@@ -59,6 +60,7 @@ export function ConnectButton({ compact = false }: { compact?: boolean }) {
           <path d="M6 9l6 6 6-6" stroke="currentColor" strokeWidth="2" fill="none" />
         </svg>
       </button>
+      {picking && <WalletPicker onClose={() => setPicking(false)} />}
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
@@ -75,7 +77,7 @@ export function ConnectButton({ compact = false }: { compact?: boolean }) {
             <button
               className="w-full text-left px-3 py-2 rounded-lg text-sm hover:bg-white/5 text-slate-300"
               onClick={() => {
-                setVisible(true);
+                setPicking(true);
                 setOpen(false);
               }}
             >
