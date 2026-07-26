@@ -14,7 +14,7 @@ import {
 } from '@/lib/forge/board';
 import {
   defaultWorld, worldStats, worldToParams, worldFromParams, normaliseLogic, newProp,
-  ascentLanes, ascentFloors, WORLD_MODES, ASCENT_TEMPLATES, NEXUS_TEMPLATES,
+  ascentLanes, ascentFloors, ASCENT_TEMPLATES, NEXUS_TEMPLATES, type WorldMode,
   ENVIRONMENTS, CAMERAS, PROP_TYPES, type WorldSpec, type EnvironmentId, type CameraId, type PropType, type WorldProp,
 } from '@/lib/forge/world';
 import { starterGraph, simulateGraph } from '@/lib/forge/model';
@@ -44,12 +44,23 @@ const Nexus3D = dynamic(() => import('@/components/worlds/Nexus3D'), {
 const ACCENTS: GameMeta['accent'][] = ['violet', 'cyan', 'gold', 'pink', 'win'];
 type Tab = 'world' | 'logic';
 
-export function WorldBuilder() {
+/**
+ * `mechanic` comes from the studio's game gallery, which already asked the
+ * creator what they wanted to make — so the builder opens straight on it
+ * instead of asking a second time in our own vocabulary.
+ */
+export function WorldBuilder({ mechanic = 'board' }: { mechanic?: WorldMode }) {
   const { publicKey, connected } = useWallet();
   const publishUgc = useCasino((s) => s.publishUgc);
   const ugc = useCasino((s) => s.ugc);
 
-  const [spec, setSpecRaw] = useState<WorldSpec>(() => defaultWorld(clampSpec(BOARD_TEMPLATES[0].spec)));
+  const [spec, setSpecRaw] = useState<WorldSpec>(() => {
+    const base = defaultWorld(clampSpec(BOARD_TEMPLATES[0].spec));
+    // Nexus needs a starting map or its validator has nothing to check.
+    return mechanic === 'nexus'
+      ? { ...base, mode: mechanic, nexus: NEXUS_TEMPLATES[0].build() }
+      : { ...base, mode: mechanic };
+  });
   const setBoard = (patch: Partial<WorldSpec['board']>) => setSpecRaw((s) => ({ ...s, board: clampSpec({ ...s.board, ...patch }) }));
   const setWorld = (patch: Partial<WorldSpec>) => setSpecRaw((s) => ({ ...s, ...patch }));
   const [target, setTarget] = useState(2);
@@ -247,27 +258,6 @@ export function WorldBuilder() {
 
           {tab === 'world' ? (
             <div className="glass space-y-4 p-4">
-              <div>
-                <span className="label-eyebrow">Mechanic</span>
-                <div className="mt-1.5 grid grid-cols-2 gap-2">
-                  {WORLD_MODES.map((m) => (
-                    <button
-                      key={m.id}
-                      onClick={() => {
-                        // Seed a starting map the first time they pick Nexus, so the
-                        // editor opens on something playable instead of an error.
-                        setWorld(m.id === 'nexus' && !spec.nexus ? { mode: m.id, nexus: NEXUS_TEMPLATES[0].build() } : { mode: m.id });
-                        sfx.click();
-                      }}
-                      className={`rounded-xl px-3 py-2 text-left transition ${spec.mode === m.id ? 'bg-neon-cyan/15 text-white ring-1 ring-neon-cyan/50' : 'bg-void-900/60 text-slate-400 hover:text-white'}`}
-                    >
-                      <div className="text-sm font-semibold">{m.label}</div>
-                      <div className="text-[0.62rem] leading-tight text-slate-500">{m.hint}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               {spec.mode === 'nexus' ? (
                 <NexusEditor spec={spec.nexus ?? NEXUS_TEMPLATES[0].build()} onChange={(n) => setWorld({ nexus: n })} />
               ) : spec.mode === 'ascent' ? (

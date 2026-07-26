@@ -1,150 +1,166 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { SectionHead } from '@/components/SectionHead';
-import { Icon, type IconName } from '@/components/Icon';
+import { Icon } from '@/components/Icon';
 import { WorldBuilder } from '@/components/create/WorldBuilder';
 import { NodeBuilder } from '@/components/create/NodeBuilder';
 import { SpriteEditor } from '@/components/create/SpriteEditor';
 import { ClassicsBuilder } from '@/components/create/ClassicsBuilder';
 import { SlotBuilder } from '@/components/create/SlotBuilder';
+import { GAME_KINDS, EFFORT_LABEL, kindById, type GameKind, type KindId } from '@/lib/studio/kinds';
 import { sfx } from '@/lib/sound';
 
-type Mode = 'slot' | 'world' | 'node' | 'classic' | 'art';
-
 /**
- * The single creation surface — 3D World and Node game builders merged behind one
- * switch. Deep-linkable via ?mode=world|node (&remix=<id>); the old /worlds,
- * /forge and /arcade routes redirect here.
+ * The studio.
+ *
+ * It used to open on five cards named after our engines — "Node game", "3D
+ * World", "Classic" — with a second mechanic menu hidden inside one of them and
+ * a pixel-art editor filed alongside the game builders as if it were a game. A
+ * creator had to understand our architecture before they could pick anything.
+ *
+ * Now there is one question: what do you want to make. Every game we can build
+ * is in one flat list, described by how it plays, with an honest note on how
+ * long it takes. Pick one and you go straight into building it — no second menu,
+ * no vocabulary to learn. Art tools live under Tools, because they are not games.
  */
 export default function StudioPage() {
-  const [mode, setMode] = useState<Mode>('slot');
-  const [showTip, setShowTip] = useState(false);
+  const [kind, setKind] = useState<KindId | null>(null);
+  const [art, setArt] = useState(false);
 
+  // Deep links: ?make=slot (and the older ?mode=) drop straight into a builder,
+  // which is what remix/edit links rely on.
   useEffect(() => {
-    const m = new URLSearchParams(window.location.search).get('mode');
-    if (m === 'slot' || m === 'node' || m === 'world' || m === 'art' || m === 'classic') setMode(m);
-    try {
-      setShowTip(!window.localStorage.getItem('soltrend-studio-tip'));
-    } catch {
-      /* ignore */
-    }
+    const q = new URLSearchParams(window.location.search);
+    const make = q.get('make') ?? q.get('mode');
+    if (make === 'art') { setArt(true); return; }
+    const legacy: Record<string, KindId> = { world: 'board', node: 'node', classic: 'towers' };
+    const id = (kindById(make ?? '')?.id ?? legacy[make ?? '']) as KindId | undefined;
+    if (id) setKind(id);
   }, []);
 
-  const dismissTip = () => {
-    setShowTip(false);
-    try {
-      window.localStorage.setItem('soltrend-studio-tip', '1');
-    } catch {
-      /* ignore */
-    }
-  };
-
-  const pick = (m: Mode) => {
-    setMode(m);
+  const pick = (id: KindId) => {
+    setKind(id);
+    setArt(false);
     sfx.click();
-    // keep the URL shareable without a reload
     const url = new URL(window.location.href);
-    url.searchParams.set('mode', m);
+    url.searchParams.set('make', id);
+    url.searchParams.delete('mode');
     window.history.replaceState({}, '', url);
   };
 
-  return (
-    <div className="space-y-6">
-      <SectionHead
-        eyebrow="Create · Studio"
-        title="Build a game"
-        sub="Build a slot, a 3D world, a node mechanic or a reskinned classic — provably fair, vault-safe, published in a tap."
-      />
+  const reset = () => {
+    setKind(null);
+    setArt(false);
+    const url = new URL(window.location.href);
+    url.searchParams.delete('make');
+    url.searchParams.delete('mode');
+    window.history.replaceState({}, '', url);
+  };
 
-      {showTip && (
-        <div className="glass relative flex flex-col gap-2 p-4 text-sm">
-          <button onClick={dismissTip} className="absolute right-3 top-3 text-slate-500 hover:text-white" aria-label="Dismiss">
-            <Icon name="close" size={14} />
-          </button>
-          <p className="font-display font-bold text-white">New here? Pick a mode:</p>
-          <ul className="grid gap-1 text-xs text-slate-400 sm:grid-cols-2">
-            <li><b className="text-slate-200">Slot</b> — a cascading ore slot; choose the feel, the maths is handled.</li>
-            <li><b className="text-slate-200">3D World</b> — a spatial board players reveal, with decor + optional logic.</li>
-            <li><b className="text-slate-200">Node game</b> — invent a mechanic from a prompt, a feeling, or node-by-node.</li>
-            <li><b className="text-slate-200">Classic</b> — reskin + retune the Towers climb, then ship it.</li>
-            <li><b className="text-slate-200">Symbols</b> — draw pixel art for slot/scratch games (an asset tool, not a game).</li>
-          </ul>
-          <p className="text-xs text-slate-500">Every builder autosaves a draft. Published a game? Manage it and claim royalties under <span className="text-neon-violet">My games</span>.</p>
+  const active = kind ? kindById(kind) : null;
+
+  /* ------------------------------------------------------- the chooser */
+  if (!kind && !art) {
+    return (
+      <div className="space-y-6">
+        <SectionHead
+          eyebrow="Create · Studio"
+          title="What do you want to make?"
+          sub="Pick a game. Everything else — the odds, the payout table, the fairness proof — is handled for you and checked before it can go live."
+        />
+
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {GAME_KINDS.map((k) => (
+            <KindCard key={k.id} kind={k} onClick={() => pick(k.id)} />
+          ))}
         </div>
-      )}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <ModeCard
-          active={mode === 'slot'}
-          onClick={() => pick('slot')}
-          icon="gem"
-          title="Slot"
-          blurb="A cascading ore slot — pick the feel, the paytable is solved for you."
-          accent="#ffd25f"
-        />
-        <ModeCard
-          active={mode === 'world'}
-          onClick={() => pick('world')}
-          icon="gem"
-          title="3D World"
-          blurb="A playable 3D board players reveal in space, with decor + an optional logic core."
-          accent="#22d3ee"
-        />
-        <ModeCard
-          active={mode === 'node'}
-          onClick={() => pick('node')}
-          icon="orbit"
-          title="Node game"
-          blurb="Generate a game from a feeling, or wire your own mechanic node-by-node."
-          accent="#a855f7"
-        />
-        <ModeCard
-          active={mode === 'classic'}
-          onClick={() => pick('classic')}
-          icon="target"
-          title="Classic"
-          blurb="Reskin the Towers dungeon-climb — pick a difficulty and a look, then ship it."
-          accent="#10f5a0"
-        />
-        <ModeCard
-          active={mode === 'art'}
-          onClick={() => pick('art')}
-          icon="star"
-          title="Symbols"
-          blurb="Draw your own pixel symbols — then use them in your slot and scratch games."
-          accent="#ffd25f"
-        />
+        <div className="glass flex flex-wrap items-center gap-3 p-4">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-white/[0.06] text-slate-300">
+            <Icon name="pencil" size={16} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-semibold text-white">Tools</div>
+            <div className="text-xs text-slate-500">Draw your own pixel symbols to use in slot games. Not a game on its own.</div>
+          </div>
+          <button onClick={() => { setArt(true); sfx.click(); }} className="btn-ghost text-xs">Symbol editor</button>
+        </div>
+
+        <p className="text-center text-xs text-slate-600">
+          Already published something? Manage it under <Link href="/studio/games" className="text-neon-violet">My games</Link>.
+        </p>
+      </div>
+    );
+  }
+
+  /* -------------------------------------------------------- the builder */
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-center gap-3">
+        <button onClick={reset} className="btn-ghost !py-2 text-xs">
+          <Icon name="close" size={12} /> Change
+        </button>
+        {active && (
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl" style={{ background: `${active.accent}1a`, color: active.accent }}>
+              <Icon name={active.icon} size={18} />
+            </span>
+            <div className="min-w-0">
+              <div className="font-display text-sm font-bold text-white">Building a {active.name.toLowerCase()}</div>
+              <div className="truncate text-xs text-slate-500">{active.plays}</div>
+            </div>
+          </div>
+        )}
+        {art && (
+          <div className="flex items-center gap-2.5">
+            <span className="grid h-9 w-9 place-items-center rounded-xl bg-white/[0.06] text-slate-300"><Icon name="pencil" size={18} /></span>
+            <div>
+              <div className="font-display text-sm font-bold text-white">Symbol editor</div>
+              <div className="text-xs text-slate-500">Draw symbols, then pick them when you build a slot.</div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {mode === 'slot' ? (
-        <SlotBuilder />
-      ) : mode === 'world' ? (
-        <WorldBuilder />
-      ) : mode === 'node' ? (
-        <NodeBuilder />
-      ) : mode === 'classic' ? (
-        <ClassicsBuilder />
-      ) : (
+      {art ? (
         <SpriteEditor />
+      ) : kind === 'slot' ? (
+        <SlotBuilder />
+      ) : kind === 'towers' ? (
+        <ClassicsBuilder />
+      ) : kind === 'node' ? (
+        <NodeBuilder />
+      ) : (
+        <WorldBuilder mechanic={kind === 'ascent' ? 'ascent' : kind === 'nexus' ? 'nexus' : 'board'} />
       )}
     </div>
   );
 }
 
-function ModeCard({ active, onClick, icon, title, blurb, accent }: { active: boolean; onClick: () => void; icon: IconName; title: string; blurb: string; accent: string }) {
+function KindCard({ kind, onClick }: { kind: GameKind; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      className="glass glass-hover flex items-center gap-3 p-4 text-left transition"
-      style={active ? { borderColor: `${accent}88`, boxShadow: `0 0 0 1px ${accent}55, 0 10px 30px -14px ${accent}` } : undefined}
+      className="glass glass-hover group relative overflow-hidden p-5 text-left transition"
     >
-      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl" style={{ background: `${accent}1a`, color: accent }}>
-        <Icon name={icon} size={20} />
-      </span>
-      <div className="flex-1">
-        <div className="font-display text-sm font-bold text-white">{title}{active && <span className="ml-2 text-[0.62rem] font-bold" style={{ color: accent }}>● building</span>}</div>
-        <div className="text-xs text-slate-500">{blurb}</div>
+      <div
+        className="pointer-events-none absolute -right-8 -top-8 h-28 w-28 rounded-full opacity-30 blur-2xl transition group-hover:opacity-60"
+        style={{ background: kind.accent }}
+      />
+      <div className="relative z-10">
+        <div className="flex items-start justify-between gap-2">
+          <span className="grid h-11 w-11 place-items-center rounded-xl" style={{ background: `${kind.accent}1a`, color: kind.accent }}>
+            <Icon name={kind.icon} size={22} />
+          </span>
+          <span className="chip !text-[0.58rem]">{EFFORT_LABEL[kind.effort]} · {kind.minutes}</span>
+        </div>
+        <h3 className="mt-3 font-display text-lg font-bold text-white">{kind.name}</h3>
+        <p className="mt-1 text-sm leading-relaxed text-slate-400">{kind.plays}</p>
+        <p className="mt-2.5 text-[0.68rem] text-slate-500">
+          <span className="text-slate-400">You choose:</span> {kind.youChoose}
+        </p>
       </div>
     </button>
   );

@@ -9,8 +9,8 @@ import { GameStakePanel } from '@/components/GameStakePanel';
 import { JourneyChip } from '@/components/Collection';
 import { maxBetFor } from '@/lib/economics';
 import type { GameMeta } from '@/lib/catalog';
+import { studioLink } from '@/lib/studio/kinds';
 
-const STUDIO_MODE: Record<string, string> = { graph: 'node', board: 'world', towers: 'classic' };
 
 export default function UgcPlayPage() {
   return (
@@ -69,8 +69,8 @@ function UgcInner() {
           )}
           {remixCount > 0 && <span className="chip">{remixCount} remix{remixCount === 1 ? '' : 'es'} · original earns royalties</span>}
           <JourneyChip gameId={game.id} />
-          {STUDIO_MODE[game.template] && (
-            <Link href={`/studio?mode=${STUDIO_MODE[game.template]}&remix=${game.id}`} className="chip hover:border-neon-violet/50" title="Fork this game in the studio">
+          {studioLink(game, 'remix') && (
+            <Link href={studioLink(game, 'remix')!} className="chip hover:border-neon-violet/50" title="Fork this game in the studio">
               Remix →
             </Link>
           )}
