@@ -776,6 +776,17 @@ export const useCasino = create<CasinoState>()(
       name: 'soltrend-casino-v2',
       version: PERSIST_VERSION,
       /**
+       * Do not restore the saved session while React is hydrating.
+       *
+       * Rehydrating at store-creation time means the first client render already
+       * carries browser state the prerendered HTML could not have — a different
+       * community-game list, a different balance — so React finds a mismatch and
+       * throws the whole server tree away. It showed up as an intermittent
+       * failure on Discover, where a card's accent colour differed between the
+       * two renders. `HydrateStore` calls `rehydrate()` once, after mount.
+       */
+      skipHydration: true,
+      /**
        * Anything read back from storage is untrusted input.
        *
        * It may be from an older build, hand-edited, or truncated by a full disk

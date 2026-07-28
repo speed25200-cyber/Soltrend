@@ -57,7 +57,7 @@ for (const viewport of VIEWPORTS) {
   // Past the age gate, so the sweep reaches the pages behind it.
   await context.addInitScript(() => {
     try {
-      localStorage.setItem('soltrend-casino-v2', JSON.stringify({ state: { ageOk: true }, version: 0 }));
+      localStorage.setItem('soltrend-casino-v2', JSON.stringify({ state: { ageVerified: true }, version: 1 }));
     } catch {
       /* storage disabled — the gate click below still handles it */
     }

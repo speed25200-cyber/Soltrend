@@ -12,6 +12,7 @@ import { LevelChip } from './LevelChip';
 import { JackpotPill } from './JackpotPill';
 import { SectionTabs } from './SectionTabs';
 import { SECTIONS, sectionFor, type NavSection } from '@/lib/nav';
+import { HydrateStore } from './HydrateStore';
 import { useCasino } from '@/lib/store';
 import { setSoundOn } from '@/lib/sound';
 
@@ -42,6 +43,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-dvh">
+      <HydrateStore />
       <a href="#main" className="skip-link btn-primary !py-2 text-sm">Skip to content</a>
       {/* Top bar */}
       <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-void-950/70 backdrop-blur-xl">
