@@ -7,7 +7,7 @@ import { BetAmount } from '@/components/BetControls';
 import { BetButton } from './BetButton';
 import { usePlay } from '@/hooks/usePlay';
 import { useCasino } from '@/lib/store';
-import { minesLayout, minesMultiplier, DEFAULT_EDGE, round2 } from '@/lib/games';
+import { minesLayout, minesMultiplier, MAX_MULTIPLIER, DEFAULT_EDGE, round2 } from '@/lib/games';
 import { fmtMult } from '@/lib/format';
 import { Icon } from '@/components/Icon';
 import type { GameConfig } from './types';
@@ -151,6 +151,11 @@ export function MinesGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params 
               onChange={(e) => setBombs(parseInt(e.target.value))}
               className="mt-2 w-full accent-neon-violet"
             />
+            {/* The ladder on a heavily-mined board runs past what the vault can
+                settle, so the ceiling is stated rather than discovered. */}
+            <p className="mt-1.5 text-[0.62rem] text-slate-600">
+              Max win {fmtMult(MAX_MULTIPLIER)} — the vault&apos;s payout ceiling.
+            </p>
           </div>
 
           <BetAmount value={bet} onChange={setBet} disabled={phase === 'playing'} />

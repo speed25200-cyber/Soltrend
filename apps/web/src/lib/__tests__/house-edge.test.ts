@@ -6,6 +6,7 @@ import {
   WHEEL_RINGS, WHEEL_SEGMENTS,
 } from '@/lib/games';
 import { floatStream } from '@/lib/provably-fair';
+import { runGraph, type ForgeGraph } from '@/lib/forge/model';
 
 /**
  * The house edge is the product's core economic invariant, and the one a
@@ -255,6 +256,13 @@ describe('mines', () => {
           let fair = 1;
           for (let i = 0; i < picks; i++) fair *= (grid - i) / (grid - bombs - i);
           const quoted = minesMultiplier(grid, bombs, picks, edge);
+          // Rungs held at the vault ceiling pay the player less than fair —
+          // never more — so they are excluded from the exactness check and
+          // asserted separately in the ceiling suite below.
+          if (fair * (1 - clampEdge(edge)) > MAX_MULTIPLIER) {
+            expect(quoted).toBe(MAX_MULTIPLIER);
+            continue;
+          }
           expect(quoted).toBeCloseTo(fair * (1 - clampEdge(edge)), 12);
           // The player's expectation at that step: P(survive) * multiplier.
           let survive = 1;
@@ -278,10 +286,80 @@ describe('towers', () => {
         for (let level = 1; level <= 12; level++) {
           const fair = Math.pow(cols / (cols - 1), level);
           const quoted = towersMultiplier(cols, level, edge);
+          if (fair * (1 - clampEdge(edge)) > MAX_MULTIPLIER) {
+            expect(quoted).toBe(MAX_MULTIPLIER);
+            continue;
+          }
           expect(quoted).toBeCloseTo(fair * (1 - clampEdge(edge)), 12);
           const survive = Math.pow((cols - 1) / cols, level);
           expect(survive * quoted).toBeCloseTo(1 - clampEdge(edge), 12);
           expect(inBand(1 - survive * quoted)).toBe(true);
+        }
+      }
+    }
+  });
+});
+
+describe('the payout ceiling, across every engine', () => {
+  /**
+   * No engine may quote a multiplier the vault cannot settle.
+   *
+   * The chain caps a single payout at `max_payout_lamports`; a client that
+   * quotes past it is promising money that will not arrive. Mines reached
+   * 3,236,000x on a 10-bomb board cleared to the end before this was enforced.
+   */
+  it('holds Mines at the ceiling on every board a player can set', () => {
+    for (const edge of EDGES) {
+      for (let bombs = 1; bombs <= 24; bombs++) {
+        for (let picks = 0; picks <= 25 - bombs; picks++) {
+          const m = minesMultiplier(25, bombs, picks, edge);
+          expect(m).toBeGreaterThan(0);
+          expect(m).toBeLessThanOrEqual(MAX_MULTIPLIER);
+        }
+      }
+    }
+  });
+
+  it('holds Towers at the ceiling however tall the climb', () => {
+    for (const edge of EDGES) {
+      for (const cols of [2, 3, 4, 5]) {
+        for (let level = 0; level <= 60; level++) {
+          expect(towersMultiplier(cols, level, edge)).toBeLessThanOrEqual(MAX_MULTIPLIER);
+        }
+      }
+    }
+  });
+
+  it('holds a node graph at the ceiling whatever arithmetic it contains', () => {
+    // A graph is arbitrary maths a creator wired together, so the guarantee has
+    // to come from the interpreter rather than from reviewing the graph.
+    const runaway: ForgeGraph = {
+      nodes: [
+        { id: 'n', kind: 'const', params: { v: 1e12 }, inputs: {} },
+        { id: 'p', kind: 'payout', params: {}, inputs: { x: 'n' } },
+      ],
+    } as unknown as ForgeGraph;
+    expect(runGraph(runaway, () => 0.5)).toBeLessThanOrEqual(MAX_MULTIPLIER);
+
+    const negative: ForgeGraph = {
+      nodes: [
+        { id: 'n', kind: 'const', params: { v: -500 }, inputs: {} },
+        { id: 'p', kind: 'payout', params: {}, inputs: { x: 'n' } },
+      ],
+    } as unknown as ForgeGraph;
+    expect(runGraph(negative, () => 0.5)).toBeGreaterThanOrEqual(0);
+  });
+
+  it('never quotes a Plinko bucket or a wheel slot past the ceiling', () => {
+    for (const edge of EDGES) {
+      for (const risk of ['low', 'medium', 'high'] as const) {
+        for (const rows of [8, 12, 16]) {
+          for (const m of plinkoPayouts(risk, rows, edge)) {
+            expect(m).toBeLessThanOrEqual(MAX_MULTIPLIER);
+          }
+        }
+        for (const s of buildWheel(risk, WHEEL_SEGMENTS, edge)) {
+          expect(s.multiplier).toBeLessThanOrEqual(MAX_MULTIPLIER);
         }
       }
     }

@@ -11,7 +11,8 @@
  * mechanics from wired nodes on Solana today.
  */
 
-import { createServerSeed, floatStream } from '../provably-fair';
+import { floatStream } from '../provably-fair';
+import { MAX_MULTIPLIER } from '../games';
 import { MIN_EDGE, MAX_EDGE } from '../games';
 
 export type NodeKind =
@@ -397,7 +398,10 @@ export function runGraph(g: ForgeGraph, next: () => number): number {
 
   const pay = payoutNode(g);
   if (!pay) return 0;
-  return evalNode(pay.id);
+  // A graph is arbitrary arithmetic, so its output is clamped to something the
+  // vault can actually settle: never negative, never past the payout ceiling.
+  const out = evalNode(pay.id);
+  return Number.isFinite(out) ? Math.min(MAX_MULTIPLIER, Math.max(0, out)) : 0;
 }
 
 /* ---------------------------------------------------------------- validation */
@@ -428,13 +432,23 @@ const BUCKETS: { label: string; min: number; max: number }[] = [
   { label: '10×+', min: 10, max: Infinity },
 ];
 
-export function simulateGraph(g: ForgeGraph, rounds = 4000): GraphSim {
+/**
+ * Monte-Carlo a graph.
+ *
+ * `seed` is fixed by default so the same graph always scores the same. It used
+ * to draw a fresh random server seed on every call, which meant a creator's
+ * reported RTP shifted each time they touched the editor, and Discover's
+ * "genuinely new" ranking came out differently on the server and in the browser
+ * — a hydration mismatch that threw away the prerendered page. Pass a different
+ * seed only when independent runs are actually wanted.
+ */
+export function simulateGraph(g: ForgeGraph, rounds = 4000, seed = 'soltrend-forge-sim-v1'): GraphSim {
   const errors: string[] = [];
   if (!payoutNode(g)) errors.push('Add a Payout node — every game needs one.');
   const hasRng = g.nodes.some((n) => RANDOM_KINDS.has(n.kind));
   if (!hasRng) errors.push('Add a randomness source (RNG, Risk tower or Multi-draw) so the outcome is random.');
 
-  const serverSeed = createServerSeed().serverSeed;
+  const serverSeed = seed;
   const buckets = BUCKETS.map((b) => ({ label: b.label, count: 0 }));
   let total = 0;
   let wins = 0;

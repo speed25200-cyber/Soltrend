@@ -208,14 +208,22 @@ export function minesLayout(
   return new Set(order.slice(0, bombs));
 }
 
-/** Multiplier after revealing `picks` safe tiles on an N-tile board with M bombs. */
+/**
+ * Multiplier after revealing `picks` safe tiles on an N-tile board with M bombs.
+ *
+ * Held at the vault ceiling. A 25-tile board with 10 bombs cleared to the end
+ * prices at over three million times the bet — a number the chain would refuse
+ * to settle, so quoting it would be promising a payout that cannot be paid. The
+ * cap only ever reduces what the player is quoted, and only on rungs whose odds
+ * are astronomically long; the bet cap is sized against the same ceiling.
+ */
 export function minesMultiplier(grid: number, bombs: number, picks: number, edge = DEFAULT_EDGE): number {
   if (picks <= 0) return 1;
   let m = 1;
   for (let i = 0; i < picks; i++) {
     m *= (grid - i) / (grid - bombs - i);
   }
-  return m * (1 - clampEdge(edge));
+  return Math.min(MAX_MULTIPLIER, m * (1 - clampEdge(edge)));
 }
 
 /* ---------------------------------------------------------------------- Plinko */
@@ -332,7 +340,7 @@ export function towersLayout(
 export function towersMultiplier(cols: number, level: number, edge = DEFAULT_EDGE): number {
   if (level <= 0) return 1;
   const per = cols / (cols - 1);
-  return Math.pow(per, level) * (1 - clampEdge(edge));
+  return Math.min(MAX_MULTIPLIER, Math.pow(per, level) * (1 - clampEdge(edge)));
 }
 
 /* ----------------------------------------------------------------------- utils */

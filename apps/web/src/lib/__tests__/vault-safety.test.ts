@@ -6,6 +6,7 @@ import {
   specFromParams, specToParams, BOARD_TEMPLATES,
 } from '@/lib/forge/board';
 import { fmtMult, fmtMultExact } from '@/lib/format';
+import { simulateGraph, starterGraph } from '@/lib/forge/model';
 import { EDGE_CHOICES, MAX_WIN, VOLATILITY, buildSlot, slotFromParams, slotToParams, type Volatility } from '@/lib/slots/goldmine';
 
 /**
@@ -244,5 +245,31 @@ describe('what the player is shown', () => {
     expect(fmtMultExact(2)).toBe('2.00×');
     expect(fmtMult(Number.NaN)).toBe('—');
     expect(fmtMultExact(Number.POSITIVE_INFINITY)).toBe('—');
+  });
+});
+
+describe('graph simulation', () => {
+  const GRAPH = starterGraph();
+
+  it('scores the same graph the same way every time', () => {
+    // A ranking or an RTP readout that moves between two calls is a ranking the
+    // server and the browser will disagree about — which throws away the
+    // prerendered page and reshuffles Discover on every load.
+    const a = simulateGraph(GRAPH, 3_000);
+    const b = simulateGraph(GRAPH, 3_000);
+    expect(a.rtp).toBe(b.rtp);
+    expect(a.maxMult).toBe(b.maxMult);
+    expect(a.hitRate).toBe(b.hitRate);
+    expect(a.buckets).toEqual(b.buckets);
+  });
+
+  it('still allows an independent run when one is asked for', () => {
+    const a = simulateGraph(GRAPH, 2_000, 'seed-a');
+    const b = simulateGraph(GRAPH, 2_000, 'seed-b');
+    expect(a.rtp).not.toBe(b.rtp);
+  });
+
+  it('never reports a max multiplier past the vault ceiling', () => {
+    expect(simulateGraph(GRAPH, 2_000).maxMult).toBeLessThanOrEqual(MAX_MULTIPLIER);
   });
 });
