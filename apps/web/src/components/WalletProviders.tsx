@@ -4,7 +4,13 @@
 import '@/lib/onchain/polyfill';
 import { ReactNode, createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
-import { PhantomWalletAdapter, SolflareWalletAdapter } from '@solana/wallet-adapter-wallets';
+// The two adapters this app registers, imported directly. The aggregate
+// `@solana/wallet-adapter-wallets` package pulls in every adapter it knows —
+// Trezor, WalletConnect, Reown — which was 254 MB of dependencies and the
+// source of every critical and most high advisories in `npm audit`, for
+// wallets nothing here instantiates.
+import { PhantomWalletAdapter } from '@solana/wallet-adapter-phantom';
+import { SolflareWalletAdapter } from '@solana/wallet-adapter-solflare';
 import { clusterApiUrl } from '@solana/web3.js';
 import type { WalletError } from '@solana/wallet-adapter-base';
 

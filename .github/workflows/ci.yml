@@ -36,6 +36,13 @@ jobs:
       # workspace, so there is one copy of the maths rather than two that drift.
       - run: npm ci --no-audit --no-fund
 
+      # Triaged in SECURITY.md. This gate catches a dependency dragging in a
+      # critical advisory — which is exactly how 254 MB of unused wallet
+      # adapters, and the only critical in the tree, got here.
+      - name: Audit production dependencies
+        working-directory: .
+        run: npm audit --omit=dev --audit-level=critical
+
       - name: Typecheck
         run: npm run typecheck
 

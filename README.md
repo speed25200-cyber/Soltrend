@@ -156,6 +156,9 @@ SMOKE_BASE=http://localhost:3211/Soltrend node ../../scripts/smoke.mjs
 The sweep fails on an uncaught error, a console error, a failed request, a page that renders nothing,
 or a layout that scrolls sideways on a phone.
 
+CI also fails on any **critical** advisory in production dependencies. The remaining advisories are
+triaged in [`SECURITY.md`](SECURITY.md) rather than left as an unexplained number.
+
 ---
 
 ## Verify a bet yourself
