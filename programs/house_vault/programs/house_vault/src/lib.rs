@@ -47,6 +47,48 @@ const SETTLE_TIMEOUT_SLOTS: u64 = 5_400;
 /// creator (seller) keeps the remainder — the asset creator economy.
 const ASSET_FEE_BPS: u64 = 500; // 5%
 
+/* ------------------------------------------------------------ payout maths */
+
+/// Apply a basis-point multiplier to a lamport amount.
+///
+/// Every intermediate is `u128` and the narrowing back to `u64` is checked
+/// rather than cast. `x as u64` on an over-range `u128` truncates silently,
+/// which would turn a payout of 2^64 + 5 lamports into 5 — a wrong number that
+/// still passes every downstream bound check.
+pub fn apply_bps(amount: u64, bps: u64) -> Result<u64> {
+    let scaled = (amount as u128)
+        .checked_mul(bps as u128)
+        .ok_or(CasinoError::MathOverflow)?
+        / BPS_DENOM as u128;
+    u64::try_from(scaled).map_err(|_| CasinoError::MathOverflow.into())
+}
+
+/// The three cuts that leave the pool on a settled bet.
+///
+/// The edge stays in `u128` until each cut is taken, because `edge * bps`
+/// overflows `u64` well inside the range of a legal bet: at a 5% edge, a bet
+/// above roughly 2e16 lamports produces an edge whose product with 10_000 bps
+/// exceeds `u64::MAX`. With `overflow-checks` on that is a panic — a bet that
+/// can never be settled — and without them it would be a wrong split.
+pub fn edge_cuts(bet_amount: u64, edge_bps: u16, split: &RevenueSplit) -> Result<(u64, u64, u64)> {
+    let edge = (bet_amount as u128)
+        .checked_mul(edge_bps as u128)
+        .ok_or(CasinoError::MathOverflow)?
+        / BPS_DENOM as u128;
+    let cut = |bps: u16| -> Result<u64> {
+        let v = edge
+            .checked_mul(bps as u128)
+            .ok_or(CasinoError::MathOverflow)?
+            / BPS_DENOM as u128;
+        u64::try_from(v).map_err(|_| CasinoError::MathOverflow.into())
+    };
+    Ok((
+        cut(split.creator_bps)?,
+        cut(split.platform_bps)?,
+        cut(split.insurance_bps)?,
+    ))
+}
+
 #[program]
 pub mod house_vault {
     use super::*;
@@ -387,10 +429,7 @@ pub mod house_vault {
             CasinoError::SeedMismatch
         );
 
-        let payout = ((bet.bet_amount as u128)
-            .checked_mul(payout_multiplier_bps as u128)
-            .ok_or(CasinoError::MathOverflow)?
-            / BPS_DENOM as u128) as u64;
+        let payout = apply_bps(bet.bet_amount, payout_multiplier_bps)?;
 
         // The authority can never exceed what was reserved at open.
         require!(payout <= bet.max_payout, CasinoError::PayoutTooLarge);
@@ -402,12 +441,13 @@ pub mod house_vault {
         let player_key = bet.player;
 
         // Edge split — non-staker cuts leave the pool for the treasury.
-        let edge =
-            (bet_amount as u128 * ctx.accounts.game.edge_bps as u128 / BPS_DENOM as u128) as u64;
-        let creator_cut = edge * cfg.split.creator_bps as u64 / BPS_DENOM;
-        let platform_cut = edge * cfg.split.platform_bps as u64 / BPS_DENOM;
-        let insurance_cut = edge * cfg.split.insurance_bps as u64 / BPS_DENOM;
-        let skim = creator_cut + platform_cut + insurance_cut;
+        let edge = apply_bps(bet_amount, ctx.accounts.game.edge_bps as u64)?;
+        let (creator_cut, platform_cut, insurance_cut) =
+            edge_cuts(bet_amount, ctx.accounts.game.edge_bps, &cfg.split)?;
+        let skim = creator_cut
+            .checked_add(platform_cut)
+            .and_then(|v| v.checked_add(insurance_cut))
+            .ok_or(CasinoError::MathOverflow)?;
 
         // Pay the player from the pool (invariant 1).
         if payout > 0 {
@@ -495,13 +535,12 @@ pub mod house_vault {
             float_bps,
         )?;
 
-        let payout = ((bet.bet_amount as u128) * (mult_bps as u128) / BPS_DENOM as u128) as u64;
+        let payout = apply_bps(bet.bet_amount, mult_bps)?;
         require!(payout <= bet.max_payout, CasinoError::PayoutTooLarge);
 
-        let edge = (bet.bet_amount as u128 * game_ro.edge_bps as u128 / BPS_DENOM as u128) as u64;
-        let creator_cut = edge * cfg.split.creator_bps as u64 / BPS_DENOM;
-        let platform_cut = edge * cfg.split.platform_bps as u64 / BPS_DENOM;
-        let insurance_cut = edge * cfg.split.insurance_bps as u64 / BPS_DENOM;
+        let edge = apply_bps(bet.bet_amount, game_ro.edge_bps as u64)?;
+        let (creator_cut, platform_cut, insurance_cut) =
+            edge_cuts(bet.bet_amount, game_ro.edge_bps, &cfg.split)?;
         let skim = creator_cut + platform_cut + insurance_cut;
         let max_payout = bet.max_payout;
         let bet_amount = bet.bet_amount;
@@ -1266,4 +1305,130 @@ pub enum CasinoError {
     Paused,
     #[msg("Cannot buy your own asset")]
     SelfPurchase,
+}
+
+/* ------------------------------------------------------------------- tests */
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SPLIT: RevenueSplit = RevenueSplit {
+        bankroll_bps: 6_000,
+        creator_bps: 2_000,
+        platform_bps: 1_500,
+        insurance_bps: 500,
+    };
+
+    /// One SOL, so the numbers below read as amounts rather than magnitudes.
+    const SOL: u64 = 1_000_000_000;
+
+    #[test]
+    fn split_sums_to_one_whole() {
+        assert!(SPLIT.validate().is_ok());
+        let bad = RevenueSplit {
+            bankroll_bps: 6_000,
+            creator_bps: 2_000,
+            platform_bps: 1_500,
+            insurance_bps: 400,
+        };
+        assert!(bad.validate().is_err());
+    }
+
+    #[test]
+    fn apply_bps_prices_a_payout() {
+        assert_eq!(apply_bps(SOL, 0).unwrap(), 0);
+        assert_eq!(apply_bps(SOL, BPS_DENOM).unwrap(), SOL); // 1.0x
+        assert_eq!(apply_bps(SOL, 2 * BPS_DENOM).unwrap(), 2 * SOL);
+        assert_eq!(apply_bps(SOL, 5_000).unwrap(), SOL / 2);
+        // A 1000x payout on a whole SOL, the ceiling the client also enforces.
+        assert_eq!(apply_bps(SOL, 1_000 * BPS_DENOM).unwrap(), 1_000 * SOL);
+    }
+
+    #[test]
+    fn apply_bps_rounds_down_never_up() {
+        // Rounding must favour the pool: paying a lamport more than the maths
+        // says, on every settled bet, is a slow drain on the stakers.
+        assert_eq!(apply_bps(1, 15_000).unwrap(), 1); // 1.5x of 1 lamport
+        assert_eq!(apply_bps(3, 3_333).unwrap(), 0);
+        assert_eq!(apply_bps(9_999, BPS_DENOM + 1).unwrap(), 9_999);
+    }
+
+    #[test]
+    fn apply_bps_refuses_to_truncate() {
+        // The product fits u128 but not u64. Casting would silently wrap to a
+        // small number that still passes every bound check downstream.
+        assert!(apply_bps(u64::MAX, 2 * BPS_DENOM).is_err());
+        assert!(apply_bps(u64::MAX / 2, 1_000 * BPS_DENOM).is_err());
+        // …while the largest exactly-representable result is fine.
+        assert_eq!(apply_bps(u64::MAX, BPS_DENOM).unwrap(), u64::MAX);
+    }
+
+    #[test]
+    fn edge_cuts_never_exceed_the_edge_taken() {
+        for bet in [1u64, 1_000, SOL, 10_000 * SOL, u64::MAX / 100_000] {
+            for edge_bps in [100u16, 250, 300, 500] {
+                let (c, p, i) = edge_cuts(bet, edge_bps, &SPLIT).unwrap();
+                let edge = (bet as u128) * edge_bps as u128 / BPS_DENOM as u128;
+                let taken = c as u128 + p as u128 + i as u128;
+                // The three cuts leave the pool; the bankroll share stays, so
+                // what leaves can never be the whole edge, let alone more.
+                assert!(
+                    taken <= edge,
+                    "bet {bet} edge_bps {edge_bps}: {taken} > {edge}"
+                );
+                let leaving_bps =
+                    (SPLIT.creator_bps + SPLIT.platform_bps + SPLIT.insurance_bps) as u128;
+                assert!(taken <= edge * leaving_bps / BPS_DENOM as u128 + 3); // +3 for flooring
+            }
+        }
+    }
+
+    #[test]
+    fn edge_cuts_hold_the_documented_proportions() {
+        let (c, p, i) = edge_cuts(10_000 * SOL, 300, &SPLIT).unwrap();
+        let edge = 10_000 * SOL / 10_000 * 300; // 3% of the bet
+        assert_eq!(c, edge / 10_000 * 2_000); // 20% creator
+        assert_eq!(p, edge / 10_000 * 1_500); // 15% platform
+        assert_eq!(i, edge / 10_000 * 500); //  5% insurance
+                                            // …and the stakers keep the rest, in the pool.
+        assert_eq!(edge - (c + p + i), edge / 10_000 * 6_000);
+    }
+
+    #[test]
+    fn edge_cuts_survive_a_bet_that_would_overflow_u64() {
+        // `edge * creator_bps` overflows u64 here. Before the u128 rewrite this
+        // panicked under overflow-checks, making the bet unsettleable.
+        let bet = u64::MAX / 4;
+        let (c, p, i) = edge_cuts(bet, 500, &SPLIT).unwrap();
+        assert!(c > 0 && p > 0 && i > 0);
+        let edge = (bet as u128) * 500 / BPS_DENOM as u128;
+        assert!(c as u128 + p as u128 + i as u128 <= edge);
+    }
+
+    #[test]
+    fn a_zero_bet_moves_nothing() {
+        assert_eq!(apply_bps(0, 1_000 * BPS_DENOM).unwrap(), 0);
+        assert_eq!(edge_cuts(0, 500, &SPLIT).unwrap(), (0, 0, 0));
+    }
+
+    #[test]
+    fn edge_of_zero_takes_nothing() {
+        assert_eq!(edge_cuts(SOL, 0, &SPLIT).unwrap(), (0, 0, 0));
+    }
+
+    #[test]
+    fn a_settled_payout_never_exceeds_what_was_reserved() {
+        // The reserve at open is what protects the pool. Whatever multiplier the
+        // settlement authority supplies, the payout must stay inside it — this
+        // is the arithmetic half of that guarantee.
+        let bet = 5 * SOL;
+        let max_payout = apply_bps(bet, 1_000 * BPS_DENOM).unwrap();
+        for mult_bps in [0u64, 1, BPS_DENOM, 999 * BPS_DENOM, 1_000 * BPS_DENOM] {
+            assert!(apply_bps(bet, mult_bps).unwrap() <= max_payout);
+        }
+        // Anything above the reserved ceiling is caught by the require! in
+        // settle_bet; here we only assert the maths agrees it is larger.
+        assert!(apply_bps(bet, 1_001 * BPS_DENOM).unwrap() > max_payout);
+    }
 }

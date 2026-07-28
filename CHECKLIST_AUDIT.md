@@ -32,7 +32,12 @@ For the auditor of `programs/house_vault`. This is the pre-mainnet gate.
 
 - [ ] Full audit by a recognised Solana firm; all criticals/highs resolved.
 - [ ] Fuzz `settle_bet` over (bet_amount, multiplier, vault_balance) incl. boundaries (0, u64::MAX).
-- [ ] Property tests for invariants 1–8; coverage report generated.
+- [x] Unit tests for the payout arithmetic (invariant 8), run on every push by CI:
+      `apply_bps` and `edge_cuts` in `src/lib.rs`, covering zero, the 1000x ceiling,
+      rounding direction, refusal to truncate a `u128` result into `u64`, and a bet
+      large enough that `edge * bps` overflows `u64`. That last case used to panic
+      under `overflow-checks`, which made such a bet unsettleable.
+- [ ] Property tests for the remaining invariants 1–7; coverage report generated.
 - [ ] Migrate outcome generation to VRF for multiplayer Crash.
 - [ ] Multisig/timelock on `admin`; documented key-management.
 - [ ] Bug bounty open before real liquidity is deposited.

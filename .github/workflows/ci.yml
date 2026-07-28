@@ -120,6 +120,11 @@ jobs:
       - name: Clippy
         working-directory: programs/house_vault
         run: cargo clippy --all-targets -- -D warnings
+      # The payout arithmetic — the only code here that moves real lamports.
+      # These run without a validator, so they gate every push.
+      - name: Unit tests
+        working-directory: programs/house_vault
+        run: cargo test --all
       - name: Build
         working-directory: programs/house_vault
         run: cargo build --release
