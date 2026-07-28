@@ -435,7 +435,7 @@ export function NodeBuilder() {
               <input value={tagline} onChange={(e) => setTagline(e.target.value)} placeholder="Tagline" maxLength={44} className="input-num !font-sans text-sm" />
               <div className="flex flex-wrap gap-1.5">
                 {STUDIO_ICONS.map((e) => (
-                  <button key={e} onClick={() => setIcon(e)} className={`grid h-8 w-8 place-items-center rounded-lg transition ${icon === e ? 'bg-neon-violet/20 text-neon-violet ring-1 ring-neon-violet/60' : 'bg-void-900/60 text-slate-400 hover:bg-white/5'}`}>
+                  <button key={e} aria-label={`Icon: ${e}`} aria-pressed={icon === e} onClick={() => setIcon(e)} className={`grid h-8 w-8 place-items-center rounded-lg transition ${icon === e ? 'bg-neon-violet/20 text-neon-violet ring-1 ring-neon-violet/60' : 'bg-void-900/60 text-slate-400 hover:bg-white/5'}`}>
                     <Icon name={e} size={16} />
                   </button>
                 ))}
@@ -443,7 +443,7 @@ export function NodeBuilder() {
               <div className="flex gap-4">
                 <div className="flex gap-2">
                   {['violet', 'cyan', 'gold', 'pink'].map((a) => (
-                    <button key={a} onClick={() => setAccent(a)} className={`h-7 w-7 rounded-lg ${accent === a ? 'ring-2 ring-white' : ''}`} style={{ background: accentHex(a) }} />
+                    <button key={a} aria-label={`Accent colour: ${a}`} aria-pressed={accent === a} onClick={() => setAccent(a)} className={`h-7 w-7 rounded-lg ${accent === a ? 'ring-2 ring-white' : ''}`} style={{ background: accentHex(a) }} />
                   ))}
                 </div>
                 <div className="flex gap-1.5">

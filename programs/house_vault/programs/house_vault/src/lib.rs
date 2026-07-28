@@ -19,6 +19,14 @@
 //!     cuts (creator + platform + insurance) leave the pool, into the treasury.
 //!  6. Creator royalties are claimable only after `kyc_verified == true`.
 
+// Anchor generates the instruction dispatch, so a handler's argument list is the
+// instruction's argument list — splitting it into a struct would only move the
+// arity behind a name the IDL still has to flatten.
+#![allow(clippy::too_many_arguments)]
+// `anchor-debug`, `custom-heap`, `custom-panic` and `solana` are cfgs the Anchor
+// and Solana macros emit; they are not features of this crate.
+#![allow(unexpected_cfgs)]
+
 use anchor_lang::prelude::*;
 use anchor_lang::system_program;
 
@@ -98,7 +106,10 @@ pub mod house_vault {
             edge_bps >= cfg.min_edge_bps && edge_bps <= cfg.max_edge_bps,
             CasinoError::EdgeOutOfBand
         );
-        require!(bond >= cfg.min_bond_lamports && bond > 0, CasinoError::BondTooSmall);
+        require!(
+            bond >= cfg.min_bond_lamports && bond > 0,
+            CasinoError::BondTooSmall
+        );
         // Native games have their outcome computed ON-CHAIN — validate their params.
         if native {
             validate_native(template, p0, p1)?;
@@ -171,7 +182,13 @@ pub mod house_vault {
         // Virtual offset (VIRT) neutralises the first-depositor inflation attack:
         // shares = amount · (total_shares + VIRT) / (pool_value + VIRT).
         let minted: u128 = (amount as u128)
-            .checked_mul(ctx.accounts.pool.total_shares.checked_add(VIRT).ok_or(CasinoError::MathOverflow)?)
+            .checked_mul(
+                ctx.accounts
+                    .pool
+                    .total_shares
+                    .checked_add(VIRT)
+                    .ok_or(CasinoError::MathOverflow)?,
+            )
             .ok_or(CasinoError::MathOverflow)?
             / value.checked_add(VIRT).ok_or(CasinoError::MathOverflow)?;
         require!(minted > 0, CasinoError::ZeroShares);
@@ -189,13 +206,24 @@ pub mod house_vault {
         )?;
 
         let pool = &mut ctx.accounts.pool;
-        pool.total_shares = pool.total_shares.checked_add(minted).ok_or(CasinoError::MathOverflow)?;
+        pool.total_shares = pool
+            .total_shares
+            .checked_add(minted)
+            .ok_or(CasinoError::MathOverflow)?;
         let pos = &mut ctx.accounts.position;
         pos.pool = pool.key();
         pos.owner = ctx.accounts.staker.key();
-        pos.shares = pos.shares.checked_add(minted).ok_or(CasinoError::MathOverflow)?;
+        pos.shares = pos
+            .shares
+            .checked_add(minted)
+            .ok_or(CasinoError::MathOverflow)?;
 
-        emit!(Staked { pool: pool.key(), staker: ctx.accounts.staker.key(), amount, shares: minted });
+        emit!(Staked {
+            pool: pool.key(),
+            staker: ctx.accounts.staker.key(),
+            amount,
+            shares: minted
+        });
         Ok(())
     }
 
@@ -203,7 +231,10 @@ pub mod house_vault {
     /// its rent-exemption.
     pub fn unstake(ctx: Context<Unstake>, shares: u128) -> Result<()> {
         require!(shares > 0, CasinoError::ZeroShares);
-        require!(shares <= ctx.accounts.position.shares, CasinoError::InsufficientShares);
+        require!(
+            shares <= ctx.accounts.position.shares,
+            CasinoError::InsufficientShares
+        );
 
         let pool_ai = ctx.accounts.pool.to_account_info();
         let rent = Rent::get()?.minimum_balance(pool_ai.data_len());
@@ -212,22 +243,42 @@ pub mod house_vault {
         let amount = (shares
             .checked_mul(value.checked_add(VIRT).ok_or(CasinoError::MathOverflow)?)
             .ok_or(CasinoError::MathOverflow)?
-            / ctx.accounts.pool.total_shares.checked_add(VIRT).ok_or(CasinoError::MathOverflow)?) as u64;
+            / ctx
+                .accounts
+                .pool
+                .total_shares
+                .checked_add(VIRT)
+                .ok_or(CasinoError::MathOverflow)?) as u64;
 
         // A staker can never withdraw locked (reserved) liability, only free value.
-        let free = pool_ai.lamports().saturating_sub(rent).saturating_sub(ctx.accounts.pool.locked);
+        let free = pool_ai
+            .lamports()
+            .saturating_sub(rent)
+            .saturating_sub(ctx.accounts.pool.locked);
         require!(amount <= free, CasinoError::BankrollLocked);
-        require!(pool_ai.lamports() >= amount.saturating_add(rent), CasinoError::InsufficientVault);
+        require!(
+            pool_ai.lamports() >= amount.saturating_add(rent),
+            CasinoError::InsufficientVault
+        );
 
         **pool_ai.try_borrow_mut_lamports()? -= amount;
-        **ctx.accounts.staker.to_account_info().try_borrow_mut_lamports()? += amount;
+        **ctx
+            .accounts
+            .staker
+            .to_account_info()
+            .try_borrow_mut_lamports()? += amount;
 
         let pool = &mut ctx.accounts.pool;
         pool.total_shares = pool.total_shares.saturating_sub(shares);
         let pos = &mut ctx.accounts.position;
         pos.shares = pos.shares.saturating_sub(shares);
 
-        emit!(Unstaked { pool: pool.key(), staker: ctx.accounts.staker.key(), amount, shares });
+        emit!(Unstaked {
+            pool: pool.key(),
+            staker: ctx.accounts.staker.key(),
+            amount,
+            shares
+        });
         Ok(())
     }
 
@@ -265,8 +316,14 @@ pub mod house_vault {
             .saturating_sub(ctx.accounts.pool.locked);
 
         // Invariant 2: the reserved max payout must fit the bankroll cap + abs cap.
-        require!((max_payout as u128) * (RUIN_K as u128) <= free as u128, CasinoError::BankrollCapExceeded);
-        require!(max_payout <= cfg.max_payout_lamports, CasinoError::PayoutTooLarge);
+        require!(
+            (max_payout as u128) * (RUIN_K as u128) <= free as u128,
+            CasinoError::BankrollCapExceeded
+        );
+        require!(
+            max_payout <= cfg.max_payout_lamports,
+            CasinoError::PayoutTooLarge
+        );
 
         // Pull the stake into the pool + reserve the liability.
         system_program::transfer(
@@ -279,7 +336,12 @@ pub mod house_vault {
             ),
             bet_amount,
         )?;
-        ctx.accounts.pool.locked = ctx.accounts.pool.locked.checked_add(max_payout).ok_or(CasinoError::MathOverflow)?;
+        ctx.accounts.pool.locked = ctx
+            .accounts
+            .pool
+            .locked
+            .checked_add(max_payout)
+            .ok_or(CasinoError::MathOverflow)?;
 
         let bet = &mut ctx.accounts.bet;
         bet.pool = ctx.accounts.pool.key();
@@ -305,7 +367,11 @@ pub mod house_vault {
     ///    reserved at open, bounding operator error/abuse).
     /// The revealed seed + multiplier are emitted so anyone can recompute the
     /// provably-fair float and, with the public GameSpec, verify the payout.
-    pub fn settle_bet(ctx: Context<SettleBet>, server_seed: [u8; 32], payout_multiplier_bps: u64) -> Result<()> {
+    pub fn settle_bet(
+        ctx: Context<SettleBet>,
+        server_seed: [u8; 32],
+        payout_multiplier_bps: u64,
+    ) -> Result<()> {
         let cfg = &ctx.accounts.config;
         // Native games MUST go through `settle_native` (outcome computed on-chain).
         // Without this, the authority could settle a native game via this
@@ -316,7 +382,10 @@ pub mod house_vault {
 
         // Commit-reveal: the revealed seed must hash to the committed value.
         let h = anchor_lang::solana_program::hash::hash(&server_seed);
-        require!(h.to_bytes() == bet.server_seed_hash, CasinoError::SeedMismatch);
+        require!(
+            h.to_bytes() == bet.server_seed_hash,
+            CasinoError::SeedMismatch
+        );
 
         let payout = ((bet.bet_amount as u128)
             .checked_mul(payout_multiplier_bps as u128)
@@ -333,7 +402,8 @@ pub mod house_vault {
         let player_key = bet.player;
 
         // Edge split — non-staker cuts leave the pool for the treasury.
-        let edge = (bet_amount as u128 * ctx.accounts.game.edge_bps as u128 / BPS_DENOM as u128) as u64;
+        let edge =
+            (bet_amount as u128 * ctx.accounts.game.edge_bps as u128 / BPS_DENOM as u128) as u64;
         let creator_cut = edge * cfg.split.creator_bps as u64 / BPS_DENOM;
         let platform_cut = edge * cfg.split.platform_bps as u64 / BPS_DENOM;
         let insurance_cut = edge * cfg.split.insurance_bps as u64 / BPS_DENOM;
@@ -341,20 +411,38 @@ pub mod house_vault {
 
         // Pay the player from the pool (invariant 1).
         if payout > 0 {
-            require!(pool_ai.lamports() >= payout.saturating_add(rent), CasinoError::InsufficientVault);
+            require!(
+                pool_ai.lamports() >= payout.saturating_add(rent),
+                CasinoError::InsufficientVault
+            );
             **pool_ai.try_borrow_mut_lamports()? -= payout;
-            **ctx.accounts.player.to_account_info().try_borrow_mut_lamports()? += payout;
+            **ctx
+                .accounts
+                .player
+                .to_account_info()
+                .try_borrow_mut_lamports()? += payout;
         }
         if skim > 0 {
-            require!(pool_ai.lamports() >= skim.saturating_add(rent), CasinoError::InsufficientVault);
+            require!(
+                pool_ai.lamports() >= skim.saturating_add(rent),
+                CasinoError::InsufficientVault
+            );
             **pool_ai.try_borrow_mut_lamports()? -= skim;
-            **ctx.accounts.treasury.to_account_info().try_borrow_mut_lamports()? += skim;
+            **ctx
+                .accounts
+                .treasury
+                .to_account_info()
+                .try_borrow_mut_lamports()? += skim;
         }
 
         // Release the reserved liability.
         ctx.accounts.pool.locked = ctx.accounts.pool.locked.saturating_sub(max_payout);
 
-        ctx.accounts.creator_vault.accrued = ctx.accounts.creator_vault.accrued.saturating_add(creator_cut);
+        ctx.accounts.creator_vault.accrued = ctx
+            .accounts
+            .creator_vault
+            .accrued
+            .saturating_add(creator_cut);
         let t = &mut ctx.accounts.treasury;
         t.platform_accrued = t.platform_accrued.saturating_add(platform_cut);
         t.insurance_accrued = t.insurance_accrued.saturating_add(insurance_cut);
@@ -392,11 +480,20 @@ pub mod house_vault {
 
         // Commit-reveal.
         let h = anchor_lang::solana_program::hash::hash(&server_seed);
-        require!(h.to_bytes() == bet.server_seed_hash, CasinoError::SeedMismatch);
+        require!(
+            h.to_bytes() == bet.server_seed_hash,
+            CasinoError::SeedMismatch
+        );
 
         // Fair float, derived on-chain — identical scheme the client verifies.
         let float_bps = native_float_bps(&server_seed, &bet.client_seed, bet.nonce);
-        let mult_bps = native_multiplier_bps(game_ro.template, game_ro.p0, game_ro.p1, game_ro.edge_bps, float_bps)?;
+        let mult_bps = native_multiplier_bps(
+            game_ro.template,
+            game_ro.p0,
+            game_ro.p1,
+            game_ro.edge_bps,
+            float_bps,
+        )?;
 
         let payout = ((bet.bet_amount as u128) * (mult_bps as u128) / BPS_DENOM as u128) as u64;
         require!(payout <= bet.max_payout, CasinoError::PayoutTooLarge);
@@ -413,18 +510,36 @@ pub mod house_vault {
         let pool_ai = ctx.accounts.pool.to_account_info();
         let rent = Rent::get()?.minimum_balance(pool_ai.data_len());
         if payout > 0 {
-            require!(pool_ai.lamports() >= payout.saturating_add(rent), CasinoError::InsufficientVault);
+            require!(
+                pool_ai.lamports() >= payout.saturating_add(rent),
+                CasinoError::InsufficientVault
+            );
             **pool_ai.try_borrow_mut_lamports()? -= payout;
-            **ctx.accounts.player.to_account_info().try_borrow_mut_lamports()? += payout;
+            **ctx
+                .accounts
+                .player
+                .to_account_info()
+                .try_borrow_mut_lamports()? += payout;
         }
         if skim > 0 {
-            require!(pool_ai.lamports() >= skim.saturating_add(rent), CasinoError::InsufficientVault);
+            require!(
+                pool_ai.lamports() >= skim.saturating_add(rent),
+                CasinoError::InsufficientVault
+            );
             **pool_ai.try_borrow_mut_lamports()? -= skim;
-            **ctx.accounts.treasury.to_account_info().try_borrow_mut_lamports()? += skim;
+            **ctx
+                .accounts
+                .treasury
+                .to_account_info()
+                .try_borrow_mut_lamports()? += skim;
         }
 
         ctx.accounts.pool.locked = ctx.accounts.pool.locked.saturating_sub(max_payout);
-        ctx.accounts.creator_vault.accrued = ctx.accounts.creator_vault.accrued.saturating_add(creator_cut);
+        ctx.accounts.creator_vault.accrued = ctx
+            .accounts
+            .creator_vault
+            .accrued
+            .saturating_add(creator_cut);
         let t = &mut ctx.accounts.treasury;
         t.platform_accrued = t.platform_accrued.saturating_add(platform_cut);
         t.insurance_accrued = t.insurance_accrued.saturating_add(insurance_cut);
@@ -473,9 +588,16 @@ pub mod house_vault {
         let refund = bet.bet_amount;
         let max_payout = bet.max_payout;
 
-        require!(pool_ai.lamports() >= refund.saturating_add(rent), CasinoError::InsufficientVault);
+        require!(
+            pool_ai.lamports() >= refund.saturating_add(rent),
+            CasinoError::InsufficientVault
+        );
         **pool_ai.try_borrow_mut_lamports()? -= refund;
-        **ctx.accounts.player.to_account_info().try_borrow_mut_lamports()? += refund;
+        **ctx
+            .accounts
+            .player
+            .to_account_info()
+            .try_borrow_mut_lamports()? += refund;
         ctx.accounts.pool.locked = ctx.accounts.pool.locked.saturating_sub(max_payout);
         Ok(())
     }
@@ -497,12 +619,22 @@ pub mod house_vault {
 
         let treasury_ai = ctx.accounts.treasury.to_account_info();
         let rent = Rent::get()?.minimum_balance(treasury_ai.data_len());
-        require!(treasury_ai.lamports() >= amount.saturating_add(rent), CasinoError::InsufficientVault);
+        require!(
+            treasury_ai.lamports() >= amount.saturating_add(rent),
+            CasinoError::InsufficientVault
+        );
 
         **treasury_ai.try_borrow_mut_lamports()? -= amount;
-        **ctx.accounts.creator.to_account_info().try_borrow_mut_lamports()? += amount;
+        **ctx
+            .accounts
+            .creator
+            .to_account_info()
+            .try_borrow_mut_lamports()? += amount;
         cv.accrued = 0;
-        emit!(RoyaltiesClaimed { creator: ctx.accounts.creator.key(), amount });
+        emit!(RoyaltiesClaimed {
+            creator: ctx.accounts.creator.key(),
+            amount
+        });
         Ok(())
     }
 
@@ -512,10 +644,17 @@ pub mod house_vault {
         let rent = Rent::get()?.minimum_balance(treasury_ai.data_len());
         let amount = ctx.accounts.treasury.platform_accrued;
         require!(amount > 0, CasinoError::NothingToClaim);
-        require!(treasury_ai.lamports() >= amount.saturating_add(rent), CasinoError::InsufficientVault);
+        require!(
+            treasury_ai.lamports() >= amount.saturating_add(rent),
+            CasinoError::InsufficientVault
+        );
 
         **treasury_ai.try_borrow_mut_lamports()? -= amount;
-        **ctx.accounts.admin.to_account_info().try_borrow_mut_lamports()? += amount;
+        **ctx
+            .accounts
+            .admin
+            .to_account_info()
+            .try_borrow_mut_lamports()? += amount;
         ctx.accounts.treasury.platform_accrued = 0;
         Ok(())
     }
@@ -534,7 +673,10 @@ pub mod house_vault {
         require!(!ctx.accounts.config.paused, CasinoError::Paused);
         require!(price > 0, CasinoError::ZeroAmount);
         // The seller cannot buy from themselves (no wash-trading royalties).
-        require!(ctx.accounts.buyer.key() != ctx.accounts.creator_vault.owner, CasinoError::SelfPurchase);
+        require!(
+            ctx.accounts.buyer.key() != ctx.accounts.creator_vault.owner,
+            CasinoError::SelfPurchase
+        );
 
         // Move the funds into the treasury PDA via a system transfer.
         anchor_lang::system_program::transfer(
@@ -578,12 +720,18 @@ const TPL_LIMBO: u8 = 2;
 fn validate_native(template: u8, p0: u64, p1: u64) -> Result<()> {
     match template {
         // dice: p0 = threshold in bps (0,10000), p1 = direction (0 under, 1 over).
-        TPL_DICE => require!(p0 > 0 && p0 < BPS_DENOM && p1 <= 1, CasinoError::InvalidNativeParams),
+        TPL_DICE => require!(
+            p0 > 0 && p0 < BPS_DENOM && p1 <= 1,
+            CasinoError::InvalidNativeParams
+        ),
         // coinflip: no params.
         TPL_COINFLIP => {}
         // limbo: p0 = target multiplier in bps, in [1.00×, 1000×]. The upper bound
         // stops a silently-unwinnable game (win_prob truncating to 0).
-        TPL_LIMBO => require!(p0 >= BPS_DENOM && p0 <= 1000 * BPS_DENOM, CasinoError::InvalidNativeParams),
+        TPL_LIMBO => require!(
+            (BPS_DENOM..=1000 * BPS_DENOM).contains(&p0),
+            CasinoError::InvalidNativeParams
+        ),
         _ => return err!(CasinoError::InvalidNativeParams),
     }
     Ok(())
@@ -617,24 +765,44 @@ fn native_float_bps(server_seed: &[u8; 32], client_seed: &[u8; 32], nonce: u64) 
 
 /// The multiplier (bps) for a native template — a pure function of the fair float
 /// and the game's params. No off-chain input, so the operator has no discretion.
-fn native_multiplier_bps(template: u8, p0: u64, p1: u64, edge_bps: u16, float_bps: u64) -> Result<u64> {
+fn native_multiplier_bps(
+    template: u8,
+    p0: u64,
+    p1: u64,
+    edge_bps: u16,
+    float_bps: u64,
+) -> Result<u64> {
     let fair = (BPS_DENOM - edge_bps as u64) as u128; // (1 - edge) in bps
     let m = match template {
         TPL_DICE => {
-            let win = if p1 == 1 { float_bps > p0 } else { float_bps < p0 };
-            if !win { 0 } else {
+            let win = if p1 == 1 {
+                float_bps > p0
+            } else {
+                float_bps < p0
+            };
+            if !win {
+                0
+            } else {
                 let win_prob = if p1 == 1 { BPS_DENOM - p0 } else { p0 };
                 require!(win_prob > 0, CasinoError::InvalidNativeParams);
                 (fair * BPS_DENOM as u128 / win_prob as u128) as u64
             }
         }
         TPL_COINFLIP => {
-            if float_bps < 5_000 { (fair * 2) as u64 } else { 0 }
+            if float_bps < 5_000 {
+                (fair * 2) as u64
+            } else {
+                0
+            }
         }
         TPL_LIMBO => {
             // Win iff the fair draw lands under the target's win-probability band.
             let win_prob = fair * BPS_DENOM as u128 / p0 as u128; // (1-edge)/target
-            if (float_bps as u128) < win_prob { p0 } else { 0 }
+            if (float_bps as u128) < win_prob {
+                p0
+            } else {
+                0
+            }
         }
         _ => return err!(CasinoError::InvalidNativeParams),
     };
@@ -893,10 +1061,10 @@ impl Config {
 /// non-staker cuts leave the pool; `bankroll_bps` is the residual kept as yield.
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy)]
 pub struct RevenueSplit {
-    pub bankroll_bps: u16,   // stakers — stays in the pool (e.g. 6000)
-    pub creator_bps: u16,    // e.g. 2000
-    pub platform_bps: u16,   // e.g. 1500
-    pub insurance_bps: u16,  // e.g. 500
+    pub bankroll_bps: u16,  // stakers — stays in the pool (e.g. 6000)
+    pub creator_bps: u16,   // e.g. 2000
+    pub platform_bps: u16,  // e.g. 1500
+    pub insurance_bps: u16, // e.g. 500
 }
 impl RevenueSplit {
     pub const SIZE: usize = 2 * 4;

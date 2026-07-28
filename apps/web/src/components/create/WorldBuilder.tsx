@@ -389,9 +389,9 @@ export function WorldBuilder({ mechanic = 'board' }: { mechanic?: WorldMode }) {
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="World name" className="w-full rounded-xl border border-white/10 bg-void-900 px-3 py-2 text-sm text-white outline-none focus:border-neon-violet/50" />
             <input value={tagline} onChange={(e) => setTagline(e.target.value)} placeholder="Tagline" className="w-full rounded-xl border border-white/10 bg-void-900 px-3 py-2 text-sm text-white outline-none focus:border-neon-violet/50" />
             <div className="flex flex-wrap gap-1.5">
-              {STUDIO_ICONS.map((ic) => (<button key={ic} onClick={() => setIcon(ic)} className={`grid h-8 w-8 place-items-center rounded-lg border ${icon === ic ? 'border-neon-violet text-white' : 'border-white/10 text-slate-500'}`}><Icon name={ic} size={15} /></button>))}
+              {STUDIO_ICONS.map((ic) => (<button key={ic} aria-label={`Icon: ${ic}`} aria-pressed={icon === ic} onClick={() => setIcon(ic)} className={`grid h-8 w-8 place-items-center rounded-lg border ${icon === ic ? 'border-neon-violet text-white' : 'border-white/10 text-slate-500'}`}><Icon name={ic} size={15} /></button>))}
             </div>
-            <div className="flex gap-2">{ACCENTS.map((a) => (<button key={a} onClick={() => setAccent(a)} className="h-7 w-7 rounded-full border-2" style={{ background: ACCENT_HEX[a], borderColor: accent === a ? '#fff' : 'transparent' }} />))}</div>
+            <div className="flex gap-2">{ACCENTS.map((a) => (<button key={a} aria-label={`Accent colour: ${a}`} aria-pressed={accent === a} onClick={() => setAccent(a)} className="h-7 w-7 rounded-full border-2" style={{ background: ACCENT_HEX[a], borderColor: accent === a ? '#fff' : 'transparent' }} />))}</div>
             <PickRow label="Sound" items={SOUND_PACKS} value={soundPack} onPick={(v) => { setSoundPack(v as SoundPackId); sfx.packWin(v, 3); }} />
             <PickRow label="Win effect" items={WIN_EFFECTS} value={winEffect} onPick={(v) => setWinEffect(v as WinEffectId)} />
           </div>

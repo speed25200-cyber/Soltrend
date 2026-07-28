@@ -21,6 +21,15 @@ interface Ball {
   bucket: number;
 }
 
+/** A bucket's payout, at the shortest length that still reads as a number and
+ *  never rounds up. Full precision stays on the tooltip. */
+function bucketLabel(m: number): string {
+  const down = (dp: number) => (Math.floor(m * 10 ** dp) / 10 ** dp).toString();
+  if (m >= 10) return down(0);
+  if (m >= 1) return down(1);
+  return down(2);
+}
+
 export function PlinkoGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params , maxBet, demo}: GameConfig) {
   const { guard, reserveSeeds, settle } = usePlay(maxBet, demo);
   const bumpUgc = useCasino((s) => s.bumpUgc);
@@ -102,15 +111,18 @@ export function PlinkoGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params
               />
             ))}
           </div>
-          {/* buckets */}
-          <div className="flex justify-center gap-1">
+          {/* buckets — 17 of them have to fit a 390px phone, so the label is
+              compacted rather than allowed to push the page sideways. It still
+              rounds down, so it never promises more than the bucket pays. */}
+          <div className="flex justify-center gap-0.5 sm:gap-1">
             {payouts.map((m: number, i: number) => {
               const hot = m >= 5;
               return (
                 <motion.div
                   key={i}
                   animate={flash === i ? { y: [0, 6, 0], scale: [1, 1.12, 1] } : {}}
-                  className="grid flex-1 place-items-center rounded-md py-1.5 text-[0.6rem] font-bold tabular-nums md:text-xs"
+                  title={fmtMult(m)}
+                  className="grid min-w-0 flex-1 place-items-center overflow-hidden rounded-md py-1.5 text-[0.5rem] font-bold tabular-nums sm:text-[0.6rem] md:text-xs"
                   style={{
                     background:
                       flash === i
@@ -121,7 +133,7 @@ export function PlinkoGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params
                     color: flash === i ? '#05060f' : hot ? '#ffd25f' : '#94a3b8',
                   }}
                 >
-                  {fmtMult(m)}
+                  {bucketLabel(m)}
                 </motion.div>
               );
             })}

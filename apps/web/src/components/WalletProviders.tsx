@@ -4,7 +4,6 @@
 import '@/lib/onchain/polyfill';
 import { ReactNode, createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { ConnectionProvider, WalletProvider } from '@solana/wallet-adapter-react';
-import { WalletModalProvider } from '@solana/wallet-adapter-react-ui';
 import { PhantomWalletAdapter, SolflareWalletAdapter } from '@solana/wallet-adapter-wallets';
 import { clusterApiUrl } from '@solana/web3.js';
 import type { WalletError } from '@solana/wallet-adapter-base';
@@ -12,7 +11,13 @@ import type { WalletError } from '@solana/wallet-adapter-base';
 /**
  * Wallet layer. Phantom is the primary/targeted wallet; Solflare and any wallet
  * implementing the Wallet Standard (Backpack included) are auto-detected by
- * wallet-adapter, so they appear in the modal without an explicit adapter.
+ * wallet-adapter, so they appear in the picker without an explicit adapter.
+ *
+ * The adapter's own modal is deliberately not mounted. Soltrend ships its own
+ * picker (it reads WalletReadyState directly, which the stock one hides), and
+ * mounting the vendored modal costs a stylesheet whose first line is an @import
+ * of a Google font — a render-blocking third-party request on every page load,
+ * for a component nothing renders.
  */
 
 const RPC = process.env.NEXT_PUBLIC_SOLANA_RPC || clusterApiUrl('devnet');
@@ -64,9 +69,7 @@ export function WalletProviders({ children }: { children: ReactNode }) {
   return (
     <ConnectionProvider endpoint={endpoint}>
       <WalletProvider wallets={wallets} onError={onError} autoConnect>
-        <WalletModalProvider>
-          <ErrCtx.Provider value={ctx}>{children}</ErrCtx.Provider>
-        </WalletModalProvider>
+        <ErrCtx.Provider value={ctx}>{children}</ErrCtx.Provider>
       </WalletProvider>
     </ConnectionProvider>
   );

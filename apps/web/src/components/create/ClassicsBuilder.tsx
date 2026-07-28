@@ -193,6 +193,8 @@ export function ClassicsBuilder() {
                 {STUDIO_ICONS.map((ic) => (
                   <button
                     key={ic}
+                    aria-label={`Icon: ${ic}`}
+                    aria-pressed={icon === ic}
                     onClick={() => setIcon(ic)}
                     className={`grid h-9 w-9 place-items-center rounded-lg border transition ${icon === ic ? 'border-neon-violet bg-neon-violet/15 text-white' : 'border-white/10 bg-void-900/60 text-slate-400 hover:text-white'}`}
                   >
@@ -208,6 +210,8 @@ export function ClassicsBuilder() {
                 {ACCENTS.map((a) => (
                   <button
                     key={a}
+                    aria-label={`Accent colour: ${a}`}
+                    aria-pressed={accent === a}
                     onClick={() => setAccent(a)}
                     style={{ background: ACCENT_HEX[a] }}
                     className={`h-8 w-8 rounded-lg border-2 ${accent === a ? 'border-white' : 'border-white/10'}`}

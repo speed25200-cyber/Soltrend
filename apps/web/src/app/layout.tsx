@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Archivo, IBM_Plex_Mono, Plus_Jakarta_Sans } from 'next/font/google';
 import './globals.css';
-import '@solana/wallet-adapter-react-ui/styles.css';
 import { WalletProviders } from '@/components/WalletProviders';
 import { AppShell } from '@/components/AppShell';
 

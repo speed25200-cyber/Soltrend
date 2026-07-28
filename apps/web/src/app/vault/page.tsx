@@ -39,7 +39,7 @@ export default function VaultPage() {
             <div>
               <span className="label-eyebrow">Claimable yield</span>
               <div className="font-display text-3xl font-bold text-win">◎{fmtSol(yieldAccrued, 4)}</div>
-              <div className="text-xs text-slate-500">Earned from games you back. Grows as they're played.</div>
+              <div className="text-xs text-slate-500">Earned from games you back. Grows as they&apos;re played.</div>
             </div>
             <button
               className="btn-primary btn-win"

@@ -17,7 +17,14 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Typecheck, lint, the engine test suite, and the browser sweep must all pass
+  # before anything is published. A casino that deploys a red build is one
+  # broken paytable away from paying the wrong odds to real players.
+  verify:
+    uses: ./.github/workflows/ci.yml
+
   build:
+    needs: verify
     runs-on: ubuntu-latest
     defaults:
       run:

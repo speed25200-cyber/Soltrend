@@ -42,6 +42,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-dvh">
+      <a href="#main" className="skip-link btn-primary !py-2 text-sm">Skip to content</a>
       {/* Top bar */}
       <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-void-950/70 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4">
@@ -52,7 +53,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </span>
           </Link>
 
-          <nav className="ml-4 hidden items-center gap-1 md:flex">
+          <nav aria-label="Primary" className="ml-4 hidden items-center gap-1 md:flex">
             {SECTIONS.map((n) => (
               <Link
                 key={n.href}
@@ -79,13 +80,13 @@ export function AppShell({ children }: { children: ReactNode }) {
       <GeoNotice />
 
       {/* Content — every page inherits its section's sub-navigation */}
-      <main className="mx-auto max-w-7xl px-4 pb-28 pt-6 md:pb-16">
+      <main id="main" className="mx-auto max-w-7xl px-4 pb-28 pt-6 md:pb-16">
         <SectionTabs />
         {children}
       </main>
 
       {/* Bottom nav (mobile) — the same five destinations as the header */}
-      <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-white/[0.06] bg-void-950/85 backdrop-blur-xl md:hidden">
+      <nav aria-label="Primary" className="fixed inset-x-0 bottom-0 z-50 border-t border-white/[0.06] bg-void-950/85 backdrop-blur-xl md:hidden">
         <div className="mx-auto grid max-w-lg grid-cols-5">
           {SECTIONS.map((n) => {
             const active = isActive(n.href);

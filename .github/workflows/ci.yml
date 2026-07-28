@@ -1,0 +1,119 @@
+name: CI
+
+# Runs on every push and every pull request. The deploy branches are excluded
+# here because the Pages workflow calls this one directly before publishing —
+# otherwise every push to them would run the whole suite twice.
+on:
+  push:
+    branches-ignore: [main, claude/solana-casino-complete-23elkr]
+  pull_request:
+  workflow_call:
+
+# Keyed by the calling workflow as well as the ref: when Pages calls this, its
+# run and a standalone run must not cancel each other.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    name: web — typecheck, lint, engine tests, build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npx next lint --max-warnings=0
+
+      # The money paths: fairness, the house edge on every game, and the
+      # vault-safety of every configuration a creator can publish.
+      - name: Engine tests
+        run: npm test
+
+      - name: Build (static export)
+        run: npm run build
+        env:
+          STATIC_EXPORT: 'true'
+          BASE_PATH: '/Soltrend'
+          NEXT_PUBLIC_SOLANA_RPC: 'https://api.devnet.solana.com'
+
+      - name: Upload build for the smoke test
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-out
+          path: apps/web/out
+          retention-days: 1
+
+  smoke:
+    name: web — every route in a real browser
+    needs: web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-out
+          path: site/Soltrend
+      - run: npm i -D playwright-core@1.49.1
+      - run: npx playwright-core install --with-deps chromium || npx playwright install --with-deps chromium
+      - name: Serve and sweep
+        run: |
+          npx --yes http-server site -p 3211 --silent &
+          npx wait-on http://localhost:3211/Soltrend/index.html
+          node scripts/smoke.mjs
+        env:
+          SMOKE_BASE: http://localhost:3211/Soltrend
+
+  api:
+    name: api — typecheck + settlement tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm test
+
+  program:
+    name: house_vault — fmt, clippy, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: programs/house_vault
+      - name: Format
+        working-directory: programs/house_vault
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        working-directory: programs/house_vault
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Build
+        working-directory: programs/house_vault
+        run: cargo build --release

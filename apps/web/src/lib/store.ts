@@ -395,6 +395,90 @@ export const seededUgc = (): UgcGame[] => [
   },
 ];
 
+
+/** Bump when the persisted shape changes incompatibly. */
+export const PERSIST_VERSION = 1;
+
+/** Largest history the client keeps; anything longer is a storage leak. */
+const HISTORY_CAP = 500;
+
+const num = (v: unknown, fallback: number, min = -Infinity, max = Infinity): number => {
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
+};
+const bool = (v: unknown, fallback: boolean) => (typeof v === 'boolean' ? v : fallback);
+const arr = <T,>(v: unknown, cap = Infinity): T[] => (Array.isArray(v) ? (v.slice(0, cap) as T[]) : []);
+const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
+
+const hex64 = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{64}$/.test(v);
+
+/**
+ * Validate a persisted blob field by field.
+ *
+ * Only keys that survive validation are returned, so every dropped field falls
+ * back to the store's own default rather than to `undefined` — which is what
+ * turns a bad record into a crash.
+ */
+export function sanitize(raw: unknown): Partial<CasinoState> {
+  const p = obj(raw);
+  const out: Record<string, unknown> = {};
+
+  if ('balance' in p) out.balance = num(p.balance, 0, 0, 1e9);
+  if ('ageVerified' in p) out.ageVerified = bool(p.ageVerified, false);
+  if ('soundOn' in p) out.soundOn = bool(p.soundOn, true);
+
+  // The seed pair is the fairness commitment. A malformed one cannot be
+  // repaired — replaying past bets against it would fail — so it is replaced.
+  const seeds = obj(p.seeds);
+  if (hex64(seeds.serverSeed) && hex64(seeds.serverSeedHash) && typeof seeds.clientSeed === 'string') {
+    out.seeds = {
+      serverSeed: seeds.serverSeed,
+      serverSeedHash: seeds.serverSeedHash,
+      clientSeed: seeds.clientSeed,
+      nonce: Math.floor(num(seeds.nonce, 0, 0, Number.MAX_SAFE_INTEGER)),
+    };
+  }
+
+  if ('history' in p) {
+    out.history = arr<Record<string, unknown>>(p.history, HISTORY_CAP).filter(
+      (h) => h && typeof h.id === 'string' && Number.isFinite(Number(h.bet)),
+    );
+  }
+
+  const rg = obj(p.rg);
+  out.rg = {
+    maxBet: rg.maxBet == null ? null : num(rg.maxBet, 0, 0, 1e9),
+    dailyLossLimit: rg.dailyLossLimit == null ? null : num(rg.dailyLossLimit, 0, 0, 1e9),
+    sessionMinutes: rg.sessionMinutes == null ? null : num(rg.sessionMinutes, 0, 0, 10_080),
+    // A self-exclusion must survive a corrupt file — it is a safety commitment,
+    // so an unreadable value keeps the exclusion rather than dropping it.
+    selfExcludedUntil:
+      rg.selfExcludedUntil == null ? null : num(rg.selfExcludedUntil, Date.now() + 86_400_000, 0, 8.64e15),
+  };
+
+  if ('sessionLossToday' in p) out.sessionLossToday = num(p.sessionLossToday, 0, 0, 1e9);
+  if (typeof p.lossDay === 'string') out.lossDay = p.lossDay;
+
+  if ('ugc' in p) {
+    out.ugc = arr<Record<string, unknown>>(p.ugc, 500).filter(
+      (g) => g && typeof g.id === 'string' && typeof g.name === 'string' && typeof g.template === 'string',
+    );
+  }
+
+  if ('progress' in p && Object.keys(obj(p.progress)).length) out.progress = obj(p.progress);
+  if ('jackpot' in p) out.jackpot = num(p.jackpot, 0, 0, 1e9);
+  if ('jackpotWins' in p) out.jackpotWins = arr(p.jackpotWins, 200);
+  if ('bankrollStakes' in p) out.bankrollStakes = obj(p.bankrollStakes);
+  if ('bankrollYield' in p) out.bankrollYield = num(p.bankrollYield, 0, 0, 1e9);
+  if ('journeys' in p) out.journeys = obj(p.journeys);
+  if ('bests' in p) out.bests = obj(p.bests);
+  if ('dailyRuns' in p) out.dailyRuns = obj(p.dailyRuns);
+  if ('dailyStreak' in p) out.dailyStreak = num(p.dailyStreak, 0, 0, 1e6);
+  if ('lastDailyRun' in p) out.lastDailyRun = p.lastDailyRun;
+
+  return out as Partial<CasinoState>;
+}
+
 export const useCasino = create<CasinoState>()(
   persist(
     (set, get) => ({
@@ -690,6 +774,21 @@ export const useCasino = create<CasinoState>()(
     }),
     {
       name: 'soltrend-casino-v2',
+      version: PERSIST_VERSION,
+      /**
+       * Anything read back from storage is untrusted input.
+       *
+       * It may be from an older build, hand-edited, or truncated by a full disk
+       * quota. Merging it blindly means one bad record white-screens the app on
+       * every load, with no way out but clearing site data. So each field is
+       * validated on the way in and falls back to its default on its own — a
+       * corrupt history costs the history, not the session.
+       */
+      migrate: (persisted, version) => (version === PERSIST_VERSION ? persisted : sanitize(persisted)),
+      merge: (persisted, current) => ({ ...current, ...sanitize(persisted) }),
+      onRehydrateStorage: () => (_state, error) => {
+        if (error) console.error('[store] saved session could not be read; starting fresh', error);
+      },
       partialize: (s) => ({
         balance: s.balance,
         ageVerified: s.ageVerified,

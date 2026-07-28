@@ -42,6 +42,28 @@
     background: rgba(139, 92, 246, 0.35);
     color: #fff;
   }
+  /* Keyboard focus. There was none, which made the whole product unusable
+     without a mouse: you could tab onto a bet button and have no way to know
+     it. `:focus-visible` shows it for keyboard and assistive-tech users without
+     putting a ring around every click. */
+  :focus-visible {
+    outline: 2px solid rgba(168, 85, 247, 0.9);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  /* A skip link, so a keyboard user is not forced through the whole nav on
+     every page before reaching the game. */
+  .skip-link {
+    position: fixed;
+    top: 0.5rem;
+    left: 0.5rem;
+    z-index: 300;
+    transform: translateY(-200%);
+    transition: transform 0.15s ease;
+  }
+  .skip-link:focus {
+    transform: translateY(0);
+  }
   /* Sleek scrollbars */
   ::-webkit-scrollbar {
     width: 10px;
