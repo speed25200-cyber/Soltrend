@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import Link from 'next/link';
 import { useCasino, type UgcGame } from '@/lib/store';
+import { useHydrated } from '@/hooks/useHydrated';
 import { UgcCard } from '@/components/UgcRow';
 import { SectionHead } from '@/components/SectionHead';
 import { Icon } from '@/components/Icon';
@@ -12,6 +13,10 @@ import { simulateGraph, type ForgeGraph, type GraphSim } from '@/lib/forge/model
 import { noveltyScore } from '@/lib/forge/generator';
 
 export default function DiscoverPage() {
+  // Everything on this page comes from the community-game list, which lives in
+  // the browser. Prerendering it can only ever be right by coincidence — and
+  // when it is not, React throws the whole route away and re-renders it.
+  const hydrated = useHydrated();
   const ugc = useCasino((s) => s.ugc);
   const trending = [...ugc].sort((a, b) => b.volume - a.volume);
   const fresh = [...ugc].sort((a, b) => b.createdAt - a.createdAt);
@@ -48,6 +53,20 @@ export default function DiscoverPage() {
   }
   const creators = [...byCreator.entries()].sort((a, b) => b[1].volume - a[1].volume).slice(0, 8);
   const hex = gotw ? ACCENT_HEX[(gotw.theme.accent as keyof typeof ACCENT_HEX) ?? 'violet'] : '#a855f7';
+
+  if (!hydrated) {
+    return (
+      <div className="space-y-10">
+        <SectionHead eyebrow="Play · Community" title="Made by the community" sub="Trending games, fresh drops and the creators behind them" />
+        <div className="glass h-40 animate-pulse rounded-2xl" />
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="glass h-44 animate-pulse rounded-2xl" />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-10">
