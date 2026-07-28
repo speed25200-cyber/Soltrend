@@ -9,6 +9,9 @@ const isExport = process.env.STATIC_EXPORT === 'true';
 const basePath = process.env.BASE_PATH || '';
 
 const nextConfig = {
+  // The engine ships as TypeScript from the workspace so the client, the
+  // settlement service and any auditor all run the same file.
+  transpilePackages: ['@soltrend/shared'],
   reactStrictMode: true,
   // Static export for GitHub Pages (STATIC_EXPORT=true). Left off for normal
   // SSR builds / dev so nothing changes locally.

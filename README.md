@@ -54,8 +54,15 @@ cover the full settle → reveal → verify loop. See `apps/api/README.md`.
 
 ### The engine (`packages/shared`)
 Dependency-free **SHA-256 + HMAC-SHA256** (byte-verified against Node `crypto`), a deterministic
-float stream, and the generic game math for every template. The exact same code runs on the client,
-the settlement service, and any third-party audit — that's what makes "provably fair" real.
+float stream, and the generic game math for every template.
+
+The web client, the settlement service and any third-party verifier import *this* module — there is
+one copy of the maths, not three. That is not a stylistic preference: these files were previously
+duplicated into `apps/web/src/lib`, and the copies drifted until the client solved Plinko's payout
+tables for an exact edge while the settlement service was still paying from hand-written ones whose
+real edges ran from 0.9% to 38%. A client and a server that disagree about a payout is the end of
+any "provably fair" claim, so `apps/web/src/lib/{games,gamespec,provably-fair,sha256}.ts` are now
+one-line re-exports and the workspace is installed from the repo root.
 
 ### The program (`programs/house_vault`)
 Idiomatic **Anchor 0.30** program that is the *sole legal operator*:

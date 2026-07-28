@@ -9,7 +9,7 @@ import {
   minesMultiplier,
   clampEdge,
   round2,
-  PLINKO_PAYOUTS,
+  plinkoPayouts,
   type Template,
 } from '@soltrend/shared';
 import type { SeedSnapshot } from '../common/session.store';
@@ -57,8 +57,9 @@ export function computeOutcome(
     case 'plinko': {
       const rows = [8, 12, 16].includes(num(params.rows, 12)) ? num(params.rows, 12) : 12;
       const { bucket, path } = dropPlinko(rows as 8 | 12 | 16, s);
-      const raw = (PLINKO_PAYOUTS[risk(params.risk)][rows as 8 | 12 | 16] ?? [])[bucket] ?? 1;
-      const multiplier = round2(raw * (1 - clampEdge(edge)));
+      // The solved table already carries the edge; applying it again here is
+      // what made the settled edge differ from the quoted one.
+      const multiplier = plinkoPayouts(risk(params.risk), rows, edge)[bucket] ?? 1;
       return { multiplier, payout: round2(bet * multiplier), win: multiplier >= 1, detail: { bucket, path } };
     }
     case 'mines': {

@@ -57,11 +57,45 @@ describe('provably-fair settlement', () => {
     expect(v.outcome.payout).toBe(settled.payout);
   });
 
-  it('dice realises ~1% house edge over many bets', () => {
+  /**
+   * The dice edge, asserted where it is exact and only sanity-checked where it
+   * is random.
+   *
+   * This test used to run 30,000 rounds and require the realised edge to land
+   * in [0.3%, 1.8%]. A 2x dice bet has a per-round standard deviation of ~0.99,
+   * so 30,000 rounds gives a standard error of 0.57 percentage points — the
+   * lower bound sat barely above one sigma from the truth, and the test failed
+   * roughly one run in eight. A gate that red that often is worse than none.
+   */
+  it('quotes a dice multiplier that is exactly fair minus the edge', () => {
     const { games } = build();
+    const EDGE = 0.01;
+    for (const target of [2, 10, 25, 50, 75, 90, 98]) {
+      for (const over of [false, true]) {
+        const r = games.settle({
+          sessionId: `q-${target}-${over}`,
+          player: 'p',
+          gameId: 'dice',
+          bet: 1,
+          params: { target, over },
+        });
+        const winChance = (over ? 100 - target : target) / 100;
+        const expected = (1 - EDGE) / winChance;
+        // The quoted multiplier is deterministic given the target — no sampling.
+        expect(r.multiplier).toBeCloseTo(expected, 6);
+        // …and expectation is exactly 1 - edge, which is the property that matters.
+        expect(winChance * r.multiplier).toBeCloseTo(1 - EDGE, 9);
+      }
+    }
+  });
+
+  it('rolls a dice distribution consistent with the target', () => {
+    const { games } = build();
+    const rounds = 30_000;
+    let wins = 0;
     let staked = 0;
     let paid = 0;
-    for (let i = 0; i < 30000; i++) {
+    for (let i = 0; i < rounds; i++) {
       const r = games.settle({
         sessionId: 'edge',
         player: 'p',
@@ -71,10 +105,18 @@ describe('provably-fair settlement', () => {
       });
       staked += 1;
       paid += r.payout;
+      if (r.payout > 0) wins += 1;
     }
-    const edge = ((staked - paid) / staked) * 100;
-    expect(edge).toBeGreaterThan(0.3);
-    expect(edge).toBeLessThan(1.8);
+    // Win rate against its own binomial sigma — a biased roll fails, noise does not.
+    const p = 0.5;
+    const sigma = Math.sqrt(rounds * p * (1 - p));
+    expect(Math.abs(wins - rounds * p)).toBeLessThan(4 * sigma);
+
+    // The realised return, with a tolerance derived from the actual standard
+    // error (0.99 / sqrt(rounds)) rather than a guessed band.
+    const rtp = paid / staked;
+    const se = 0.99 / Math.sqrt(rounds);
+    expect(Math.abs(rtp - 0.99)).toBeLessThan(4 * se);
   });
 
   it('mines: hitting a bomb loses, a safe path pays', () => {
