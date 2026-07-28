@@ -1,13 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { GameLayout } from '@/components/GameLayout';
 import { BetAmount } from '@/components/BetControls';
 import { BetButton } from './BetButton';
 import { usePlay } from '@/hooks/usePlay';
 import { useCasino } from '@/lib/store';
-import { dropPlinko, PLINKO_PAYOUTS, DEFAULT_EDGE, round2 } from '@/lib/games';
+import { dropPlinko, plinkoPayouts, DEFAULT_EDGE, round2 } from '@/lib/games';
 import { fmtMult } from '@/lib/format';
 import type { GameConfig } from './types';
 
@@ -31,15 +31,14 @@ export function PlinkoGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params
   const [balls, setBalls] = useState<Ball[]>([]);
   const [flash, setFlash] = useState<number | null>(null);
 
-  const payouts = PLINKO_PAYOUTS[risk][rows];
+  // Already edge-solved: what the buckets show is what the ball pays.
+  const payouts = useMemo(() => plinkoPayouts(risk, rows, edge), [risk, rows, edge]);
   const g = guard(bet);
 
   const drop = () => {
     const seeds = reserveSeeds();
     const { path, bucket } = dropPlinko(rows, seeds);
-    const rawMult = payouts[bucket] ?? 1;
-    // House edge applied uniformly on top of the visual payout table.
-    const mult = round2(rawMult * (1 - edge));
+    const mult = round2(payouts[bucket] ?? 1);
     const xs: number[] = [];
     const ys: number[] = [];
     let sr = 0;
@@ -105,7 +104,7 @@ export function PlinkoGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params
           </div>
           {/* buckets */}
           <div className="flex justify-center gap-1">
-            {payouts.map((m, i) => {
+            {payouts.map((m: number, i: number) => {
               const hot = m >= 5;
               return (
                 <motion.div
@@ -122,7 +121,7 @@ export function PlinkoGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params
                     color: flash === i ? '#05060f' : hot ? '#ffd25f' : '#94a3b8',
                   }}
                 >
-                  {m}×
+                  {fmtMult(m)}
                 </motion.div>
               );
             })}

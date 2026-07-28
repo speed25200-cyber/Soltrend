@@ -9,7 +9,7 @@ import { ConnectButton } from '@/components/ConnectButton';
 import { Icon } from '@/components/Icon';
 import { SolMark } from '@/components/BalanceWidget';
 import { Collection } from '@/components/Collection';
-import { fmtSol, fmtMult, fmtCompact, shortAddr, timeAgo } from '@/lib/format';
+import { fmtSol, fmtMult, fmtMultExact, fmtCompact, shortAddr, timeAgo } from '@/lib/format';
 import { creatorEarnings } from '@/lib/store';
 import { vipFromWagered, levelFromXp } from '@/lib/progression';
 import { useOnchainVault } from '@/hooks/useOnchainVault';
@@ -106,7 +106,10 @@ export default function ProfilePage() {
                     <div className="text-[0.65rem] text-slate-500">{timeAgo(h.ts)} · nonce {h.nonce}</div>
                   </div>
                   <div className="text-right font-mono text-slate-400">◎{fmtSol(h.bet, 3)}</div>
-                  <div className={`hidden text-right font-mono md:block ${h.win ? 'text-win' : 'text-slate-500'}`}>
+                  <div
+                    className={`hidden text-right font-mono md:block ${h.win ? 'text-win' : 'text-slate-500'}`}
+                    title={`Exact multiplier settled: ${fmtMultExact(h.multiplier)}`}
+                  >
                     {fmtMult(h.multiplier)}
                   </div>
                   <div className={`text-right font-mono font-bold ${h.win ? 'text-win' : 'text-loss'}`}>

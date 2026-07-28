@@ -12,7 +12,7 @@ import {
   MAX_EDGE,
   clampEdge,
   minesMultiplier,
-  PLINKO_PAYOUTS,
+  plinkoPayouts,
   type Template,
 } from './games';
 
@@ -54,8 +54,7 @@ export function maxWinMultiplier(spec: GameSpec): number {
     case 'plinko': {
       const risk = (spec.params.risk as 'low' | 'medium' | 'high') ?? 'medium';
       const rows = (spec.params.rows as 8 | 12 | 16) ?? 12;
-      const table = PLINKO_PAYOUTS[risk][rows] ?? [];
-      return Math.max(...table) * (1 - e);
+      return Math.max(...plinkoPayouts(risk, rows, e));
     }
     case 'wheel':
       return 50 * (1 - e); // high-risk top segment

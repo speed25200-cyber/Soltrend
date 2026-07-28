@@ -13,6 +13,13 @@ export const MIN_EDGE = 0.01; // 1%
 export const MAX_EDGE = 0.05; // 5%
 export const DEFAULT_EDGE = 0.01;
 
+/**
+ * The largest multiplier any single round may pay. This mirrors the vault's
+ * `max_payout_lamports` — a client that quotes past it is promising a payout the
+ * chain will refuse to settle.
+ */
+export const MAX_MULTIPLIER = 1000;
+
 export function clampEdge(edge: number): number {
   return Math.min(MAX_EDGE, Math.max(MIN_EDGE, edge));
 }
@@ -40,12 +47,12 @@ export function playDice(
   const winChance = over ? 100 - target : target; // percent
   const win = over ? roll > target : roll < target;
   const multiplier = winChance > 0 ? ((100 - clampEdge(edge) * 100) / winChance) : 0;
-  return { roll, win, multiplier: round2(multiplier), payout: win ? round2(bet * multiplier) : 0 };
+  return { roll, win, multiplier, payout: win ? round2(bet * multiplier) : 0 };
 }
 
 export function diceMultiplier(target: number, over: boolean, edge = DEFAULT_EDGE): number {
   const winChance = over ? 100 - target : target;
-  return winChance > 0 ? round2((100 - clampEdge(edge) * 100) / winChance) : 0;
+  return winChance > 0 ? (100 - clampEdge(edge) * 100) / winChance : 0;
 }
 
 /* ---------------------------------------------------------------------- Limbo */
@@ -97,7 +104,7 @@ export function playCoinflip(
   const heads = firstFloat(seeds.serverSeed, seeds.clientSeed, seeds.nonce) < 0.5;
   const win = heads === pickHeads;
   const multiplier = 2 * (1 - clampEdge(edge));
-  return { heads, win, multiplier: round2(multiplier), payout: win ? round2(bet * multiplier) : 0 };
+  return { heads, win, multiplier, payout: win ? round2(bet * multiplier) : 0 };
 }
 
 /* ----------------------------------------------------------------------- Wheel */
@@ -108,35 +115,72 @@ export interface WheelSegment {
   weight: number;
 }
 
-/** Build a balanced wheel whose expected return equals (1 - edge). */
-export function buildWheel(risk: 'low' | 'medium' | 'high', segments = 30, edge = DEFAULT_EDGE): WheelSegment[] {
-  // Base multiplier pattern per risk profile (relative weights).
-  const patterns: Record<string, { mult: number; color: string; weight: number }[]> = {
-    low: [
-      { mult: 0, color: 'loss', weight: 8 },
-      { mult: 1.2, color: 'violet', weight: 14 },
-      { mult: 1.5, color: 'cyan', weight: 6 },
-      { mult: 2, color: 'gold', weight: 2 },
-    ],
-    medium: [
-      { mult: 0, color: 'loss', weight: 16 },
-      { mult: 1.5, color: 'violet', weight: 8 },
-      { mult: 2, color: 'cyan', weight: 4 },
-      { mult: 4, color: 'gold', weight: 2 },
-    ],
-    high: [
-      { mult: 0, color: 'loss', weight: 24 },
-      { mult: 3, color: 'violet', weight: 4 },
-      { mult: 10, color: 'cyan', weight: 1 },
-      { mult: 50, color: 'gold', weight: 1 },
-    ],
-  };
-  const base = patterns[risk];
-  // Normalise so EV == 1 - edge.
-  const totalW = base.reduce((s, x) => s + x.weight, 0);
-  const rawEv = base.reduce((s, x) => s + (x.mult * x.weight) / totalW, 0);
+/** Slots per turn of the wheel. Every slot is equally likely, so the odds a
+ *  player sees on the rim are the odds they get. */
+export const WHEEL_SEGMENTS = 30;
+
+/**
+ * The wheel's shape: how many of the 30 slots carry each payout tier. Counts
+ * must sum to WHEEL_SEGMENTS so every slot is 1/30 — a weighted wheel would be
+ * one whose displayed rim does not match its real odds.
+ */
+export const WHEEL_RINGS: Record<'low' | 'medium' | 'high', { mult: number; color: string; count: number }[]> = {
+  low: [
+    { mult: 0, color: 'loss', count: 10 },
+    { mult: 1.2, color: 'violet', count: 12 },
+    { mult: 1.5, color: 'cyan', count: 6 },
+    { mult: 2, color: 'gold', count: 2 },
+  ],
+  medium: [
+    { mult: 0, color: 'loss', count: 15 },
+    { mult: 1.5, color: 'violet', count: 8 },
+    { mult: 2, color: 'cyan', count: 4 },
+    { mult: 4, color: 'gold', count: 3 },
+  ],
+  high: [
+    { mult: 0, color: 'loss', count: 22 },
+    { mult: 3, color: 'violet', count: 4 },
+    { mult: 10, color: 'cyan', count: 3 },
+    { mult: 50, color: 'gold', count: 1 },
+  ],
+};
+
+/**
+ * Build the wheel a player actually spins: one entry per slot, equal weight,
+ * scaled so expected return is exactly `1 - edge`.
+ *
+ * The component and the simulator both call this. They used to carry separate
+ * tables with different odds, which meant the studio's projected edge belonged
+ * to a wheel nobody ever span.
+ */
+export function buildWheel(risk: 'low' | 'medium' | 'high', segments = WHEEL_SEGMENTS, edge = DEFAULT_EDGE): WheelSegment[] {
+  const cats = WHEEL_RINGS[risk] ?? WHEEL_RINGS.medium;
+  const slots = cats.reduce((s, c) => s + c.count, 0) || segments;
+  const rawEv = cats.reduce((s, c) => s + c.mult * c.count, 0) / slots;
   const scale = rawEv > 0 ? (1 - clampEdge(edge)) / rawEv : 1;
-  return base.map((x) => ({ multiplier: round2(x.mult * scale), color: x.color, weight: x.weight }));
+
+  const out: WheelSegment[] = [];
+  for (const c of cats) {
+    for (let i = 0; i < c.count; i++) {
+      out.push({ multiplier: c.mult === 0 ? 0 : c.mult * scale, color: c.color, weight: 1 });
+    }
+  }
+  return out;
+}
+
+/** Spread the slots around the rim so big payouts are never adjacent. Purely
+ *  cosmetic — every slot is still 1/30, whatever order they sit in. */
+export function interleaveWheel(slots: WheelSegment[]): WheelSegment[] {
+  const n = slots.length;
+  const ring = new Array<WheelSegment | undefined>(n);
+  let idx = 0;
+  const stride = 7; // coprime with 30 → even spread
+  for (const slot of slots) {
+    while (ring[idx % n]) idx++;
+    ring[idx % n] = slot;
+    idx = (idx + stride) % n;
+  }
+  return ring.map((s, i) => s ?? slots[i]);
 }
 
 export function spinWheel(
@@ -171,28 +215,91 @@ export function minesMultiplier(grid: number, bombs: number, picks: number, edge
   for (let i = 0; i < picks; i++) {
     m *= (grid - i) / (grid - bombs - i);
   }
-  return round2(m * (1 - clampEdge(edge)));
+  return m * (1 - clampEdge(edge));
 }
 
 /* ---------------------------------------------------------------------- Plinko */
 
-export const PLINKO_PAYOUTS: Record<'low' | 'medium' | 'high', Record<number, number[]>> = {
+/**
+ * The *shape* of each Plinko board — the relative payout profile that gives a
+ * risk level its character, not the numbers a player is paid. Every row is
+ * symmetric and has exactly rows+1 buckets.
+ *
+ * These are deliberately NOT the paid multipliers. A hand-written table carries
+ * whatever house edge its author happened to type, which here ranged from 0.9%
+ * to 38% and was then multiplied by the configured edge a second time. Payouts
+ * are derived from these shapes by `plinkoPayouts`, which solves the scale so
+ * the board's expected return is exactly `1 - edge`.
+ */
+export const PLINKO_SHAPES: Record<'low' | 'medium' | 'high', Record<number, number[]>> = {
   low: {
     8: [5.6, 2.1, 1.1, 1, 0.5, 1, 1.1, 2.1, 5.6],
-    12: [8.4, 3, 1.6, 1.1, 1, 0.5, 1, 1, 0.5, 1, 1.1, 1.6, 3, 8.4].slice(0, 13),
-    16: [16, 9, 2, 1.4, 1.1, 1, 0.5, 1, 0.5, 1, 1, 1.1, 1.4, 2, 9, 16, 110].slice(0, 17),
+    12: [10, 3, 1.6, 1.4, 1.1, 1, 0.5, 1, 1.1, 1.4, 1.6, 3, 10],
+    16: [16, 9, 2, 1.4, 1.4, 1.2, 1.1, 1, 0.5, 1, 1.1, 1.2, 1.4, 1.4, 2, 9, 16],
   },
   medium: {
     8: [13, 3, 1.3, 0.7, 0.4, 0.7, 1.3, 3, 13],
-    12: [24, 5, 2, 1.4, 0.6, 0.4, 0.3, 0.4, 0.6, 1.4, 2, 5, 24],
+    12: [33, 11, 4, 2, 1.1, 0.6, 0.3, 0.6, 1.1, 2, 4, 11, 33],
     16: [110, 41, 10, 5, 3, 1.5, 1, 0.5, 0.3, 0.5, 1, 1.5, 3, 5, 10, 41, 110],
   },
   high: {
     8: [29, 4, 1.5, 0.3, 0.2, 0.3, 1.5, 4, 29],
-    12: [58, 8, 3, 2, 0.7, 0.2, 0.2, 0.2, 0.7, 2, 3, 8, 58],
+    12: [76, 18, 5, 1.9, 0.3, 0.2, 0.2, 0.2, 0.3, 1.9, 5, 18, 76],
     16: [1000, 130, 26, 9, 4, 2, 0.2, 0.2, 0.2, 0.2, 0.2, 2, 4, 9, 26, 130, 1000],
   },
 };
+
+/** Binomial coefficient, exact for the row counts Plinko uses. */
+function binom(n: number, k: number): number {
+  let r = 1;
+  for (let i = 0; i < k; i++) r = (r * (n - i)) / (i + 1);
+  return r;
+}
+
+/** Probability of landing in each bucket — a fair ball is a binomial walk. */
+export function plinkoBucketOdds(rows: number): number[] {
+  const denom = 2 ** rows;
+  return Array.from({ length: rows + 1 }, (_, k) => binom(rows, k) / denom);
+}
+
+/**
+ * The multipliers a Plinko board actually pays, solved so that expected return
+ * equals `1 - clampEdge(edge)` exactly.
+ *
+ * This is the single source of truth: the ball is paid this table, the buckets
+ * on screen display this table, and the simulator scores this table. There is no
+ * second edge applied anywhere — a player is paid the number they were shown.
+ */
+export function plinkoPayouts(
+  risk: 'low' | 'medium' | 'high',
+  rows: number,
+  edge = DEFAULT_EDGE,
+): number[] {
+  const shape = PLINKO_SHAPES[risk]?.[rows] ?? PLINKO_SHAPES.medium[12];
+  const odds = plinkoBucketOdds(rows);
+  const target = 1 - clampEdge(edge);
+  const rawEv = shape.reduce((s, m, k) => s + m * (odds[k] ?? 0), 0);
+  if (rawEv <= 0) return shape.slice();
+
+  // Solve the scale, then hold the vault ceiling: any bucket that would pay past
+  // MAX_MULTIPLIER is pinned there and the rest are re-solved around it, so the
+  // board still returns exactly `1 - edge`. Without this a 1% board's top bucket
+  // scales past 1000x and the chain rejects a win the client already showed.
+  const capped = new Array<boolean>(shape.length).fill(false);
+  let out = shape.map((m) => m * (target / rawEv));
+
+  for (let pass = 0; pass < shape.length; pass++) {
+    const over = out.findIndex((m, k) => !capped[k] && m > MAX_MULTIPLIER);
+    if (over === -1) break;
+    capped[over] = true;
+
+    const pinnedEv = shape.reduce((s, _m, k) => (capped[k] ? s + MAX_MULTIPLIER * odds[k] : s), 0);
+    const freeEv = shape.reduce((s, m, k) => (capped[k] ? s : s + m * odds[k]), 0);
+    const scale = freeEv > 0 ? Math.max(0, target - pinnedEv) / freeEv : 0;
+    out = shape.map((m, k) => (capped[k] ? MAX_MULTIPLIER : m * scale));
+  }
+  return out;
+}
 
 /** Drop the ball: each of `rows` pegs sends it left(0)/right(1). Bucket = # rights. */
 export function dropPlinko(
@@ -225,11 +332,20 @@ export function towersLayout(
 export function towersMultiplier(cols: number, level: number, edge = DEFAULT_EDGE): number {
   if (level <= 0) return 1;
   const per = cols / (cols - 1);
-  return round2(Math.pow(per, level) * (1 - clampEdge(edge)));
+  return Math.pow(per, level) * (1 - clampEdge(edge));
 }
 
 /* ----------------------------------------------------------------------- utils */
 
+/**
+ * Rounding for MONEY, not for multipliers.
+ *
+ * A multiplier rounded to two decimals leaks real value: Mines 25/3 on its first
+ * pick quotes 1.125x, and rounding that to 1.13 turns a configured 1% edge into
+ * a realised 0.56% — outside the band the vault and the licence both assume.
+ * Engines therefore return exact multipliers and only the settled payout is
+ * rounded here; `fmtMult` shows the player the full precision they are paid.
+ */
 export function round2(n: number): number {
   return Math.round((n + Number.EPSILON) * 100) / 100;
 }

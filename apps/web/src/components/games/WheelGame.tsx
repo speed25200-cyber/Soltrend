@@ -7,7 +7,7 @@ import { BetAmount } from '@/components/BetControls';
 import { BetButton } from './BetButton';
 import { usePlay } from '@/hooks/usePlay';
 import { useCasino } from '@/lib/store';
-import { clampEdge, DEFAULT_EDGE, round2 } from '@/lib/games';
+import { buildWheel, interleaveWheel, DEFAULT_EDGE, round2 } from '@/lib/games';
 import { firstFloat } from '@/lib/provably-fair';
 import { fmtMult } from '@/lib/format';
 import { Icon } from '@/components/Icon';
@@ -23,47 +23,9 @@ const COLORS: Record<string, string> = {
   gold: '#ffd25f',
 };
 
-// Equal-probability ring (each segment 1/SEG). Non-zero multipliers scaled so
-// the expected return is exactly (1 - edge) — the edge is provable from the ring.
+/** The rim, laid out for looks. The economics live in `buildWheel`. */
 function buildRing(risk: Risk, edge: number): { mult: number; color: string }[] {
-  const spec: Record<Risk, { mult: number; color: string; count: number }[]> = {
-    low: [
-      { mult: 0, color: 'loss', count: 10 },
-      { mult: 1.2, color: 'violet', count: 12 },
-      { mult: 1.5, color: 'cyan', count: 6 },
-      { mult: 2, color: 'gold', count: 2 },
-    ],
-    medium: [
-      { mult: 0, color: 'loss', count: 15 },
-      { mult: 1.5, color: 'violet', count: 8 },
-      { mult: 2, color: 'cyan', count: 4 },
-      { mult: 4, color: 'gold', count: 3 },
-    ],
-    high: [
-      { mult: 0, color: 'loss', count: 22 },
-      { mult: 3, color: 'violet', count: 4 },
-      { mult: 10, color: 'cyan', count: 3 },
-      { mult: 50, color: 'gold', count: 1 },
-    ],
-  };
-  const cats = spec[risk];
-  const rawEv = cats.reduce((s, c) => s + c.mult * c.count, 0) / SEG;
-  const scale = rawEv > 0 ? (1 - clampEdge(edge)) / rawEv : 1;
-
-  // Expand to slots, then interleave so high payouts are spread around the wheel.
-  const pool: { mult: number; color: string }[] = [];
-  cats.forEach((c) => {
-    for (let i = 0; i < c.count; i++) pool.push({ mult: c.mult === 0 ? 0 : round2(c.mult * scale), color: c.color });
-  });
-  const ring: { mult: number; color: string }[] = new Array(SEG);
-  let idx = 0;
-  const stride = 7; // coprime-ish with 30 → even spread
-  for (const slot of pool) {
-    while (ring[idx % SEG]) idx++;
-    ring[idx % SEG] = slot;
-    idx = (idx + stride) % SEG;
-  }
-  return ring;
+  return interleaveWheel(buildWheel(risk, SEG, edge)).map((s) => ({ mult: s.multiplier, color: s.color }));
 }
 
 export function WheelGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params , maxBet, demo}: GameConfig) {

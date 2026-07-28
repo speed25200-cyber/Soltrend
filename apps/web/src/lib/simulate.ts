@@ -16,7 +16,7 @@ import {
   minesLayout,
   minesMultiplier,
   clampEdge,
-  PLINKO_PAYOUTS,
+  plinkoPayouts,
   type Template,
 } from './games';
 
@@ -76,8 +76,7 @@ function roundMultiplier(
     case 'plinko': {
       const rows = [8, 12, 16].includes(params.rows) ? params.rows : 12;
       const { bucket } = dropPlinko(rows, seeds);
-      const raw = (PLINKO_PAYOUTS[(params.risk ?? 'medium') as 'low' | 'medium' | 'high'][rows as 8 | 12 | 16] ?? [])[bucket] ?? 1;
-      return raw * (1 - clampEdge(edge));
+      return plinkoPayouts((params.risk ?? 'medium') as 'low' | 'medium' | 'high', rows, edge)[bucket] ?? 1;
     }
     case 'mines': {
       const grid = params.grid ?? 25;
