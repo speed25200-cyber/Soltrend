@@ -47,6 +47,48 @@ const SETTLE_TIMEOUT_SLOTS: u64 = 5_400;
 /// creator (seller) keeps the remainder — the asset creator economy.
 const ASSET_FEE_BPS: u64 = 500; // 5%
 
+/* ------------------------------------------------------------- share maths */
+
+/// Shares minted for a stake of `amount` into a pool worth `value`.
+///
+/// `shares = amount · (total_shares + VIRT) / (value + VIRT)`.
+///
+/// The virtual offset is what neutralises the first-depositor inflation attack:
+/// without it, an attacker stakes 1 lamport, donates a large amount straight to
+/// the pool account so one share is worth a fortune, and the next staker's
+/// deposit rounds down to zero shares — their money becomes the attacker's. With
+/// VIRT the pool behaves as though it already held a large balance, so no early
+/// position can be levered that way.
+pub fn shares_for_stake(amount: u64, total_shares: u128, value: u128) -> Result<u128> {
+    (amount as u128)
+        .checked_mul(
+            total_shares
+                .checked_add(VIRT)
+                .ok_or(CasinoError::MathOverflow)?,
+        )
+        .ok_or(CasinoError::MathOverflow)?
+        .checked_div(value.checked_add(VIRT).ok_or(CasinoError::MathOverflow)?)
+        .ok_or(CasinoError::MathOverflow.into())
+}
+
+/// Lamports redeemed for `shares` — the exact mirror of `shares_for_stake`.
+///
+/// Both round down, so a round trip can only ever return the staker less than
+/// they put in. Rounding the other way would let a position be minted and
+/// redeemed at a profit, which is a drain on every other staker in the pool.
+pub fn lamports_for_shares(shares: u128, total_shares: u128, value: u128) -> Result<u64> {
+    let amount = shares
+        .checked_mul(value.checked_add(VIRT).ok_or(CasinoError::MathOverflow)?)
+        .ok_or(CasinoError::MathOverflow)?
+        .checked_div(
+            total_shares
+                .checked_add(VIRT)
+                .ok_or(CasinoError::MathOverflow)?,
+        )
+        .ok_or(CasinoError::MathOverflow)?;
+    u64::try_from(amount).map_err(|_| CasinoError::MathOverflow.into())
+}
+
 /* ------------------------------------------------------------ payout maths */
 
 /// Apply a basis-point multiplier to a lamport amount.
@@ -221,18 +263,7 @@ pub mod house_vault {
         let rent = Rent::get()?.minimum_balance(pool_ai.data_len());
         let value = pool_ai.lamports().saturating_sub(rent) as u128;
 
-        // Virtual offset (VIRT) neutralises the first-depositor inflation attack:
-        // shares = amount · (total_shares + VIRT) / (pool_value + VIRT).
-        let minted: u128 = (amount as u128)
-            .checked_mul(
-                ctx.accounts
-                    .pool
-                    .total_shares
-                    .checked_add(VIRT)
-                    .ok_or(CasinoError::MathOverflow)?,
-            )
-            .ok_or(CasinoError::MathOverflow)?
-            / value.checked_add(VIRT).ok_or(CasinoError::MathOverflow)?;
+        let minted = shares_for_stake(amount, ctx.accounts.pool.total_shares, value)?;
         require!(minted > 0, CasinoError::ZeroShares);
 
         // Staker funds the pool.
@@ -281,16 +312,7 @@ pub mod house_vault {
         let pool_ai = ctx.accounts.pool.to_account_info();
         let rent = Rent::get()?.minimum_balance(pool_ai.data_len());
         let value = pool_ai.lamports().saturating_sub(rent) as u128;
-        // Mirror of the mint formula: amount = shares · (value + VIRT) / (total + VIRT).
-        let amount = (shares
-            .checked_mul(value.checked_add(VIRT).ok_or(CasinoError::MathOverflow)?)
-            .ok_or(CasinoError::MathOverflow)?
-            / ctx
-                .accounts
-                .pool
-                .total_shares
-                .checked_add(VIRT)
-                .ok_or(CasinoError::MathOverflow)?) as u64;
+        let amount = lamports_for_shares(shares, ctx.accounts.pool.total_shares, value)?;
 
         // A staker can never withdraw locked (reserved) liability, only free value.
         let free = pool_ai
@@ -1430,5 +1452,155 @@ mod tests {
         // Anything above the reserved ceiling is caught by the require! in
         // settle_bet; here we only assert the maths agrees it is larger.
         assert!(apply_bps(bet, 1_001 * BPS_DENOM).unwrap() > max_payout);
+    }
+    /* ------------------------------------------------- staker share accounting */
+
+    /// A pool as the maths sees it: what it is worth, and how many shares exist.
+    #[derive(Clone, Copy)]
+    struct Pool {
+        value: u128,
+        shares: u128,
+    }
+    impl Pool {
+        fn empty() -> Self {
+            Pool {
+                value: 0,
+                shares: 0,
+            }
+        }
+        fn stake(&mut self, amount: u64) -> u128 {
+            let minted = shares_for_stake(amount, self.shares, self.value).unwrap();
+            self.shares += minted;
+            self.value += amount as u128;
+            minted
+        }
+        fn unstake(&mut self, shares: u128) -> u64 {
+            let amount = lamports_for_shares(shares, self.shares, self.value).unwrap();
+            self.shares -= shares;
+            self.value -= amount as u128;
+            amount
+        }
+        fn worth(&self, shares: u128) -> u64 {
+            lamports_for_shares(shares, self.shares, self.value).unwrap()
+        }
+    }
+
+    #[test]
+    fn a_round_trip_never_returns_more_than_it_put_in() {
+        // Minting and redeeming at a profit would be value created from nothing,
+        // paid for by every other staker in the pool.
+        for seed in [1u64, 7, 1_000, SOL, 137 * SOL, u64::MAX / 1_000_000] {
+            for amount in [1u64, 999, SOL, 3 * SOL] {
+                let mut p = Pool::empty();
+                p.stake(seed);
+                let minted = p.stake(amount);
+                let back = p.unstake(minted);
+                assert!(
+                    back <= amount,
+                    "seed {seed} amount {amount}: {back} > {amount}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_first_depositor_cannot_inflate_a_share() {
+        // The classic vault attack: stake the smallest possible amount, donate a
+        // large sum straight into the pool so one share looks enormously
+        // valuable, and the victim's deposit rounds down to zero shares. The
+        // virtual offset is what stops it.
+        let mut p = Pool::empty();
+        let attacker = p.stake(1); // 1 lamport
+        p.value += 10_000 * SOL as u128; // donated directly, no shares minted
+
+        let victim_deposit = 5 * SOL;
+        let victim = p.stake(victim_deposit);
+        assert!(victim > 0, "victim's deposit must mint shares");
+
+        // The victim keeps essentially all of their deposit — the attack fails
+        // at its objective, which was to round that deposit down to nothing.
+        let victim_back = p.worth(victim);
+        assert!(
+            victim_back >= victim_deposit - victim_deposit / 1_000,
+            "victim recovered only {victim_back} of {victim_deposit}"
+        );
+
+        // And the attacker is left far worse off than they started. They can
+        // redeem a share of the pool their own donation inflated, but nothing
+        // like what they spent inflating it — the attack costs 10,000 SOL to
+        // extract a hundredth of one. That is the whole point of the offset:
+        // it does not forbid the manoeuvre, it makes it ruinous.
+        let spent = 1 + 10_000 * SOL as u128;
+        let attacker_back = p.worth(attacker) as u128;
+        assert!(
+            attacker_back < spent / 1_000,
+            "attacker recovered {attacker_back} of {spent}"
+        );
+    }
+
+    #[test]
+    fn staking_never_dilutes_an_existing_position() {
+        // Someone else joining must not reduce what a staker can redeem.
+        let mut p = Pool::empty();
+        let mine = p.stake(10 * SOL);
+        let before = p.worth(mine);
+        for other in [1u64, SOL, 500 * SOL] {
+            p.stake(other);
+            let after = p.worth(mine);
+            assert!(after + 1 >= before, "diluted: {before} -> {after}");
+        }
+    }
+
+    #[test]
+    fn a_pool_that_wins_lifts_every_share_and_a_pool_that_loses_cuts_them() {
+        // Stakers carry the variance — that is what they are paid the edge for.
+        let mut p = Pool::empty();
+        let mine = p.stake(100 * SOL);
+        let flat = p.worth(mine);
+
+        p.value += 10 * SOL as u128; // the house won
+        assert!(p.worth(mine) > flat);
+
+        p.value -= 30 * SOL as u128; // a lucky player took a run out of it
+        assert!(p.worth(mine) < flat);
+    }
+
+    #[test]
+    fn redemption_is_monotonic_in_shares() {
+        let mut p = Pool::empty();
+        p.stake(50 * SOL);
+        let mut last = 0u64;
+        for shares in [1u128, 1_000, 1_000_000, 1_000_000_000] {
+            let v = p.worth(shares);
+            assert!(v >= last);
+            last = v;
+        }
+    }
+
+    #[test]
+    fn a_dust_stake_into_a_huge_pool_still_mints_or_is_refused() {
+        // It may round to zero shares — `stake` rejects that with ZeroShares
+        // rather than taking the money — but it must never mint something for
+        // nothing, and it must never panic.
+        let mut p = Pool::empty();
+        p.stake(1_000_000 * SOL);
+        let minted = shares_for_stake(1, p.shares, p.value).unwrap();
+        let back = lamports_for_shares(minted, p.shares, p.value).unwrap();
+        assert!(back <= 1);
+    }
+
+    #[test]
+    fn share_maths_refuses_to_overflow_or_truncate() {
+        assert!(shares_for_stake(u64::MAX, u128::MAX, 1).is_err());
+        assert!(lamports_for_shares(u128::MAX, 1, u128::MAX).is_err());
+        // A redemption larger than u64 lamports cannot exist, so it is refused
+        // rather than silently wrapped to a small number.
+        assert!(lamports_for_shares(u128::MAX / 2, 1, u128::MAX / 2).is_err());
+    }
+
+    #[test]
+    fn an_empty_pool_mints_one_share_per_lamport() {
+        // With no shares and no value the formula reduces to amount · VIRT / VIRT.
+        assert_eq!(shares_for_stake(SOL, 0, 0).unwrap(), SOL as u128);
     }
 }

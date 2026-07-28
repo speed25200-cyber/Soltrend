@@ -20,6 +20,7 @@ The on-chain program has **not** been audited. Do not deposit real funds. See
 | No round quotes past the vault's payout ceiling | `MAX_MULTIPLIER` at each engine's point of production; asserted per engine |
 | One maximal win cannot take more than 1/`RUIN_K` of a game's bankroll | `maxBetFor`, mirrored on-chain by the reserve taken at `open_bet` |
 | Payout arithmetic cannot overflow or truncate | `apply_bps` / `edge_cuts` in the program, with unit tests including the overflow case |
+| A staker can never redeem more than they staked, and cannot be diluted or inflated out of their deposit | `shares_for_stake` / `lamports_for_shares`, with a first-depositor inflation attack asserted explicitly |
 | A self-exclusion survives a corrupt saved session | `sanitize` in `src/lib/store.ts` — it fails closed |
 
 The client, the settlement service and any third-party verifier all import

@@ -37,7 +37,17 @@ For the auditor of `programs/house_vault`. This is the pre-mainnet gate.
       rounding direction, refusal to truncate a `u128` result into `u64`, and a bet
       large enough that `edge * bps` overflows `u64`. That last case used to panic
       under `overflow-checks`, which made such a bet unsettleable.
-- [ ] Property tests for the remaining invariants 1–7; coverage report generated.
+- [x] Property tests for the staker share accounting (invariant 4), run by CI:
+      `shares_for_stake` / `lamports_for_shares` in `src/lib.rs`. Covers the round trip
+      (redeeming can never return more than was staked), non-dilution of an existing
+      position, monotonicity, dust stakes, refusal to overflow or truncate, and an
+      explicit first-depositor inflation attack — stake 1 lamport, donate 10,000 SOL
+      directly to the pool, then check the next staker still recovers their deposit and
+      the attacker recovers under a thousandth of what they spent. The virtual offset
+      does not forbid that manoeuvre; it makes it ruinous.
+- [ ] Property tests for the remaining invariants 1–3 and 5–7 (these need account state,
+      so they belong in `tests/house_vault.ts` under a validator rather than in unit tests);
+      coverage report generated.
 - [ ] Migrate outcome generation to VRF for multiplayer Crash.
 - [ ] Multisig/timelock on `admin`; documented key-management.
 - [ ] Bug bounty open before real liquidity is deposited.
