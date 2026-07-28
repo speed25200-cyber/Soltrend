@@ -11,7 +11,7 @@
  *   node scripts/smoke.mjs           # expects SMOKE_BASE to point at a served build
  */
 
-import { chromium } from 'playwright-core';
+import { chromium } from 'playwright';
 
 const BASE = (process.env.SMOKE_BASE || 'http://localhost:3211/Soltrend').replace(/\/$/, '');
 const EXECUTABLE = process.env.CHROMIUM_PATH || undefined;

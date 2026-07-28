@@ -3,6 +3,7 @@ import { Archivo, IBM_Plex_Mono, Plus_Jakarta_Sans } from 'next/font/google';
 import './globals.css';
 import { WalletProviders } from '@/components/WalletProviders';
 import { AppShell } from '@/components/AppShell';
+import { SITE_URL } from '@/lib/site';
 
 /**
  * Type. Self-hosted at build time rather than pulled from Google at runtime —
@@ -35,11 +36,29 @@ const mono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Soltrend — The on-chain casino the community builds',
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: 'Soltrend — The on-chain casino the community builds',
+    template: '%s · Soltrend',
+  },
   description:
-    'Provably-fair Solana casino. Play instant Originals, build your own games no-code, and earn creator royalties. Connect with Phantom.',
-  metadataBase: new URL('https://soltrend.io'),
-  openGraph: { title: 'Soltrend', description: 'The Roblox of on-chain casino. Provably fair on Solana.' },
+    'Provably-fair Solana casino. Play instant Originals for free or for real, build your own games no-code, and earn creator royalties. Connect with Phantom.',
+  applicationName: 'Soltrend',
+  keywords: ['Solana casino', 'provably fair', 'on-chain casino', 'crash', 'plinko', 'slots', 'game studio'],
+  alternates: { canonical: '/' },
+  openGraph: {
+    type: 'website',
+    siteName: 'Soltrend',
+    url: SITE_URL,
+    title: 'Soltrend — The on-chain casino the community builds',
+    description: 'Provably fair on Solana. Play free in demo, build your own game, earn a royalty on every bet it takes.',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Soltrend',
+    description: 'Provably fair on Solana. Play free in demo, build your own game, earn a royalty on every bet it takes.',
+  },
+  robots: { index: true, follow: true },
 };
 
 export const viewport: Viewport = {

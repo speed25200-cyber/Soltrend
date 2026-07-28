@@ -19,7 +19,7 @@
   "devDependencies": {
     "@types/react": "18.3.31",
     "@types/react-dom": "18.3.7",
-    "playwright-core": "^1.49.1"
+    "playwright": "^1.49.1"
   },
   "overrides": {
     "@types/react": "18.3.31",

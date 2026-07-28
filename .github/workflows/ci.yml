@@ -68,16 +68,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
+          cache-dependency-path: package-lock.json
       - uses: actions/download-artifact@v4
         with:
           name: web-out
+          # Served under /Soltrend so the built basePath resolves.
           path: site/Soltrend
-      - run: npm i -D playwright-core@1.49.1
-      - run: npx playwright-core install --with-deps chromium || npx playwright install --with-deps chromium
+      - run: npm ci --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
       - name: Serve and sweep
         run: |
           npx --yes http-server site -p 3211 --silent &
-          npx wait-on http://localhost:3211/Soltrend/index.html
+          npx --yes wait-on http://localhost:3211/Soltrend/index.html
           node scripts/smoke.mjs
         env:
           SMOKE_BASE: http://localhost:3211/Soltrend
@@ -85,17 +88,20 @@ jobs:
   api:
     name: api — typecheck + settlement tests
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/api
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npm install --no-audit --no-fund
+          cache: npm
+          cache-dependency-path: package-lock.json
+      # Installed from the repo root: the API imports the provably-fair engine
+      # from the @soltrend/shared workspace, and only a root install links it.
+      - run: npm ci --no-audit --no-fund
       - run: npm run typecheck
+        working-directory: apps/api
       - run: npm test
+        working-directory: apps/api
 
   program:
     name: house_vault — fmt, clippy, build
