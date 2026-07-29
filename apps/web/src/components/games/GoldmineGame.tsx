@@ -12,29 +12,26 @@ import { floatStream } from '@/lib/provably-fair';
 import { Icon } from '@/components/Icon';
 import { sfx } from '@/lib/sound';
 import { burstWin } from '@/lib/fx';
-import { MineSymbol } from './goldmine/MineSymbol';
-import { ReelWindow, Cabinet, reelPlan } from './goldmine/ReelMachine';
+import { Cabinet } from './goldmine/ReelMachine';
+import { ExpressReels, reelPlan } from './goldmine/ExpressReels';
+import { ExpressSymbol, TRAIN_HEX } from './goldmine/ExpressSymbols';
 import {
-  REELS, ROWS, BERTHS, WAGON, SYMBOLS, MAX_WIN,
-  playRound, slotFromParams, type RoundResult, type SlotConfig, type WagonCargo,
-} from '@/lib/slots/goldmine';
+  CART_CAPACITY, JACKPOTS, MAX_WIN, SYMBOLS,
+  playRound, slotFromParams,
+  type Carriage, type GXSpin, type RoundResult, type SlotConfig,
+} from '@/lib/slots/gold-express';
 import type { GameConfig } from './types';
 
-type Phase = 'idle' | 'spinning' | 'base' | 'boarding' | 'express' | 'done';
-
-const STEP_MS = 950;
+type Phase = 'idle' | 'spinning' | 'base' | 'collect' | 'train' | 'free' | 'done';
 
 /**
- * GOLDMINE EXPRESS — the train hold-and-win.
- *
- * The whole round is resolved by the engine the instant you spin, so the outcome
- * is fixed by the reserved seed and nothing on screen can move it. The board
- * then replays it: the bands travel and brake one reel at a time, hanging on the
- * last ones while the wagons are still on pace, and if enough land the rig
- * converts into a train — wagons lock into berths holding their gold, and each
- * respin is a step down the track that only ends when three go by empty.
+ * GOLD MINE EXPRESS — the modern online game, rebuilt for Soltrend: 5×4 reels,
+ * 20 fixed paylines, Gold Mines collected by the Bell and the Golden Train,
+ * coloured trains that run the Train Bonus, dynamite Free Games, and the mine
+ * cart that drops what it gathered back onto the reels. RTP 97%, like the
+ * reference game.
  */
-export function GoldmineGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, maxBet, demo}: GameConfig) {
+export function GoldmineGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, maxBet, demo }: GameConfig) {
   const cfg: SlotConfig = useMemo(() => slotFromParams(params), [params]);
   const { guard, reserveSeeds, settle } = usePlay(maxBet, demo);
   const bumpUgc = useCasino((s) => s.bumpUgc);
@@ -42,11 +39,18 @@ export function GoldmineGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, para
 
   const [bet, setBet] = useState(0.1);
   const [phase, setPhase] = useState<Phase>('idle');
-  const [result, setResult] = useState<RoundResult | null>(null);
-  const [grid, setGrid] = useState<number[][] | null>(null);
-  const [stepIdx, setStepIdx] = useState(0);
+  const [round, setRound] = useState<RoundResult | null>(null);
+  const [view, setView] = useState<GXSpin | null>(null); // the spin on the reels
   const [spinKey, setSpinKey] = useState(0);
-  const [plan, setPlan] = useState(() => reelPlan(null, cfg.trigger));
+  const [plan, setPlan] = useState(() => reelPlan(null));
+  const [cart, setCart] = useState(0);
+  const [cartDropLive, setCartDropLive] = useState(false);
+  const [freeIdx, setFreeIdx] = useState(0);
+  const [fsBank, setFsBank] = useState(0);
+  const [trainStep, setTrainStep] = useState(0);
+  const [trainBank, setTrainBank] = useState(0);
+  const [reelsMoving, setReelsMoving] = useState(false);
+  const [fsBanner, setFsBanner] = useState(false);
   const timers = useRef<number[]>([]);
   const busy = useRef(false);
 
@@ -56,9 +60,72 @@ export function GoldmineGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, para
   };
 
   const g = guard(bet);
-  const bonus = result?.bonus ?? null;
-  const step = bonus?.steps[stepIdx];
-  const onTrain = phase === 'boarding' || phase === 'express';
+  const base = round?.spins[0] ?? null;
+  const bonus = base?.trainBonus ?? null;
+
+  const finish = (r: RoundResult) => {
+    setPhase('done');
+    if (r.total > 0) {
+      sfx.win(r.total);
+      burstWin(r.total, { colors: ['#fcd34d', '#fb923c', '#ffffff'] });
+    } else {
+      sfx.loss();
+    }
+    busy.current = false;
+  };
+
+  /** Free games, replayed one spin at a time with the fast braking schedule. */
+  const runFreeSpin = (r: RoundResult, i: number) => {
+    const spin = r.spins[i];
+    setFreeIdx(i);
+    setPhase('free');
+    const p = reelPlan(spin, true);
+    setPlan(p);
+    setView(spin);
+    setSpinKey((k) => k + 1);
+    setReelsMoving(true);
+    sfx.bet();
+    after(p.total, () => setReelsMoving(false));
+    after(p.total + 500, () => {
+      setFsBank((b) => b + spin.total);
+      if (spin.total > 0) sfx.tick(3);
+      if (i + 1 < r.spins.length) runFreeSpin(r, i + 1);
+      else finish(r);
+    });
+  };
+
+  /** The Train Bonus, carriage by carriage. */
+  const runTrain = (r: RoundResult) => {
+    const tb = r.spins[0].trainBonus!;
+    setPhase('train');
+    setTrainStep(0);
+    setTrainBank(tb.collect); // the multiplier applies to the whole haul, collect included
+    sfx.jackpot();
+    const stepThrough = (i: number) => {
+      if (i >= tb.carriages.length) {
+        after(1400, () => {
+          if (r.freeGames > 0) startFreeGames(r);
+          else finish(r);
+        });
+        return;
+      }
+      setTrainStep(i + 1);
+      const c = tb.carriages[i];
+      if (c.jackpot) {
+        sfx.jackpot();
+        burstWin(12, { colors: ['#fcd34d', TRAIN_HEX[tb.color].glow] });
+      } else if (c.multiplier > 1) {
+        sfx.win(c.multiplier * 2);
+      } else {
+        sfx.tick(i + 2);
+      }
+      if (c.jackpot) setTrainBank((b) => b + c.award);
+      else if (c.multiplier > 1) setTrainBank((b) => b * c.multiplier);
+      else setTrainBank((b) => b + c.award);
+      after(820, () => stepThrough(i + 1));
+    };
+    after(900, () => stepThrough(0));
+  };
 
   const spin = () => {
     if (busy.current || !g.ok) return;
@@ -66,198 +133,224 @@ export function GoldmineGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, para
     timers.current.forEach(clearTimeout);
     timers.current = [];
 
+    // A full mine cart tips over onto this spin.
+    const drop = cart >= CART_CAPACITY;
+    setCartDropLive(drop);
+    if (drop) setCart(0);
+
     const seeds = reserveSeeds();
     const stream = floatStream(seeds.serverSeed, seeds.clientSeed, seeds.nonce);
-    const round = playRound(() => stream.next(), cfg);
+    const r = playRound(() => stream.next(), cfg, { cartDrop: drop ? 1 : 0 });
 
-    // The braking schedule is derived from the grid the engine just produced, so
-    // the reels hang exactly when the wagons really were still on pace.
-    const rp = reelPlan(round.base.grid, cfg.trigger);
-    setResult(round);
-    setGrid(round.base.grid);
-    setStepIdx(0);
-    setPlan(rp);
+    const p = reelPlan(r.spins[0]);
+    setRound(r);
+    setView(r.spins[0]);
+    setPlan(p);
     setSpinKey((k) => k + 1);
+    setFsBank(0);
+    setFreeIdx(0);
     setPhase('spinning');
+    setReelsMoving(true);
     sfx.bet();
-    rp.stops.forEach((t, r) => {
-      if (rp.antic[r]) after(Math.max(0, t - 820), () => sfx.anticipate(820));
-      after(t, () => sfx.reelStop(r));
-    });
+    if (drop) sfx.jackpot();
 
-    // Settle now — the seed decided this, not the replay.
+    // Settle now — the seed decided this round, not the replay.
     settle(
       {
         game: gameName ?? meta.name,
         template: 'slots',
         bet,
-        multiplier: round.total,
-        payout: round2(bet * round.total),
-        win: round.total > 0,
-        meta: { wagons: round.base.wagons, express: !!round.bonus, filled: !!round.bonus?.filled },
+        multiplier: r.total,
+        payout: round2(bet * r.total),
+        win: r.total > 0,
+        meta: {
+          lines: r.spins[0].linesTotal,
+          collect: r.spins[0].collect?.total ?? 0,
+          train: r.spins[0].trainBonus?.total ?? 0,
+          freeGames: r.freeGames,
+          cartDrop: drop,
+        },
         seeds,
       },
       { quiet: true },
     );
     if (gameId) bumpUgc(gameId, bet);
-    if (round.total > 0) recordBest(gameId ?? meta.slug, round.total);
+    if (r.total > 0) recordBest(gameId ?? meta.slug, r.total);
 
-    after(rp.total, () => {
+    // The mine cart gathers whatever gold was never collected.
+    setCart((c) => Math.min(CART_CAPACITY * 1.6, (drop ? 0 : c) + r.spins.reduce((s, x) => s + x.cartFeed, 0)));
+
+    after(p.total, () => {
+      setReelsMoving(false);
       setPhase('base');
-      if (round.base.won > 0) sfx.tick(round.base.wins.length);
-
-      if (round.bonus) {
-        // The rig converts into a train.
-        after(1200, () => {
-          setPhase('boarding');
-          sfx.jackpot();
-          after(1100, () => runSteps(1, round));
-        });
-      } else {
-        after(round.base.won > 0 ? 1000 : 500, () => finish(round));
-      }
+      const b0 = r.spins[0];
+      if (b0.linesTotal > 0) sfx.tick(b0.lineWins.length);
+      after(b0.linesTotal > 0 ? 1100 : 500, () => {
+        if (b0.collect) {
+          setPhase('collect');
+          sfx.cashout();
+          after(1300, () => {
+            if (b0.trainBonus) runTrain(r);
+            else if (r.freeGames > 0) startFreeGames(r);
+            else finish(r);
+          });
+        } else if (r.freeGames > 0) {
+          startFreeGames(r);
+        } else {
+          finish(r);
+        }
+      });
     });
   };
 
-  const runSteps = (i: number, round: RoundResult) => {
-    const b = round.bonus!;
-    if (i >= b.steps.length) {
-      finish(round);
-      return;
-    }
-    setStepIdx(i);
-    setPhase('express');
-    const s = b.steps[i];
-    if (s.landed.length > 0) sfx.tick(s.landed.length + 2);
-    if (s.events.some((e) => e.kind === 'locomotive')) sfx.win(3);
-    after(STEP_MS, () => runSteps(i + 1, round));
+  const startFreeGames = (r: RoundResult) => {
+    setFsBanner(true);
+    after(1400, () => setFsBanner(false));
+    runFreeSpin(r, 1);
   };
 
-  const finish = (round: RoundResult) => {
-    setPhase('done');
-    if (round.total > 0) {
-      sfx.win(round.total);
-      burstWin(round.total, { colors: ['#fcd34d', '#fb923c', '#ffffff'] });
-    } else {
-      sfx.loss();
-    }
-    busy.current = false;
-  };
-
-  const train = step?.train ?? null;
-  const haulNow = bonus ? (step?.haul ?? 0) * (bonus.multiplier || 1) : 0;
+  const cartPct = Math.min(100, (cart / CART_CAPACITY) * 100);
+  const showWins = phase === 'base' || phase === 'collect' || phase === 'done' || phase === 'train';
+  const collecting = phase === 'collect' || phase === 'train';
 
   return (
     <GameLayout
       meta={meta}
       stage={
-        <div className="relative h-full min-h-[420px] overflow-hidden rounded-2xl sm:min-h-[480px]">
-          {/* the shaft */}
-          <div className="absolute inset-0 bg-[radial-gradient(120%_90%_at_50%_0%,#2a1d0d_0%,#0e0a06_55%,#05060f_100%)]" />
-          <MineDust running={onTrain} />
+        <div className="relative h-full min-h-[460px] overflow-hidden rounded-2xl sm:min-h-[520px]">
+          {/* the shaft — canyon rock, lantern glow, drifting dust */}
+          <div className="absolute inset-0 bg-[radial-gradient(120%_90%_at_50%_0%,#33200c_0%,#120b06_55%,#05060f_100%)]" />
+          <MineDust running={phase === 'train' || phase === 'free'} />
 
-          <div className="relative z-10 flex h-full flex-col items-center justify-center gap-3 p-3 pb-14">
-            <AnimatePresence mode="wait">
-              {onTrain && train ? (
-                <motion.div
-                  key="train"
-                  initial={{ opacity: 0, x: 90 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -90 }}
-                  transition={{ type: 'spring', stiffness: 160, damping: 22 }}
-                  className="flex w-full justify-center"
+          <div className="relative z-10 flex h-full flex-col items-center justify-center gap-2.5 p-3 pb-4">
+            {/* jackpots */}
+            <div className="flex gap-1.5 sm:gap-2">
+              {JACKPOTS.map((j) => (
+                <span
+                  key={j.tier}
+                  className="rounded-lg border px-2 py-0.5 font-mono text-[0.58rem] font-black uppercase tracking-wider sm:text-[0.66rem]"
+                  style={{
+                    color: TRAIN_HEX[j.color].glow,
+                    borderColor: `${TRAIN_HEX[j.color].a}55`,
+                    background: `${TRAIN_HEX[j.color].b}33`,
+                    textShadow: `0 0 10px ${TRAIN_HEX[j.color].glow}`,
+                  }}
                 >
-                  <Cabinet title="Express Run" lit>
-                    <div className="rounded-xl bg-[#06040a] p-2">
-                      <TrainBoard train={train} landed={step?.landed ?? []} />
-                    </div>
-                  </Cabinet>
-                </motion.div>
-              ) : (
-                <motion.div
-                  key="reels"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0, scale: 0.94 }}
-                  className="flex w-full justify-center"
-                >
-                  <ReelWindow
-                    grid={grid}
-                    weights={cfg.weights}
-                    plan={plan}
-                    spinning={phase === 'spinning'}
-                    spinKey={spinKey}
-                    wins={result?.base.wins ?? []}
-                    showWins={phase === 'base' || phase === 'done'}
-                  />
-                </motion.div>
-              )}
-            </AnimatePresence>
+                  {j.tier} {(j.value * cfg.payScale).toFixed(0)}×
+                </span>
+              ))}
+            </div>
 
-            {/* the rail */}
-            <Rail running={phase === 'express'} />
+            {/* the mine cart meter */}
+            <div className="w-full max-w-md">
+              <div className="flex items-center justify-between text-[0.6rem] font-bold uppercase tracking-wider text-amber-200/70">
+                <span>Mine cart</span>
+                <span>{cart >= CART_CAPACITY ? 'FULL — drops next spin' : `${cart.toFixed(1)} / ${CART_CAPACITY}`}</span>
+              </div>
+              <div className="mt-1 h-2.5 overflow-hidden rounded-full border border-amber-900/60 bg-black/50">
+                <motion.div
+                  className="h-full rounded-full"
+                  style={{ background: 'linear-gradient(90deg,#b45309,#fcd34d)', boxShadow: '0 0 12px rgba(252,211,77,0.6)' }}
+                  animate={{ width: `${cartPct}%` }}
+                  transition={{ type: 'spring', stiffness: 120, damping: 20 }}
+                />
+              </div>
+            </div>
+
+            {/* the machine */}
+            <Cabinet title="Gold Mine Express" lit={showWins && (view?.total ?? 0) > 0} spinning={phase === 'spinning'}>
+              <ExpressReels
+                spin={view}
+                plan={plan}
+                spinning={reelsMoving}
+                spinKey={spinKey}
+                free={phase === 'free'}
+                showWins={showWins && phase !== 'train'}
+                collected={collecting}
+              />
+            </Cabinet>
 
             {/* readout */}
-            <div className="flex min-h-[2rem] items-center gap-3">
-              {onTrain && (
+            <div className="flex min-h-[2rem] flex-wrap items-center justify-center gap-2">
+              {phase === 'collect' && base?.collect && (
+                <motion.span
+                  initial={{ scale: 0.6, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  className="rounded-xl border border-gold/50 bg-gold/15 px-4 py-1.5 font-mono text-lg font-black text-gold"
+                  style={{ textShadow: '0 0 18px rgba(255,210,95,0.7)' }}
+                >
+                  {base.collect.kind === 'gtrain' ? `GOLDEN TRAIN ×${base.collect.multiplier} · ` : 'BELL COLLECTS · '}
+                  {base.collect.total.toFixed(2)}×
+                </motion.span>
+              )}
+              {phase === 'free' && (
                 <>
-                  <span className="rounded-xl border border-gold/40 bg-gold/10 px-3 py-1 font-mono text-sm font-black text-gold">
-                    {step?.respinsLeft ?? 0} respins
+                  <span className="rounded-xl border border-red-400/50 bg-red-500/10 px-3 py-1 font-mono text-sm font-black text-red-300">
+                    FREE GAME {freeIdx}/{round?.freeGames}
                   </span>
-                  <motion.span key={haulNow} initial={{ scale: 1.2 }} animate={{ scale: 1 }} className="font-mono text-2xl font-black text-white" style={{ textShadow: '0 0 22px #fcd34d66' }}>
-                    {haulNow.toFixed(2)}×
+                  <motion.span key={fsBank} initial={{ scale: 1.15 }} animate={{ scale: 1 }} className="font-mono text-xl font-black text-white">
+                    {fsBank.toFixed(2)}×
                   </motion.span>
-                  {bonus && bonus.multiplier > 1 && (
-                    <span className="rounded-lg border border-orange-400/50 bg-orange-500/10 px-2 py-0.5 font-mono text-xs font-bold text-orange-300">
-                      ×{bonus.multiplier} dynamite
-                    </span>
-                  )}
                 </>
               )}
-              {!onTrain && (phase === 'base' || phase === 'done') && result && result.base.wins.length > 0 && (
-                <>
-                  {result.base.wins.map((w) => (
-                    <motion.span
-                      key={w.sym}
-                      initial={{ opacity: 0, y: 6 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="flex items-center gap-1 rounded-lg border border-gold/25 bg-gold/[0.07] px-2 py-0.5"
-                    >
-                      <MineSymbol sym={w.sym} size={16} />
-                      <span className="font-mono text-[0.62rem] text-amber-200">
-                        {w.length}× · {w.ways} ways · {w.pay.toFixed(2)}
-                      </span>
-                    </motion.span>
-                  ))}
-                  <motion.span key={result.base.won} initial={{ scale: 1.25 }} animate={{ scale: 1 }} className="font-mono text-xl font-black text-white">
-                    {result.base.won.toFixed(2)}×
-                  </motion.span>
-                </>
+              {phase === 'base' && base && base.linesTotal > 0 && !base.collect && (
+                <motion.span key={base.linesTotal} initial={{ scale: 1.2 }} animate={{ scale: 1 }} className="font-mono text-xl font-black text-white">
+                  {base.linesTotal.toFixed(2)}×
+                </motion.span>
               )}
             </div>
           </div>
 
           {/* banners */}
           <AnimatePresence>
-            {phase === 'boarding' && (
+            {cartDropLive && phase === 'spinning' && (
               <motion.div
-                initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
-                className="absolute inset-0 z-20 grid place-items-center"
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute inset-x-0 top-1/3 z-20 flex justify-center"
               >
-                <span className="rounded-2xl border border-gold/50 bg-void-950/90 px-6 py-3 font-display text-2xl font-black uppercase tracking-widest text-gold backdrop-blur">
-                  Express Run
+                <span className="rounded-2xl border border-amber-400/60 bg-void-950/90 px-6 py-3 font-display text-2xl font-black uppercase tracking-widest text-amber-300 backdrop-blur">
+                  Cart drop!
                 </span>
               </motion.div>
             )}
-            {phase === 'done' && result && result.total > 0 && (
+            {fsBanner && phase === 'free' && (
               <motion.div
-                initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute inset-x-0 top-1/3 z-20 flex justify-center"
+              >
+                <span className="rounded-2xl border border-red-400/60 bg-void-950/90 px-6 py-3 font-display text-2xl font-black uppercase tracking-widest text-red-300 backdrop-blur">
+                  {round?.freeGames} Free Games
+                </span>
+              </motion.div>
+            )}
+            {phase === 'done' && round && round.total > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
                 className="absolute inset-x-0 bottom-3 z-20 flex justify-center"
               >
                 <span className="rounded-2xl border border-gold/40 bg-void-950/85 px-5 py-2 font-display text-xl font-black text-gold backdrop-blur">
-                  {result.bonus?.filled ? 'FULL TRAIN · ' : ''}{result.total.toFixed(2)}× · ◎{(bet * result.total).toFixed(4)}
+                  {round.total.toFixed(2)}× · ◎{(bet * round.total).toFixed(4)}
                 </span>
               </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* the Train Bonus */}
+          <AnimatePresence>
+            {phase === 'train' && bonus && (
+              <TrainOverlay
+                color={bonus.color}
+                carriages={bonus.carriages}
+                step={trainStep}
+                bank={trainBank}
+                collect={bonus.collect}
+              />
             )}
           </AnimatePresence>
         </div>
@@ -267,137 +360,115 @@ export function GoldmineGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, para
           <div className="flex items-center gap-2 rounded-xl border border-white/[0.06] bg-void-900/50 p-2.5">
             <span className="grid h-8 w-8 place-items-center rounded-lg bg-gold/15 text-gold"><Icon name="gem" size={16} /></span>
             <div className="min-w-0">
-              <div className="truncate text-sm font-semibold text-white">Goldmine Express</div>
-              <div className="text-[0.68rem] text-slate-500">{REELS}×{ROWS} ways · {cfg.trigger} wagons start the train</div>
+              <div className="truncate text-sm font-semibold text-white">Gold Mine Express</div>
+              <div className="text-[0.68rem] text-slate-500">5×4 · 20 lines · RTP 97% · max {MAX_WIN}×</div>
             </div>
           </div>
 
           <BetAmount value={bet} onChange={setBet} disabled={phase !== 'idle' && phase !== 'done'} />
           <BetButton guard={g} onClick={spin} busy={phase !== 'idle' && phase !== 'done'}>
-            Dig ◎{bet}
+            Spin ◎{bet}
           </BetButton>
 
-          <Paytable cfg={cfg} />
+          <Paytable />
         </div>
       }
     />
   );
 }
 
-/** The train: five wagons, four berths each, pulled by the locomotive. */
-function TrainBoard({ train, landed }: { train: (WagonCargo | null)[]; landed: number[] }) {
+/* ------------------------------------------------------------- train bonus */
+
+function TrainOverlay({
+  color, carriages, step, bank, collect,
+}: {
+  color: keyof typeof TRAIN_HEX;
+  carriages: Carriage[];
+  step: number;
+  bank: number;
+  collect: number;
+}) {
+  const hex = TRAIN_HEX[color];
   return (
-    <div className="flex items-end justify-center gap-1.5 sm:gap-2">
-      <Locomotive />
-      {Array.from({ length: REELS }).map((_, r) => (
-        <div key={r} className="flex flex-col gap-1.5 rounded-lg border border-white/[0.07] bg-black/30 p-1 sm:gap-2">
-          {Array.from({ length: ROWS }).map((_, row) => {
-            const b = r * ROWS + row;
-            const cargo = train[b];
-            const isNew = landed.includes(b);
-            return <Berth key={row} cargo={cargo} isNew={isNew} />;
-          })}
-          <div className="flex justify-around px-1">
-            <Wheel /><Wheel />
-          </div>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-4 bg-void-950/85 p-4 backdrop-blur-md"
+    >
+      <div className="text-center">
+        <div className="font-display text-2xl font-black uppercase tracking-[0.25em]" style={{ color: hex.glow, textShadow: `0 0 24px ${hex.glow}` }}>
+          {color} Train Bonus
         </div>
-      ))}
-    </div>
-  );
-}
+        <div className="mt-1 font-mono text-sm text-amber-200">
+          collected {collect.toFixed(2)}× aboard
+        </div>
+      </div>
 
-function Berth({ cargo, isNew }: { cargo: WagonCargo | null; isNew: boolean }) {
-  const tone =
-    cargo?.kind === 'locomotive' ? { ring: '#22d3ee', text: '#a5f3fc' }
-      : cargo?.kind === 'payer' ? { ring: '#34d399', text: '#6ee7b7' }
-        : cargo?.kind === 'dynamite' ? { ring: '#ff5a3c', text: '#ff8a5c' }
-          : { ring: '#fcd34d', text: '#fde68a' };
-
-  return (
-    <div className="relative grid h-10 w-11 place-items-center rounded-lg border border-white/[0.06] bg-void-950/70 sm:h-12 sm:w-14">
-      <AnimatePresence>
-        {cargo && (
+      {/* the train */}
+      <div className="flex w-full max-w-2xl items-end justify-start gap-1.5 overflow-hidden px-2">
+        <motion.div
+          animate={{ y: [0, -2, 0] }}
+          transition={{ repeat: Infinity, duration: 0.5 }}
+          className="shrink-0"
+        >
+          <ExpressSymbol sym={12} size={54} trainColor={color} />
+        </motion.div>
+        {carriages.map((c, i) => (
           <motion.div
-            initial={isNew ? { y: -40, opacity: 0, scale: 0.6 } : false}
-            animate={{ y: 0, opacity: 1, scale: 1 }}
-            transition={{ type: 'spring', stiffness: 420, damping: 22 }}
-            className="absolute inset-0 grid place-items-center rounded-lg"
-            style={{ boxShadow: `inset 0 0 0 1.5px ${tone.ring}66, 0 0 18px -6px ${tone.ring}` }}
+            key={i}
+            initial={{ opacity: 0, x: 40, scale: 0.7 }}
+            animate={i < step ? { opacity: 1, x: 0, scale: 1 } : {}}
+            transition={{ type: 'spring', stiffness: 260, damping: 20 }}
+            className="grid h-16 w-16 shrink-0 place-items-center rounded-xl border sm:h-[4.5rem] sm:w-[4.5rem]"
+            style={{
+              borderColor: `${hex.a}66`,
+              background: `linear-gradient(160deg, ${hex.b}cc, #0c0a09)`,
+              boxShadow: i < step ? `0 0 22px -6px ${hex.a}` : 'none',
+            }}
           >
-            {cargo.kind === 'dynamite' ? (
-              <span className="font-mono text-xs font-black" style={{ color: tone.text }}>×{cargo.value}</span>
-            ) : cargo.kind === 'locomotive' ? (
-              <span className="text-[0.55rem] font-black uppercase" style={{ color: tone.text }}>Loco</span>
-            ) : cargo.kind === 'payer' ? (
-              <span className="text-[0.55rem] font-black uppercase" style={{ color: tone.text }}>Payer</span>
-            ) : null}
-            {cargo.kind !== 'dynamite' && (
-              <span className="absolute bottom-0.5 font-mono text-[0.6rem] font-bold" style={{ color: tone.text }}>
-                {cargo.value.toFixed(2)}
-              </span>
+            {i < step && (
+              <div className="text-center">
+                {c.jackpot ? (
+                  <>
+                    <div className="text-[0.5rem] font-black uppercase tracking-wider" style={{ color: hex.glow }}>{c.jackpot.tier}</div>
+                    <div className="font-mono text-sm font-black text-white">{c.award.toFixed(0)}×</div>
+                  </>
+                ) : c.multiplier > 1 ? (
+                  <div className="font-mono text-lg font-black text-white">×{c.multiplier}</div>
+                ) : (
+                  <div className="font-mono text-sm font-black text-amber-200">+{c.award.toFixed(2)}</div>
+                )}
+              </div>
             )}
           </motion.div>
-        )}
-      </AnimatePresence>
-      {isNew && (
-        <motion.div
-          className="pointer-events-none absolute inset-0 rounded-lg ring-2"
-          style={{ borderColor: tone.ring }}
-          initial={{ opacity: 1, scale: 1 }}
-          animate={{ opacity: 0, scale: 1.5 }}
-          transition={{ duration: 0.6 }}
-        />
-      )}
-    </div>
-  );
-}
-
-function Locomotive() {
-  return (
-    <div className="relative mr-1 hidden flex-col items-center sm:flex">
-      <motion.div
-        animate={{ y: [0, -1.5, 0] }}
-        transition={{ repeat: Infinity, duration: 0.6 }}
-        className="grid h-24 w-16 place-items-end rounded-l-2xl rounded-r-lg border border-white/10 bg-gradient-to-b from-[#3f2a12] to-[#160d05] p-1"
-      >
-        <svg width="52" height="72" viewBox="0 0 52 72" aria-hidden>
-          <rect x="6" y="26" width="40" height="30" rx="4" fill="#78350f" />
-          <rect x="10" y="10" width="18" height="18" rx="3" fill="#92400e" />
-          <rect x="30" y="4" width="10" height="24" rx="3" fill="#b45309" />
-          <circle cx="20" cy="40" r="7" fill="#fde68a" opacity="0.9" />
-          <rect x="4" y="54" width="44" height="6" rx="2" fill="#451a03" />
-        </svg>
-      </motion.div>
-      <div className="flex w-full justify-around px-1">
-        <Wheel big /><Wheel big />
+        ))}
       </div>
-    </div>
-  );
-}
 
-function Wheel({ big }: { big?: boolean }) {
-  return (
-    <motion.span
-      className={`mt-0.5 block rounded-full border-2 border-slate-600 bg-slate-800 ${big ? 'h-5 w-5' : 'h-3 w-3'}`}
-      animate={{ rotate: 360 }}
-      transition={{ repeat: Infinity, duration: big ? 1.1 : 0.8, ease: 'linear' }}
-    />
-  );
-}
+      {/* rail */}
+      <div className="relative h-2 w-full max-w-2xl overflow-hidden rounded-full border-y border-white/10 bg-black/50">
+        <motion.div
+          className="absolute inset-0"
+          style={{ backgroundImage: 'repeating-linear-gradient(90deg,#78350f 0 6px,transparent 6px 22px)' }}
+          animate={{ x: [0, -22] }}
+          transition={{ repeat: Infinity, duration: 0.3, ease: 'linear' }}
+        />
+      </div>
 
-/** Track that scrolls under the train — the sense of actually moving. */
-function Rail({ running }: { running: boolean }) {
-  return (
-    <div className="relative h-3 w-full max-w-[38rem] overflow-hidden rounded-full border-y border-white/[0.06] bg-black/40">
       <motion.div
-        className="absolute inset-0"
-        style={{ backgroundImage: 'repeating-linear-gradient(90deg,#78350f 0 6px,transparent 6px 22px)' }}
-        animate={running ? { x: [0, -22] } : { x: 0 }}
-        transition={running ? { repeat: Infinity, duration: 0.35, ease: 'linear' } : { duration: 0.3 }}
-      />
-    </div>
+        key={bank}
+        initial={{ scale: 1.2 }}
+        animate={{ scale: 1 }}
+        className="font-mono text-4xl font-black text-white"
+        style={{ textShadow: `0 0 30px ${hex.glow}` }}
+      >
+        {bank.toFixed(2)}×
+      </motion.div>
+    </motion.div>
   );
 }
+
+/* ----------------------------------------------------------------- pieces */
 
 /** Drifting mine dust — depth, at almost no cost. */
 function MineDust({ running }: { running: boolean }) {
@@ -420,30 +491,38 @@ function MineDust({ running }: { running: boolean }) {
   );
 }
 
-function Paytable({ cfg }: { cfg: SlotConfig }) {
+function Paytable() {
+  const lows = SYMBOLS.slice(0, 5);
+  const highs = SYMBOLS.slice(5, 10);
   return (
     <div className="rounded-xl border border-white/[0.06] bg-void-900/40 p-3">
       <div className="flex items-center justify-between">
-        <span className="label-eyebrow">Ways pay</span>
+        <span className="label-eyebrow">20 fixed lines</span>
         <span className="text-[0.6rem] text-slate-600">3 / 4 / 5 from the left</span>
       </div>
       <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5">
-        {SYMBOLS.filter((s) => s.id <= 6).slice().reverse().map((s) => (
+        {[...highs, ...lows].map((s) => (
           <div key={s.key} className="flex items-center gap-1.5">
-            <MineSymbol sym={s.id} size={20} />
+            <ExpressSymbol sym={s.id} size={20} />
             <span className="font-mono text-[0.6rem] text-slate-400">
-              {(cfg.pays[s.id][0] * cfg.payScale).toFixed(2)} / {(cfg.pays[s.id][2] * cfg.payScale).toFixed(2)}
+              {s.pays[0]} / {s.pays[1]} / {s.pays[2]}
             </span>
           </div>
         ))}
       </div>
-      <div className="mt-2.5 space-y-1 border-t border-white/[0.05] pt-2 text-[0.62rem] text-slate-400">
-        <div className="flex items-center gap-1.5">
-          <MineSymbol sym={WAGON} size={20} />
-          <span>{cfg.trigger}+ wagons start the Express Run — {cfg.startRespins} respins, reset by every new wagon</span>
-        </div>
-        <p><b className="text-cyan-300">Loco</b> sweeps every value aboard into itself. <b className="text-emerald-300">Payer</b> gives its value to every wagon. <b className="text-orange-300">Dynamite</b> multiplies the haul.</p>
-        <p>Fill all {BERTHS} berths for a {(cfg.grand * cfg.payScale).toFixed(0)}× grand haul. Max win {MAX_WIN}×.</p>
+      <div className="mt-2.5 space-y-1 border-t border-white/[0.05] pt-2 text-[0.62rem] leading-relaxed text-slate-400">
+        <p>
+          <b className="text-amber-300">Gold Mines</b> hold cash on reels 1–4. The <b className="text-amber-300">Bell</b> collects
+          it all; the <b className="text-amber-300">Golden Train</b> collects with a multiplier. Both land on reel 5.
+        </p>
+        <p>
+          <b className="text-emerald-300">Coloured trains</b> + a collector run the <b className="text-white">Train Bonus</b> — every
+          carriage pays, the last can drop a multiplier or the colour&apos;s jackpot.
+        </p>
+        <p>
+          <b className="text-red-300">Dynamite</b> on reels 1, 3 and 5 triggers 8 Free Games. Uncollected gold fills
+          the <b className="text-amber-300">mine cart</b> — full cart drops back onto the reels.
+        </p>
       </div>
     </div>
   );
