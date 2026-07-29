@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { AnimatePresence, motion } from 'framer-motion';
 import { GameLayout } from '@/components/GameLayout';
 import { BetAmount } from '@/components/BetControls';
@@ -9,6 +10,8 @@ import { usePlay } from '@/hooks/usePlay';
 import { useCasino } from '@/lib/store';
 import { round2, DEFAULT_EDGE } from '@/lib/games';
 import { floatStream } from '@/lib/provably-fair';
+import { fmtSol, SOL_USD } from '@/lib/format';
+import { SolMark } from '@/components/BalanceWidget';
 import { Icon } from '@/components/Icon';
 import { sfx } from '@/lib/sound';
 import { burstWin } from '@/lib/fx';
@@ -21,6 +24,11 @@ import {
   type Carriage, type GXSpin, type RoundResult, type SlotConfig,
 } from '@/lib/slots/gold-express';
 import type { GameConfig } from './types';
+
+const Scene3D = dynamic(() => import('./goldmine/GoldmineScene3D'), {
+  ssr: false,
+  loading: () => null,
+});
 
 type Phase = 'idle' | 'spinning' | 'base' | 'collect' | 'train' | 'free' | 'done';
 
@@ -51,6 +59,12 @@ export function GoldmineGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, para
   const [trainBank, setTrainBank] = useState(0);
   const [reelsMoving, setReelsMoving] = useState(false);
   const [fsBanner, setFsBanner] = useState(false);
+  // 3D scene signals
+  const [dropSignal, setDropSignal] = useState(0);
+  const [winSignal, setWinSignal] = useState(0);
+  const [winStrength, setWinStrength] = useState(0);
+  const [collectSignal, setCollectSignal] = useState(0);
+  const [lastWin, setLastWin] = useState<number | null>(null);
   const timers = useRef<number[]>([]);
   const busy = useRef(false);
 
@@ -66,9 +80,13 @@ export function GoldmineGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, para
   const finish = (r: RoundResult) => {
     setPhase('done');
     if (r.total > 0) {
+      setLastWin(r.total);
+      setWinSignal((s) => s + 1);
+      setWinStrength(Math.min(1, r.total / 60));
       sfx.win(r.total);
       burstWin(r.total, { colors: ['#fcd34d', '#fb923c', '#ffffff'] });
     } else {
+      setLastWin(0);
       sfx.loss();
     }
     busy.current = false;
@@ -136,7 +154,10 @@ export function GoldmineGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, para
     // A full mine cart tips over onto this spin.
     const drop = cart >= CART_CAPACITY;
     setCartDropLive(drop);
-    if (drop) setCart(0);
+    if (drop) {
+      setCart(0);
+      setDropSignal((s) => s + 1);
+    }
 
     const seeds = reserveSeeds();
     const stream = floatStream(seeds.serverSeed, seeds.clientSeed, seeds.nonce);
@@ -188,6 +209,7 @@ export function GoldmineGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, para
       after(b0.linesTotal > 0 ? 1100 : 500, () => {
         if (b0.collect) {
           setPhase('collect');
+          setCollectSignal((s) => s + 1);
           sfx.cashout();
           after(1300, () => {
             if (b0.trainBonus) runTrain(r);
@@ -212,17 +234,33 @@ export function GoldmineGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, para
   const cartPct = Math.min(100, (cart / CART_CAPACITY) * 100);
   const showWins = phase === 'base' || phase === 'collect' || phase === 'done' || phase === 'train';
   const collecting = phase === 'collect' || phase === 'train';
+  const spinLocked = phase !== 'idle' && phase !== 'done';
 
   return (
     <GameLayout
       meta={meta}
       stage={
-        <div className="relative h-full min-h-[460px] overflow-hidden rounded-2xl sm:min-h-[520px]">
-          {/* the shaft — canyon rock, lantern glow, drifting dust */}
+        <div className="relative h-full min-h-[520px] overflow-hidden rounded-2xl sm:min-h-[560px]">
+          {/* the living mine — WebGL behind the machine (rock, lanterns, rails,
+              the cart filling with ore, coin eruptions, the bonus train) */}
           <div className="absolute inset-0 bg-[radial-gradient(120%_90%_at_50%_0%,#33200c_0%,#120b06_55%,#05060f_100%)]" />
-          <MineDust running={phase === 'train' || phase === 'free'} />
+          <div className="absolute inset-0">
+            <Scene3D
+              cartLevel={Math.min(1, cart / CART_CAPACITY)}
+              dropSignal={dropSignal}
+              winSignal={winSignal}
+              winStrength={winStrength}
+              collectSignal={collectSignal}
+              train={{
+                active: phase === 'train' && !!bonus,
+                color: bonus?.color ?? 'green',
+                step: trainStep,
+                count: bonus?.carriages.length ?? 0,
+              }}
+            />
+          </div>
 
-          <div className="relative z-10 flex h-full flex-col items-center justify-center gap-2.5 p-3 pb-4">
+          <div className="relative z-10 flex h-full flex-col items-center justify-center gap-2 p-3 pb-3">
             {/* jackpots */}
             <div className="flex gap-1.5 sm:gap-2">
               {JACKPOTS.map((j) => (
@@ -232,7 +270,7 @@ export function GoldmineGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, para
                   style={{
                     color: TRAIN_HEX[j.color].glow,
                     borderColor: `${TRAIN_HEX[j.color].a}55`,
-                    background: `${TRAIN_HEX[j.color].b}33`,
+                    background: `${TRAIN_HEX[j.color].b}cc`,
                     textShadow: `0 0 10px ${TRAIN_HEX[j.color].glow}`,
                   }}
                 >
@@ -242,7 +280,7 @@ export function GoldmineGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, para
             </div>
 
             {/* the mine cart meter */}
-            <div className="w-full max-w-md">
+            <div className="w-full max-w-md rounded-xl border border-white/[0.05] bg-void-950/60 px-3 py-2 backdrop-blur-sm">
               <div className="flex items-center justify-between text-[0.6rem] font-bold uppercase tracking-wider text-amber-200/70">
                 <span>Mine cart</span>
                 <span>{cart >= CART_CAPACITY ? 'FULL — drops next spin' : `${cart.toFixed(1)} / ${CART_CAPACITY}`}</span>
@@ -298,6 +336,57 @@ export function GoldmineGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, para
                   {base.linesTotal.toFixed(2)}×
                 </motion.span>
               )}
+            </div>
+
+            {/* the action bar — WIN readout, bet stepper, and the big spin */}
+            <div className="flex w-full max-w-xl items-stretch gap-2 rounded-2xl border border-white/[0.07] bg-void-950/70 p-2 backdrop-blur-md">
+              <div className="hidden min-w-[5.5rem] flex-col justify-center rounded-xl border border-white/[0.06] bg-void-900/70 px-2.5 sm:flex">
+                <span className="text-[0.55rem] font-bold uppercase tracking-widest text-slate-500">Win</span>
+                <span className={`font-mono text-sm font-black ${lastWin ? 'text-gold' : 'text-slate-500'}`}>
+                  {lastWin === null ? '—' : lastWin === 0 ? '0.00' : `${lastWin.toFixed(2)}×`}
+                </span>
+              </div>
+
+              <div className="flex flex-col justify-center rounded-xl border border-white/[0.06] bg-void-900/70 px-2">
+                <span className="text-center text-[0.55rem] font-bold uppercase tracking-widest text-slate-500">Bet</span>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setBet((b) => Math.max(0.01, Math.round(b * 50) / 100))}
+                    disabled={spinLocked}
+                    className="grid h-7 w-7 place-items-center rounded-lg border border-white/10 bg-white/[0.03] font-mono text-sm font-black text-slate-300 transition hover:border-gold/50 hover:text-gold disabled:opacity-30"
+                    aria-label="Halve bet"
+                  >
+                    −
+                  </button>
+                  <div className="min-w-[3.6rem] text-center">
+                    <div className="flex items-center justify-center gap-1 font-mono text-sm font-black text-white">
+                      <SolMark size={12} />{fmtSol(bet)}
+                    </div>
+                    <div className="font-mono text-[0.55rem] text-slate-500">≈ ${(bet * SOL_USD).toFixed(2)}</div>
+                  </div>
+                  <button
+                    onClick={() => setBet((b) => Math.round(b * 200) / 100)}
+                    disabled={spinLocked}
+                    className="grid h-7 w-7 place-items-center rounded-lg border border-white/10 bg-white/[0.03] font-mono text-sm font-black text-slate-300 transition hover:border-gold/50 hover:text-gold disabled:opacity-30"
+                    aria-label="Double bet"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+
+              <button
+                onClick={spin}
+                disabled={spinLocked || !g.ok}
+                className="group relative flex-1 overflow-hidden rounded-xl py-3 font-display text-xl font-black uppercase tracking-[0.2em] text-void-950 transition-all hover:brightness-110 active:translate-y-0.5 disabled:opacity-40"
+                style={{
+                  background: 'linear-gradient(160deg,#fde68a 0%,#f59e0b 45%,#b45309 100%)',
+                  boxShadow: '0 0 0 1px rgba(255,255,255,0.2) inset, 0 10px 30px -8px rgba(245,158,11,0.7), 0 0 34px -6px rgba(252,211,77,0.5)',
+                }}
+              >
+                <span className="relative z-10">{phase === 'free' ? 'Free…' : 'Spin'}</span>
+                <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/40 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
+              </button>
             </div>
           </div>
 
@@ -469,27 +558,6 @@ function TrainOverlay({
 }
 
 /* ----------------------------------------------------------------- pieces */
-
-/** Drifting mine dust — depth, at almost no cost. */
-function MineDust({ running }: { running: boolean }) {
-  const motes = useMemo(
-    () => Array.from({ length: 16 }, (_, i) => ({ left: (i * 37) % 100, delay: (i % 7) * 0.5, size: 1 + (i % 3) })),
-    [],
-  );
-  return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      {motes.map((m, i) => (
-        <motion.span
-          key={i}
-          className="absolute rounded-full bg-amber-200/25"
-          style={{ left: `${m.left}%`, width: m.size, height: m.size }}
-          animate={{ y: ['110%', '-10%'], opacity: [0, 0.7, 0] }}
-          transition={{ repeat: Infinity, duration: running ? 4 : 7, delay: m.delay, ease: 'linear' }}
-        />
-      ))}
-    </div>
-  );
-}
 
 function Paytable() {
   const lows = SYMBOLS.slice(0, 5);
