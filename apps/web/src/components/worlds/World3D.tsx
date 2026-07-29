@@ -3,7 +3,7 @@
 import { Component, useMemo, useRef, type ReactNode } from 'react';
 import { Canvas, useFrame, type ThreeEvent } from '@react-three/fiber';
 import { OrbitControls, RoundedBox, Stars, Sparkles } from '@react-three/drei';
-import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
+import { EffectComposer, Bloom, Vignette, ChromaticAberration, Noise } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import type { WorldSpec } from '@/lib/forge/world';
 import { envDef, type WorldProp } from '@/lib/forge/world';
@@ -23,7 +23,7 @@ export interface World3DProps {
 
 const SPACING = 1.14;
 
-/** A single board tile — a rounded slab that lifts + glows when revealed. */
+/** A single board tile — a lacquered slab with a hover ring and a floating gem. */
 function Tile({
   index, col, row, cols, rows, skin, revealed, isBomb, isHit, playing, onReveal, heat,
 }: {
@@ -34,6 +34,7 @@ function Tile({
   const group = useRef<THREE.Group>(null);
   const gem = useRef<THREE.Mesh>(null);
   const slab = useRef<THREE.Mesh>(null);
+  const ring = useRef<THREE.Mesh>(null);
   const hover = useRef(false);
 
   const x = (col - (cols - 1) / 2) * SPACING;
@@ -48,13 +49,20 @@ function Tile({
     const targetY = open ? 0.34 : hover.current && playing ? 0.12 : 0;
     g.position.y = THREE.MathUtils.damp(g.position.y, targetY, 9, dt);
     // slab emissive ramps in when opened
-    const mat = slab.current?.material as THREE.MeshStandardMaterial | undefined;
+    const mat = slab.current?.material as THREE.MeshPhysicalMaterial | undefined;
     if (mat) mat.emissiveIntensity = THREE.MathUtils.damp(mat.emissiveIntensity, open ? (isBomb ? 0.8 : 0.55 + heat * 0.6) : 0, 8, dt);
+    // hover ring — a halo that rises around the tile under the cursor
+    const rmat = ring.current?.material as THREE.MeshBasicMaterial | undefined;
+    if (rmat && ring.current) {
+      const active = hover.current && playing && !open;
+      rmat.opacity = THREE.MathUtils.damp(rmat.opacity, active ? 0.85 : 0, 12, dt);
+      ring.current.rotation.z += dt * (active ? 2.2 : 0.4);
+    }
     // floating gem bob + spin
     if (gem.current) {
       const t = state.clock.elapsedTime;
       gem.current.visible = open;
-      const s = open ? THREE.MathUtils.damp(gem.current.scale.x, isHit ? 0.001 + 0 : 0.32, 10, dt) : 0.001;
+      const s = open ? THREE.MathUtils.damp(gem.current.scale.x, isHit ? 0.001 : 0.32, 10, dt) : 0.001;
       gem.current.scale.setScalar(Math.max(0.001, s));
       gem.current.position.y = 0.62 + Math.sin(t * 1.6 + index) * 0.05;
       gem.current.rotation.y += dt * 1.2;
@@ -71,14 +79,21 @@ function Tile({
       onClick={(e: ThreeEvent<MouseEvent>) => { e.stopPropagation(); if (playing && !open) onReveal(index); }}
     >
       <RoundedBox ref={slab as never} args={[0.98, 0.26, 0.98]} radius={0.09} smoothness={4} castShadow receiveShadow>
-        <meshStandardMaterial
+        <meshPhysicalMaterial
           color={open ? gemColor : new THREE.Color(skin.tile[0])}
           emissive={glowColor}
           emissiveIntensity={0}
-          metalness={0.55}
-          roughness={0.28}
+          metalness={0.65}
+          roughness={0.3}
+          clearcoat={0.8}
+          clearcoatRoughness={0.22}
         />
       </RoundedBox>
+      {/* hover halo */}
+      <mesh ref={ring} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.2, 0]}>
+        <ringGeometry args={[0.52, 0.6, 40]} />
+        <meshBasicMaterial color={glowColor} transparent opacity={0} side={THREE.DoubleSide} depthWrite={false} />
+      </mesh>
       {/* floating gem / hazard crystal */}
       <mesh ref={gem} position={[0, 0.62, 0]}>
         {isBomb ? <icosahedronGeometry args={[1, 0]} /> : <octahedronGeometry args={[1, 0]} />}
@@ -112,6 +127,23 @@ function Rig({ spec, heat }: { spec: WorldSpec; heat: number }) {
   );
 }
 
+/** A vast emissive backdrop dome — gives the void depth and a coloured horizon. */
+function SkyDome({ skin }: { skin: (typeof BOARD_SKINS)[BoardSkin] }) {
+  const mat = useRef<THREE.MeshBasicMaterial>(null);
+  useFrame((s) => {
+    if (mat.current) {
+      const t = s.clock.elapsedTime;
+      mat.current.opacity = 0.05 + Math.sin(t * 0.3) * 0.015;
+    }
+  });
+  return (
+    <mesh position={[0, 4, -26]}>
+      <sphereGeometry args={[16, 32, 24]} />
+      <meshBasicMaterial ref={mat} color={skin.gem} transparent opacity={0.05} side={THREE.BackSide} depthWrite={false} />
+    </mesh>
+  );
+}
+
 /** Per-environment mood — procedural, fully self-contained (no external assets). */
 function Atmosphere({ env, skin }: { env: WorldSpec['environment']; skin: (typeof BOARD_SKINS)[BoardSkin] }) {
   return (
@@ -134,6 +166,7 @@ function Atmosphere({ env, skin }: { env: WorldSpec['environment']; skin: (typeo
           <Sparkles count={30} scale={[14, 6, 14]} size={5} speed={0.25} color="#ffb078" position={[0, 2, 0]} />
         </>
       )}
+      <SkyDome skin={skin} />
       {/* horizon glow ring — grounds the board in a "place" */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.18, 0]}>
         <ringGeometry args={[9, 13, 64]} />
@@ -196,10 +229,10 @@ function Scene({ spec, revealed, bombSet, showBombs, playing, hitIndex, onReveal
       <Atmosphere env={spec.environment} skin={skin} />
       {spec.props.map((p) => <Prop key={p.id} prop={p} />)}
 
-      {/* ground */}
+      {/* ground — lacquered, so the board's glow catches in it */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.2, 0]} receiveShadow>
         <planeGeometry args={[60, 60]} />
-        <meshStandardMaterial color={env.ground} metalness={0.6} roughness={0.5} />
+        <meshPhysicalMaterial color={env.ground} metalness={0.7} roughness={0.45} clearcoat={0.5} clearcoatRoughness={0.4} />
       </mesh>
       <gridHelper args={[60, 60, skin.gem, '#1b2036']} position={[0, -0.19, 0]} />
 
@@ -236,6 +269,8 @@ function Scene({ spec, revealed, bombSet, showBombs, playing, hitIndex, onReveal
 
       <EffectComposer>
         <Bloom mipmapBlur intensity={0.9 + heat * 1.1} luminanceThreshold={0.25} luminanceSmoothing={0.9} />
+        <ChromaticAberration offset={new THREE.Vector2(0.0004, 0.0006)} radialModulation modulationOffset={0.4} />
+        <Noise premultiply opacity={0.06} />
         <Vignette eskil={false} offset={0.25} darkness={0.75} />
       </EffectComposer>
     </>

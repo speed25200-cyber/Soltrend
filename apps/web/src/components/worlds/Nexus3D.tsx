@@ -3,7 +3,7 @@
 import { Component, useMemo, useRef, type ReactNode } from 'react';
 import { Canvas, useFrame, type ThreeEvent } from '@react-three/fiber';
 import { OrbitControls, Sparkles, Stars } from '@react-three/drei';
-import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
+import { EffectComposer, Bloom, Vignette, ChromaticAberration, Noise } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { clampRisk, exitsFrom, findRoom, gateOn, keysAfter, KEY_HEX, type NexusRoom, type NexusSpec } from '@/lib/forge/nexus';
 import { envDef, type EnvironmentId } from '@/lib/forge/world';
@@ -89,6 +89,11 @@ function Room({
         <icosahedronGeometry args={[1, 0]} />
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.3} metalness={0.4} roughness={0.18} flatShading />
       </mesh>
+      {/* structural shell — a wireframe cage that makes the crystal read as built, not blob */}
+      <mesh scale={0.52} rotation={[0.4, 0.2, 0]}>
+        <icosahedronGeometry args={[1, 1]} />
+        <meshBasicMaterial color={color} wireframe transparent opacity={state === 'ahead' && !reachable ? 0.1 : 0.28} />
+      </mesh>
       {/* danger halo — thicker + faster on lethal rooms */}
       <mesh ref={halo} rotation={[Math.PI / 2, 0, 0]}>
         <torusGeometry args={[0.62, 0.018 + danger * 0.05, 8, 36]} />
@@ -122,9 +127,33 @@ function Link({ a, b, color, live, walked, locked }: { a: NexusRoom; b: NexusRoo
   });
 
   return (
-    <mesh ref={ref} position={mid} quaternion={quat}>
-      <cylinderGeometry args={[live || walked ? 0.035 : 0.014, live || walked ? 0.035 : 0.014, len, 6]} />
-      <meshBasicMaterial color={locked ? KEY_HEX[locked] : color} transparent opacity={0.1} />
+    <>
+      <mesh ref={ref} position={mid} quaternion={quat}>
+        <cylinderGeometry args={[live || walked ? 0.035 : 0.014, live || walked ? 0.035 : 0.014, len, 6]} />
+        <meshBasicMaterial color={locked ? KEY_HEX[locked] : color} transparent opacity={0.1} />
+      </mesh>
+      {(live || walked) && <Pulse from={a} to={b} color={locked ? KEY_HEX[locked] : color} speed={walked ? 1.6 : 1} />}
+    </>
+  );
+}
+
+/** A mote of light travelling down a live path — pulls the eye toward the move. */
+function Pulse({ from, to, color, speed }: { from: NexusRoom; to: NexusRoom; color: string; speed: number }) {
+  const ref = useRef<THREE.Mesh>(null);
+  const a = useMemo(() => new THREE.Vector3(from.x, from.y, from.z), [from]);
+  const b = useMemo(() => new THREE.Vector3(to.x, to.y, to.z), [to]);
+  useFrame((s) => {
+    const m = ref.current;
+    if (!m) return;
+    const t = (s.clock.elapsedTime * 0.6 * speed) % 1;
+    m.position.lerpVectors(a, b, t);
+    const fade = Math.sin(t * Math.PI); // in/out at the ends
+    (m.material as THREE.MeshBasicMaterial).opacity = 0.9 * fade;
+  });
+  return (
+    <mesh ref={ref}>
+      <sphereGeometry args={[0.05, 8, 8]} />
+      <meshBasicMaterial color={color} transparent opacity={0} depthWrite={false} />
     </mesh>
   );
 }
@@ -237,6 +266,8 @@ function Scene({ spec, environment, skin: skinId, currentId, cleared, hitId, rev
 
       <EffectComposer>
         <Bloom mipmapBlur intensity={1.1 + heat * 1.2} luminanceThreshold={0.2} luminanceSmoothing={0.9} />
+        <ChromaticAberration offset={new THREE.Vector2(0.0004, 0.0006)} radialModulation modulationOffset={0.4} />
+        <Noise premultiply opacity={0.06} />
         <Vignette eskil={false} offset={0.22} darkness={0.82} />
       </EffectComposer>
     </>

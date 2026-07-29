@@ -2,8 +2,8 @@
 
 import { Component, useMemo, useRef, type ReactNode } from 'react';
 import { Canvas, useFrame, type ThreeEvent } from '@react-three/fiber';
-import { OrbitControls, RoundedBox, Sparkles, Stars } from '@react-three/drei';
-import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
+import { OrbitControls, RoundedBox, Sparkles, Stars, Trail } from '@react-three/drei';
+import { EffectComposer, Bloom, Vignette, ChromaticAberration, Noise } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { envDef, ascentLanes, ascentFloors, type WorldSpec, type WorldProp } from '@/lib/forge/world';
 import { BOARD_SKINS, type BoardSkin } from '@/lib/forge/board';
@@ -109,11 +109,36 @@ function Climber({ level, lane, lanes, skin, alive }: { level: number; lane: num
   });
   return (
     <group ref={ref} position={[0, 0.6, 0]}>
-      <mesh scale={[0.2, 0.34, 0.2]}>
-        <octahedronGeometry args={[1, 0]} />
-        <meshStandardMaterial color="#ffffff" emissive={skin.gemGlow} emissiveIntensity={2.4} flatShading />
-      </mesh>
+      <Trail width={1.6} length={5} color={new THREE.Color(skin.gemGlow)} attenuation={(t) => t * t}>
+        <mesh scale={[0.2, 0.34, 0.2]}>
+          <octahedronGeometry args={[1, 0]} />
+          <meshStandardMaterial color="#ffffff" emissive={skin.gemGlow} emissiveIntensity={2.4} flatShading />
+        </mesh>
+      </Trail>
       <pointLight color={skin.gemGlow} intensity={6} distance={5} />
+    </group>
+  );
+}
+
+/** The tower's spine — a humming column of energy the platforms hang off. */
+function EnergyBeam({ floors, skin, heat }: { floors: number; skin: (typeof BOARD_SKINS)[BoardSkin]; heat: number }) {
+  const mat = useRef<THREE.MeshBasicMaterial>(null);
+  const h = floors * FLOOR_H + 4;
+  useFrame((s) => {
+    if (!mat.current) return;
+    const t = s.clock.elapsedTime;
+    mat.current.opacity = 0.05 + heat * 0.1 + Math.sin(t * 2.2) * 0.02;
+  });
+  return (
+    <group position={[0, h / 2 - 1, 0]}>
+      <mesh>
+        <cylinderGeometry args={[0.16, 0.16, h, 12, 1, true]} />
+        <meshBasicMaterial ref={mat} color={skin.gemGlow} transparent opacity={0.06} side={THREE.DoubleSide} depthWrite={false} />
+      </mesh>
+      <mesh>
+        <cylinderGeometry args={[0.045, 0.045, h, 8]} />
+        <meshBasicMaterial color={skin.gemGlow} transparent opacity={0.35} depthWrite={false} />
+      </mesh>
     </group>
   );
 }
@@ -171,6 +196,7 @@ function Scene({ spec, level, traps, picks, reveal, playing, hitLane, onPick, he
 
       <Stars radius={80} depth={60} count={1800} factor={4} saturation={0} fade speed={0.5} />
       <Sparkles count={40} scale={[6, floors * FLOOR_H, 6]} size={4} speed={0.35} color={skin.gemGlow} position={[0, (floors * FLOOR_H) / 2, 0]} />
+      <EnergyBeam floors={floors} skin={skin} heat={heat} />
       {spec.props.map((p) => <Prop3D key={p.id} prop={p} level={level} />)}
 
       {/* the floor you started from — falls away below you */}
@@ -210,6 +236,8 @@ function Scene({ spec, level, traps, picks, reveal, playing, hitLane, onPick, he
 
       <EffectComposer>
         <Bloom mipmapBlur intensity={1 + heat * 1.3} luminanceThreshold={0.22} luminanceSmoothing={0.9} />
+        <ChromaticAberration offset={new THREE.Vector2(0.0004, 0.0007)} radialModulation modulationOffset={0.4} />
+        <Noise premultiply opacity={0.06} />
         <Vignette eskil={false} offset={0.22} darkness={0.8} />
       </EffectComposer>
     </>

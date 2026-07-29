@@ -2,7 +2,8 @@
 
 import { Component, useMemo, useRef, type ReactNode } from 'react';
 import { Canvas, useFrame, type ThreeEvent } from '@react-three/fiber';
-import { Stars } from '@react-three/drei';
+import { Stars, Trail } from '@react-three/drei';
+import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import { ShipMesh, shipById, SHIP_SKINS, type ShipSkin } from './ships';
 import type { PlazaPeer } from '@/hooks/usePlaza';
@@ -19,16 +20,26 @@ const rand = (n: number) => (Math.random() * 2 - 1) * n;
 
 function LocalShip({ skin, target, onMove }: { skin: ShipSkin; target: React.MutableRefObject<THREE.Vector3>; onMove: (x: number, z: number) => void }) {
   const grp = useRef<THREE.Group>(null);
+  const body = useRef<THREE.Group>(null);
   const acc = useRef(0);
   useFrame((state, dt) => {
     const g = grp.current;
     if (!g) return;
+    const t = state.clock.elapsedTime;
     const dir = target.current.clone().sub(g.position); dir.y = 0;
     const dist = dir.length();
+    let turning = 0;
     if (dist > 0.06) {
       dir.normalize();
       g.position.addScaledVector(dir, Math.min(dist, SPEED * dt));
-      g.rotation.y = THREE.MathUtils.damp(g.rotation.y, Math.atan2(dir.x, dir.z), 8, dt);
+      const want = Math.atan2(dir.x, dir.z);
+      turning = want - g.rotation.y;
+      g.rotation.y = THREE.MathUtils.damp(g.rotation.y, want, 8, dt);
+    }
+    // hover bob + bank into the turn — the ship feels piloted, not dragged
+    if (body.current) {
+      body.current.position.y = 0.4 + Math.sin(t * 1.8) * 0.06;
+      body.current.rotation.z = THREE.MathUtils.damp(body.current.rotation.z, THREE.MathUtils.clamp(-turning * 0.8, -0.5, 0.5), 6, dt);
     }
     const cam = state.camera;
     const desired = new THREE.Vector3(g.position.x, 7.5, g.position.z + 9);
@@ -39,7 +50,13 @@ function LocalShip({ skin, target, onMove }: { skin: ShipSkin; target: React.Mut
   });
   return (
     <group ref={grp} position={[0, 0.4, 4]}>
-      <group rotation={[Math.PI / 2, 0, 0]}><ShipMesh skin={skin} scale={0.72} /></group>
+      <group ref={body}>
+        <Trail width={1.2} length={4} color={new THREE.Color(skin.color)} attenuation={(t) => t * t}>
+          <group rotation={[Math.PI / 2, 0, 0]}>
+            <ShipMesh skin={skin} scale={0.72} />
+          </group>
+        </Trail>
+      </group>
       <pointLight color={skin.color} intensity={7} distance={11} />
     </group>
   );
@@ -106,15 +123,48 @@ function Plaza({ skin, peers, ambient, onMove }: PlazaSceneProps) {
         <meshStandardMaterial color="#0b0f1f" metalness={0.6} roughness={0.45} />
       </mesh>
       <gridHelper args={[52, 52, skin.color, '#141a2e']} position={[0, 0.01, 0]} />
-      {/* central pad */}
+      {/* central pad — breathing rings at the heart of the plaza */}
       <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[2.2, 2.6, 48]} />
         <meshBasicMaterial color={skin.glow} transparent opacity={0.5} side={THREE.DoubleSide} />
       </mesh>
+      <PulseRings color={skin.glow} />
 
       <LocalShip skin={skin} target={target} onMove={onMove} />
       {peers.map((p) => <PeerShip key={p.id} peer={p} />)}
       {bots.map((b) => <AmbientShip key={b} seed={b} />)}
+
+      <EffectComposer>
+        <Bloom mipmapBlur intensity={0.9} luminanceThreshold={0.25} luminanceSmoothing={0.9} />
+        <Vignette eskil={false} offset={0.24} darkness={0.8} />
+      </EffectComposer>
+    </>
+  );
+}
+
+/** Expanding sonar rings from the pad — the plaza feels alive even when still. */
+function PulseRings({ color }: { color: string }) {
+  const a = useRef<THREE.Mesh>(null);
+  const b = useRef<THREE.Mesh>(null);
+  useFrame((s) => {
+    const t = s.clock.elapsedTime;
+    for (const [ring, phase] of [[a, 0], [b, 0.5]] as const) {
+      if (!ring.current) continue;
+      const p = (t * 0.25 + phase) % 1;
+      ring.current.scale.setScalar(1 + p * 7);
+      (ring.current.material as THREE.MeshBasicMaterial).opacity = 0.35 * (1 - p);
+    }
+  });
+  return (
+    <>
+      <mesh ref={a} position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[2.3, 2.42, 48]} />
+        <meshBasicMaterial color={color} transparent opacity={0.3} side={THREE.DoubleSide} depthWrite={false} />
+      </mesh>
+      <mesh ref={b} position={[0, 0.03, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[2.3, 2.42, 48]} />
+        <meshBasicMaterial color={color} transparent opacity={0.3} side={THREE.DoubleSide} depthWrite={false} />
+      </mesh>
     </>
   );
 }
