@@ -10,10 +10,17 @@ import { fmtCompact } from '@/lib/format';
 export function Hero() {
   const { connected } = useWallet();
   return (
-    <section className="relative overflow-hidden rounded-3xl border border-white/[0.06] bg-void-900/40 px-6 py-12 md:px-12 md:py-16">
-      {/* aurora backdrop */}
-      <div className="pointer-events-none absolute inset-0 bg-aurora opacity-80" />
+    <section className="glass-premium relative overflow-hidden rounded-3xl border border-white/[0.06] bg-void-900/40 px-6 py-12 md:px-12 md:py-16">
+      {/* aurora backdrop — slowly drifting, so the lobby never sits still */}
+      <div className="pointer-events-none absolute inset-0 bg-aurora opacity-80 animate-aurora-pan" />
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-neon-violet/50 to-transparent" />
+      {/* floating orbs */}
+      <div className="pointer-events-none absolute -left-16 top-8 h-56 w-56 rounded-full bg-neon-violet/25 blur-3xl animate-float-slow" />
+      <div
+        className="pointer-events-none absolute -right-10 bottom-0 h-64 w-64 rounded-full bg-neon-magenta/20 blur-3xl animate-float-slow"
+        style={{ animationDelay: '-3.5s' }}
+      />
+      <div className="pointer-events-none absolute right-1/4 top-0 h-40 w-40 rounded-full bg-neon-cyan/15 blur-3xl animate-float-slow" style={{ animationDelay: '-1.8s' }} />
 
       <div className="relative z-10 max-w-3xl">
         <motion.span
@@ -59,10 +66,13 @@ export function Hero() {
           </Link>
         </motion.div>
 
-        <div className="mt-9 flex flex-wrap gap-x-8 gap-y-3">
+        <div className="mt-9 flex flex-wrap items-center gap-x-8 gap-y-3">
           <Stat label="Wagered (24h)" value={`◎ ${fmtCompact(1_284_920)}`} />
+          <Divider />
           <Stat label="Bets settled" value={fmtCompact(9_120_004)} />
+          <Divider />
           <Stat label="Community games" value="312" />
+          <Divider />
           <Stat label="House edge" value="1–5%" />
         </div>
       </div>
@@ -77,4 +87,8 @@ function Stat({ label, value }: { label: string; value: string }) {
       <div className="text-xs text-slate-500">{label}</div>
     </div>
   );
+}
+
+function Divider() {
+  return <span className="hidden h-8 w-px bg-gradient-to-b from-transparent via-white/15 to-transparent sm:block" />;
 }

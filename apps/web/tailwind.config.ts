@@ -57,7 +57,12 @@ const config: Config = {
         'glow-win': '0 0 24px -4px rgba(16,245,160,0.6), 0 0 64px -12px rgba(16,245,160,0.35)',
         'glow-loss': '0 0 24px -4px rgba(255,59,107,0.55), 0 0 64px -12px rgba(255,59,107,0.3)',
         'glow-gold': '0 0 24px -4px rgba(255,210,95,0.6), 0 0 60px -12px rgba(245,158,11,0.35)',
+        'glow-cyan': '0 0 24px -4px rgba(34,211,238,0.55), 0 0 60px -12px rgba(34,211,238,0.3)',
         'inner-top': 'inset 0 1px 0 0 rgba(255,255,255,0.08)',
+        card: 'inset 0 1px 0 0 rgba(255,255,255,0.06), 0 24px 48px -24px rgba(0,0,0,0.85)',
+      },
+      transitionTimingFunction: {
+        spring: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
       },
       backgroundImage: {
         'grid-fade':
@@ -85,6 +90,14 @@ const config: Config = {
         'spin-slow': {
           to: { transform: 'rotate(360deg)' },
         },
+        'float-slow': {
+          '0%, 100%': { transform: 'translate3d(0, 0, 0) scale(1)' },
+          '50%': { transform: 'translate3d(0, -18px, 0) scale(1.04)' },
+        },
+        'aurora-pan': {
+          '0%, 100%': { transform: 'translate(-6%, -4%) rotate(-2deg)' },
+          '50%': { transform: 'translate(6%, 4%) rotate(2deg)' },
+        },
       },
       animation: {
         'pulse-glow': 'pulse-glow 2.4s ease-in-out infinite',
@@ -92,6 +105,8 @@ const config: Config = {
         'float-up': 'float-up 0.4s ease-out both',
         'count-pop': 'count-pop 0.4s cubic-bezier(0.2,1.4,0.4,1) both',
         'spin-slow': 'spin-slow 8s linear infinite',
+        'float-slow': 'float-slow 7s ease-in-out infinite',
+        'aurora-pan': 'aurora-pan 14s ease-in-out infinite',
       },
     },
   },

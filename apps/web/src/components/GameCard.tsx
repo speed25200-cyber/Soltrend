@@ -1,12 +1,33 @@
 'use client';
 
 import Link from 'next/link';
+import { useRef } from 'react';
 import { motion } from 'framer-motion';
 import { GameMeta, ACCENT_HEX } from '@/lib/catalog';
 import { Icon } from './Icon';
 
 export function GameCard({ meta, index = 0 }: { meta: GameMeta; index?: number }) {
   const hex = ACCENT_HEX[meta.accent];
+  const card = useRef<HTMLDivElement>(null);
+
+  // Pointer-tracked 3D tilt + spotlight. CSS custom properties carry the cursor
+  // into the stylesheet; the transform is set directly so there is no re-render
+  // per mousemove.
+  const onMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const el = card.current;
+    if (!el || e.pointerType !== 'mouse') return;
+    const r = el.getBoundingClientRect();
+    const px = (e.clientX - r.left) / r.width;
+    const py = (e.clientY - r.top) / r.height;
+    el.style.setProperty('--mx', `${px * 100}%`);
+    el.style.setProperty('--my', `${py * 100}%`);
+    el.style.transform = `perspective(900px) rotateX(${(0.5 - py) * 6}deg) rotateY(${(px - 0.5) * 8}deg) translateY(-4px)`;
+  };
+  const onLeave = () => {
+    const el = card.current;
+    if (el) el.style.transform = '';
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -15,7 +36,10 @@ export function GameCard({ meta, index = 0 }: { meta: GameMeta; index?: number }
     >
       <Link href={`/play/${meta.slug}`} className="group block">
         <div
-          className="glass glass-hover relative aspect-[4/5] overflow-hidden p-4"
+          ref={card}
+          onPointerMove={onMove}
+          onPointerLeave={onLeave}
+          className="glass glass-premium spot-card tilt glass-hover relative aspect-[4/5] overflow-hidden p-4"
           style={{ ['--hex' as string]: hex }}
         >
           {/* ambient glow */}
@@ -29,7 +53,7 @@ export function GameCard({ meta, index = 0 }: { meta: GameMeta; index?: number }
             </span>
           )}
 
-          <div className="relative flex h-full flex-col">
+          <div className="relative flex h-full flex-col" style={{ transform: 'translateZ(28px)', transformStyle: 'preserve-3d' }}>
             <div className="flex-1 grid place-items-center">
               <span
                 className="transition-transform duration-500 group-hover:scale-110 group-hover:-rotate-6"

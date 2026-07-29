@@ -38,6 +38,23 @@
     background-attachment: fixed;
     overflow-x: hidden;
   }
+  /* Film grain — a whisper of texture that kills the flat, purely-digital look.
+     Sits under every interactive layer (z < 50) and never intercepts input. */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    opacity: 0.035;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  /* Headlines wrap as a designer would set them, not wherever the box breaks. */
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
   ::selection {
     background: rgba(139, 92, 246, 0.35);
     color: #fff;
@@ -106,12 +123,25 @@
   /* Primary CTA — the "bet" button. Loud, glowing, satisfying. */
   .btn-primary {
     @apply relative inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3
-      font-display font-bold tracking-wide text-void-950 select-none
+      font-display font-bold tracking-wide text-void-950 select-none overflow-hidden
       transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed;
     background: linear-gradient(135deg, #c4b5fd 0%, #a855f7 40%, #d946ef 100%);
     box-shadow:
       0 0 0 1px rgba(255, 255, 255, 0.15) inset,
       0 10px 30px -8px rgba(168, 85, 247, 0.7);
+  }
+  /* Light sweep on hover — the lacquered finish that reads "expensive". */
+  .btn-primary::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(105deg, transparent 42%, rgba(255, 255, 255, 0.38) 50%, transparent 58%);
+    transform: translateX(-130%);
+    transition: transform 0.55s ease;
+  }
+  .btn-primary:not(:disabled):hover::after {
+    transform: translateX(130%);
   }
   .btn-primary:not(:disabled):hover {
     filter: brightness(1.08);
@@ -159,14 +189,80 @@
   }
 
   .neon-text {
-    background: linear-gradient(120deg, #e9d5ff, #a855f7 40%, #22d3ee);
+    background: linear-gradient(120deg, #e9d5ff, #a855f7 40%, #22d3ee, #e9d5ff);
+    background-size: 250% 250%;
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
+    animation: gradient-pan 8s ease-in-out infinite;
+  }
+
+  /* Gradient hairline border — the difference between "card" and "jewel case".
+     Painted into the border with a mask, so the fill stays translucent. */
+  .glass-premium {
+    position: relative;
+  }
+  .glass-premium::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(
+      140deg,
+      rgba(255, 255, 255, 0.22),
+      rgba(255, 255, 255, 0.03) 30%,
+      rgba(139, 92, 246, 0.4) 62%,
+      rgba(34, 211, 238, 0.28)
+    );
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  /* Cursor spotlight — set --mx/--my from a pointermove handler. */
+  .spot-card {
+    position: relative;
+  }
+  .spot-card::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    opacity: 0;
+    transition: opacity 0.35s ease;
+    pointer-events: none;
+    background: radial-gradient(
+      340px circle at var(--mx, 50%) var(--my, 50%),
+      rgba(139, 92, 246, 0.16),
+      transparent 65%
+    );
+  }
+  .spot-card:hover::after {
+    opacity: 1;
+  }
+
+  /* 3D tilt host — transform driven from JS, transition smooths the release. */
+  .tilt {
+    transform-style: preserve-3d;
+    transition: transform 0.16s ease-out;
+    will-change: transform;
   }
 
   .divider {
     @apply h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent;
+  }
+}
+
+@keyframes gradient-pan {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
   }
 }
 
