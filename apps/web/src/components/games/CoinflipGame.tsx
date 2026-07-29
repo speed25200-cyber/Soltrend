@@ -75,20 +75,54 @@ export function CoinflipGame({ meta, edge = DEFAULT_EDGE, gameId, gameName , max
       meta={meta}
       stage={
         <div className="grid h-full place-items-center gap-6">
-          <div style={{ perspective: 800 }}>
+          <div style={{ perspective: 1100 }}>
             <motion.div
-              className="relative h-40 w-40"
+              className="relative h-44 w-44"
               style={{ transformStyle: 'preserve-3d' }}
               animate={{ rotateY: spin }}
               transition={{ duration: 1.05, ease: [0.22, 1, 0.36, 1] }}
             >
+              {/* the edge — stacked discs give the coin real thickness */}
+              {Array.from({ length: 9 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="absolute inset-0 rounded-full"
+                  style={{
+                    transform: `translateZ(${-4 + i}px)`,
+                    background: 'radial-gradient(circle at 40% 35%, #8a5f22, #4a2f0d 70%)',
+                  }}
+                />
+              ))}
               <CoinFace side="H" />
               <CoinFace side="T" back />
+              {/* gloss that sweeps the faces as the coin turns */}
+              <div
+                className="pointer-events-none absolute inset-0 rounded-full"
+                style={{
+                  transform: 'translateZ(5px)',
+                  background: 'linear-gradient(115deg, transparent 30%, rgba(255,255,255,0.28) 46%, transparent 60%)',
+                  backfaceVisibility: 'hidden',
+                }}
+              />
             </motion.div>
+            {/* landing shadow */}
+            <motion.div
+              className="mx-auto mt-4 h-3 w-28 rounded-full bg-black/60 blur-md"
+              animate={{ scaleX: [1, 0.7, 1] }}
+              transition={{ duration: 1.05, ease: [0.22, 1, 0.36, 1] }}
+            />
           </div>
           <div className="h-6 font-semibold">
-            {win === true && <span className="text-win">{heads ? 'Heads' : 'Tails'} — you win!</span>}
-            {win === false && <span className="text-loss">{heads ? 'Heads' : 'Tails'} — not this time.</span>}
+            {win === true && (
+              <motion.span initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="text-win" style={{ textShadow: '0 0 18px rgba(16,245,160,0.6)' }}>
+                {heads ? 'Heads' : 'Tails'} — you win!
+              </motion.span>
+            )}
+            {win === false && (
+              <motion.span initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="text-loss">
+                {heads ? 'Heads' : 'Tails'} — not this time.
+              </motion.span>
+            )}
           </div>
         </div>
       }
@@ -136,20 +170,27 @@ export function CoinflipGame({ meta, edge = DEFAULT_EDGE, gameId, gameName , max
 }
 
 function CoinFace({ side, back }: { side: 'H' | 'T'; back?: boolean }) {
+  const gold = side === 'H';
   return (
     <div
       className="absolute inset-0 grid place-items-center rounded-full text-void-950"
       style={{
         backfaceVisibility: 'hidden',
-        transform: back ? 'rotateY(180deg)' : undefined,
-        background:
-          side === 'H'
-            ? 'radial-gradient(circle at 35% 30%, #fde68a, #f59e0b)'
-            : 'radial-gradient(circle at 35% 30%, #c4b5fd, #a855f7)',
-        boxShadow: '0 12px 40px -8px rgba(0,0,0,0.7), inset 0 0 0 6px rgba(255,255,255,0.25)',
+        transform: back ? 'rotateY(180deg) translateZ(5px)' : 'translateZ(5px)',
+        background: gold
+          ? 'radial-gradient(circle at 35% 28%, #fef3c7, #f59e0b 55%, #92400e)'
+          : 'radial-gradient(circle at 35% 28%, #ede9fe, #a855f7 55%, #6b21a8)',
+        boxShadow: `inset 0 0 0 5px ${gold ? 'rgba(120,53,15,0.55)' : 'rgba(76,29,149,0.5)'}, inset 0 0 0 9px rgba(255,255,255,0.18), inset -8px -10px 24px rgba(0,0,0,0.35), inset 6px 8px 18px rgba(255,255,255,0.35)`,
       }}
     >
-      <Icon name={side === 'H' ? 'moon' : 'bolt'} size={56} strokeWidth={1.6} />
+      {/* engraved ring + glyph */}
+      <div
+        className="absolute inset-[14%] rounded-full"
+        style={{ border: `2px dashed ${gold ? 'rgba(120,53,15,0.5)' : 'rgba(76,29,149,0.45)'}` }}
+      />
+      <span style={{ filter: 'drop-shadow(0 2px 2px rgba(0,0,0,0.3)) drop-shadow(0 -1px 0 rgba(255,255,255,0.4))' }}>
+        <Icon name={side === 'H' ? 'moon' : 'bolt'} size={58} strokeWidth={1.6} />
+      </span>
     </div>
   );
 }

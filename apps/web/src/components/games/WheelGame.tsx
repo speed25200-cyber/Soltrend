@@ -81,25 +81,84 @@ export function WheelGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params 
       meta={meta}
       stage={
         <div className="grid h-full place-items-center">
-          <div className="relative h-72 w-72">
-            {/* pointer */}
-            <div className="absolute left-1/2 top-[-6px] z-20 -translate-x-1/2">
-              <div className="h-0 w-0 border-x-[10px] border-t-[16px] border-x-transparent border-t-white drop-shadow" />
-            </div>
+          <div className="relative h-80 w-80">
+            {/* brass rim with marquee bulbs */}
+            <div
+              className="absolute inset-0 rounded-full"
+              style={{
+                background: 'linear-gradient(160deg,#e6b455,#6b4a17 55%,#2a1a08)',
+                boxShadow: '0 0 60px -14px rgba(230,180,85,0.45), inset 0 2px 3px rgba(255,255,255,0.35), inset 0 -4px 8px rgba(0,0,0,0.6)',
+              }}
+            />
+            {Array.from({ length: 20 }).map((_, i) => {
+              const a = (i / 20) * Math.PI * 2;
+              return (
+                <motion.span
+                  key={i}
+                  className="absolute h-1.5 w-1.5 rounded-full bg-amber-200"
+                  style={{
+                    left: `${50 + Math.cos(a) * 47.5}%`,
+                    top: `${50 + Math.sin(a) * 47.5}%`,
+                    boxShadow: '0 0 8px rgba(253,230,138,0.9)',
+                  }}
+                  animate={busy ? { opacity: [0.25, 1, 0.25] } : { opacity: 0.55 }}
+                  transition={busy ? { duration: 0.6, repeat: Infinity, delay: i * 0.05 } : { duration: 0.3 }}
+                />
+              );
+            })}
+            {/* the wheel itself, with segment separators and a glass coat */}
             <motion.div
-              className="h-full w-full rounded-full"
-              style={{ background: conic, boxShadow: '0 0 60px -18px #a855f7, inset 0 0 0 6px rgba(255,255,255,0.06)' }}
+              className="absolute inset-[5.5%] rounded-full"
+              style={{
+                background: conic,
+                boxShadow: 'inset 0 0 0 3px rgba(0,0,0,0.45), inset 0 0 40px rgba(0,0,0,0.5), 0 0 46px -14px #a855f7',
+              }}
               animate={{ rotate: rotation }}
               transition={{ duration: 4, ease: [0.15, 0.85, 0.2, 1] }}
-            />
+            >
+              {/* separators */}
+              <div
+                className="absolute inset-0 rounded-full"
+                style={{
+                  background: `repeating-conic-gradient(rgba(0,0,0,0.55) 0deg 0.6deg, transparent 0.6deg ${360 / SEG}deg)`,
+                }}
+              />
+              {/* glass coat */}
+              <div
+                className="absolute inset-0 rounded-full"
+                style={{
+                  background:
+                    'conic-gradient(from 210deg, rgba(255,255,255,0.22), transparent 18%, transparent 55%, rgba(255,255,255,0.1) 78%, transparent 90%)',
+                }}
+              />
+            </motion.div>
+            {/* pointer — wobbles as the wheel brakes */}
+            <motion.div
+              className="absolute left-1/2 top-[1.5%] z-20 -translate-x-1/2"
+              animate={result ? { rotate: [0, -14, 10, -5, 0] } : { rotate: 0 }}
+              transition={{ duration: 0.5 }}
+              style={{ transformOrigin: '50% 20%' }}
+            >
+              <div
+                className="h-0 w-0 border-x-[11px] border-t-[18px] border-x-transparent"
+                style={{ borderTopColor: '#f8fafc', filter: 'drop-shadow(0 2px 3px rgba(0,0,0,0.7)) drop-shadow(0 0 8px rgba(255,255,255,0.5))' }}
+              />
+            </motion.div>
             {/* hub */}
-            <div className="absolute left-1/2 top-1/2 z-10 grid h-24 w-24 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-white/10 bg-void-900/90 backdrop-blur">
+            <div
+              className="absolute left-1/2 top-1/2 z-10 grid h-24 w-24 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full"
+              style={{
+                background: 'radial-gradient(circle at 35% 30%, #2a2f57, #0d1024 70%)',
+                boxShadow: 'inset 0 2px 3px rgba(255,255,255,0.2), inset 0 -4px 8px rgba(0,0,0,0.7), 0 8px 24px -6px rgba(0,0,0,0.8)',
+              }}
+            >
               {result ? (
                 <motion.span
                   key={result.mult}
                   initial={{ scale: 0.4, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   className={`font-display text-2xl font-bold ${result.mult >= 1 ? 'text-win' : 'text-loss'}`}
+                  style={{ textShadow: result.mult >= 1 ? '0 0 18px rgba(16,245,160,0.7)' : '0 0 18px rgba(255,59,107,0.6)' }}
                 >
                   {fmtMult(result.mult)}
                 </motion.span>

@@ -87,34 +87,64 @@ export function PlinkoGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params
       meta={meta}
       stage={
         <div className="flex h-full flex-col">
-          <div className="relative flex-1">
-            {/* pegs */}
-            <div className="absolute inset-0 flex flex-col justify-between py-2">
+          <div
+            className="relative flex-1 rounded-2xl border border-white/[0.07] p-2"
+            style={{
+              background: 'radial-gradient(120% 100% at 50% 0%, #171a35 0%, #0a0c1e 60%, #05060f 100%)',
+              boxShadow: 'inset 0 2px 0 rgba(255,255,255,0.06), inset 0 -14px 30px rgba(0,0,0,0.5)',
+            }}
+          >
+            {/* pegs — brass pins with a lit crown, staggered rows */}
+            <div className="absolute inset-0 flex flex-col justify-between p-2">
               {pegRows.map((count, r) => (
                 <div key={r} className="flex justify-center gap-[3%]">
                   {Array.from({ length: count }, (_, i) => (
-                    <span key={i} className="h-1.5 w-1.5 rounded-full bg-white/25 md:h-2 md:w-2" />
+                    <span
+                      key={i}
+                      className="h-2 w-2 rounded-full md:h-2.5 md:w-2.5"
+                      style={{
+                        background: 'radial-gradient(circle at 35% 30%, #e2e8f0, #64748b 65%, #334155)',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.8), 0 0 6px rgba(203,213,225,0.25)',
+                      }}
+                    />
                   ))}
                 </div>
               ))}
             </div>
-            {/* balls */}
+            {/* balls — layered ghosts read as a motion trail */}
             {balls.map((ball) => (
-              <motion.div
-                key={ball.id}
-                className="absolute h-3 w-3 rounded-full bg-gradient-to-br from-neon-violet to-neon-magenta shadow-glow-violet"
-                style={{ left: '50%', top: 0, marginLeft: -6 }}
-                initial={{ left: '50%', top: '0%' }}
-                animate={{ left: ball.xs.map((x) => `${x}%`), top: ball.ys.map((y) => `${y}%`) }}
-                transition={{ duration: rows * 0.085, ease: 'linear', times: ball.xs.map((_, i) => i / rows) }}
-                onAnimationComplete={() => onLand(ball)}
-              />
+              <div key={ball.id}>
+                {[0.12, 0.06].map((delay, gi) => (
+                  <motion.div
+                    key={gi}
+                    className="absolute h-3 w-3 rounded-full bg-neon-violet/25"
+                    style={{ left: '50%', top: 0, marginLeft: -6, filter: 'blur(1px)' }}
+                    initial={{ left: '50%', top: '0%' }}
+                    animate={{ left: ball.xs.map((x) => `${x}%`), top: ball.ys.map((y) => `${y}%`) }}
+                    transition={{ duration: rows * 0.085, ease: 'linear', times: ball.xs.map((_, i) => i / rows), delay }}
+                  />
+                ))}
+                <motion.div
+                  className="absolute h-3 w-3 rounded-full"
+                  style={{
+                    left: '50%',
+                    top: 0,
+                    marginLeft: -6,
+                    background: 'radial-gradient(circle at 35% 30%, #e9d5ff, #a855f7 60%, #7e22ce)',
+                    boxShadow: '0 0 14px rgba(168,85,247,0.9), inset 0 -2px 3px rgba(0,0,0,0.4)',
+                  }}
+                  initial={{ left: '50%', top: '0%' }}
+                  animate={{ left: ball.xs.map((x) => `${x}%`), top: ball.ys.map((y) => `${y}%`) }}
+                  transition={{ duration: rows * 0.085, ease: 'linear', times: ball.xs.map((_, i) => i / rows) }}
+                  onAnimationComplete={() => onLand(ball)}
+                />
+              </div>
             ))}
           </div>
           {/* buckets — 17 of them have to fit a 390px phone, so the label is
               compacted rather than allowed to push the page sideways. It still
               rounds down, so it never promises more than the bucket pays. */}
-          <div className="flex justify-center gap-0.5 sm:gap-1">
+          <div className="mt-2 flex justify-center gap-0.5 sm:gap-1">
             {payouts.map((m: number, i: number) => {
               const hot = m >= 5;
               return (
@@ -128,8 +158,14 @@ export function PlinkoGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params
                       flash === i
                         ? 'linear-gradient(180deg,#10f5a0,#059669)'
                         : hot
-                          ? 'rgba(255,210,95,0.14)'
-                          : 'rgba(255,255,255,0.04)',
+                          ? 'linear-gradient(180deg,rgba(255,210,95,0.22),rgba(255,210,95,0.08))'
+                          : 'linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))',
+                    boxShadow:
+                      flash === i
+                        ? '0 0 22px rgba(16,245,160,0.8), inset 0 1px 0 rgba(255,255,255,0.4)'
+                        : hot
+                          ? 'inset 0 1px 0 rgba(255,210,95,0.35), 0 0 10px -2px rgba(255,210,95,0.3)'
+                          : 'inset 0 1px 0 rgba(255,255,255,0.08)',
                     color: flash === i ? '#05060f' : hot ? '#ffd25f' : '#94a3b8',
                   }}
                 >
@@ -165,7 +201,7 @@ export function PlinkoGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params
                 <button
                   key={r}
                   onClick={() => setRows(r)}
-                  className={`flex-1 rounded-lg py-2 text-sm font-semibold transition ${
+                  className={`flex-1 rounded-lg py-2 text-sm font-semibold capitalize transition ${
                     rows === r ? 'bg-white/10 text-white' : 'text-slate-400 hover:text-white'
                   }`}
                 >

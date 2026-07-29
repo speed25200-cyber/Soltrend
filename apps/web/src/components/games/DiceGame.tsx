@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { GameLayout } from '@/components/GameLayout';
 import { BetAmount } from '@/components/BetControls';
@@ -22,8 +22,11 @@ export function DiceGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params ,
   const [over, setOver] = useState(((params?.over ?? 1) as number) === 1);
   const [roll, setRoll] = useState<number | null>(null);
   const [lastWin, setLastWin] = useState<boolean | null>(null);
+  const [rolling, setRolling] = useState(false);
   const [busy, setBusy] = useState(false);
   const [mode, setMode] = useState<'manual' | 'auto'>('manual');
+  const timers = useRef<number[]>([]);
+  useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
   const winChance = over ? 100 - target : target;
   const mult = diceMultiplier(target, over, edge);
@@ -53,8 +56,13 @@ export function DiceGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params ,
 
   const doBet = () => {
     setBusy(true);
-    playRound(bet, false);
-    setBusy(false);
+    setRolling(true);
+    // The tumble is theatre — the outcome is settled instantly by the seed.
+    timers.current.push(window.setTimeout(() => {
+      playRound(bet, false);
+      setRolling(false);
+      setBusy(false);
+    }, 620));
   };
 
   return (
@@ -63,8 +71,10 @@ export function DiceGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params ,
       stage={
         <div className="flex h-full flex-col justify-center">
           {/* Result number */}
-          <div className="mb-10 text-center">
-            {roll === null ? (
+          <div className="mb-8 text-center">
+            {rolling ? (
+              <Scramble />
+            ) : roll === null ? (
               <div className="font-display text-6xl font-bold text-slate-700">00.00</div>
             ) : (
               <motion.div
@@ -80,34 +90,57 @@ export function DiceGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params ,
             )}
           </div>
 
-          {/* Track */}
+          {/* Track — a glass gauge with tick marks and a glowing read-head */}
           <div className="relative mx-auto w-full max-w-xl">
-            <div className="relative h-3 overflow-hidden rounded-full bg-void-900">
+            <div
+              className="relative h-4 overflow-visible rounded-full border border-white/[0.08]"
+              style={{ background: 'linear-gradient(180deg,#10142c,#080a18)', boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.7)' }}
+            >
               <div
-                className="absolute inset-y-0 left-0 rounded-full"
+                className="absolute inset-y-[3px] left-[3px] rounded-full"
                 style={{
-                  width: `${target}%`,
-                  background: over ? '#ff3b6b33' : 'linear-gradient(90deg,#10f5a0,#059669)',
+                  width: `calc(${target}% - 6px)`,
+                  background: over ? 'rgba(255,59,107,0.18)' : 'linear-gradient(90deg,#10f5a0cc,#059669cc)',
+                  boxShadow: over ? 'none' : '0 0 14px rgba(16,245,160,0.35)',
                 }}
               />
               <div
-                className="absolute inset-y-0 right-0 rounded-full"
+                className="absolute inset-y-[3px] right-[3px] rounded-full"
                 style={{
-                  width: `${100 - target}%`,
-                  background: over ? 'linear-gradient(90deg,#10f5a0,#059669)' : '#ff3b6b33',
+                  width: `calc(${100 - target}% - 6px)`,
+                  background: over ? 'linear-gradient(90deg,#10f5a0cc,#059669cc)' : 'rgba(255,59,107,0.18)',
+                  boxShadow: over ? '0 0 14px rgba(16,245,160,0.35)' : 'none',
                 }}
               />
+              {/* tick marks */}
+              {Array.from({ length: 21 }).map((_, i) => (
+                <span
+                  key={i}
+                  className="absolute top-1/2 -translate-y-1/2 rounded-full bg-white/20"
+                  style={{ left: `${i * 5}%`, width: 1, height: i % 5 === 0 ? 10 : 5 }}
+                />
+              ))}
+              {/* threshold needle */}
+              <div
+                className="absolute -top-1.5 h-7 w-[3px] -translate-x-1/2 rounded-full bg-white"
+                style={{ left: `${target}%`, boxShadow: '0 0 10px rgba(255,255,255,0.7)' }}
+              />
+              {/* roll marker */}
+              {roll !== null && !rolling && (
+                <motion.div
+                  className="absolute -top-2.5 grid h-9 w-9 -translate-x-1/2 place-items-center rounded-lg border-2 border-white"
+                  initial={{ left: '50%', scale: 0.6 }}
+                  animate={{ left: `${roll}%`, scale: 1 }}
+                  transition={{ type: 'spring', stiffness: 120, damping: 14 }}
+                  style={{
+                    background: 'linear-gradient(180deg,#1c2044,#0d1024)',
+                    boxShadow: lastWin ? '0 0 20px #10f5a0' : '0 0 20px #ff3b6b',
+                  }}
+                >
+                  <span className={`h-2 w-2 rounded-full ${lastWin ? 'bg-win' : 'bg-loss'}`} />
+                </motion.div>
+              )}
             </div>
-            {/* roll marker */}
-            {roll !== null && (
-              <motion.div
-                className="absolute -top-2 h-7 w-7 -translate-x-1/2 rounded-lg border-2 border-white bg-void-800"
-                initial={{ left: '50%' }}
-                animate={{ left: `${roll}%` }}
-                transition={{ type: 'spring', stiffness: 120, damping: 14 }}
-                style={{ boxShadow: lastWin ? '0 0 16px #10f5a0' : '0 0 16px #ff3b6b' }}
-              />
-            )}
             {/* threshold slider */}
             <input
               type="range"
@@ -116,7 +149,7 @@ export function DiceGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params ,
               step={1}
               value={target}
               onChange={(e) => setTarget(parseInt(e.target.value))}
-              className="mt-4 w-full accent-neon-violet"
+              className="mt-5 w-full accent-neon-violet"
             />
             <div className="mt-1 flex justify-between font-mono text-xs text-slate-600">
               <span>0</span>
@@ -171,6 +204,25 @@ export function DiceGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params ,
         </div>
       }
     />
+  );
+}
+
+/** Rapidly cycling digits while the die is "in the air". */
+function Scramble() {
+  const [text, setText] = useState('00.00');
+  useEffect(() => {
+    const t = setInterval(() => setText((Math.random() * 100).toFixed(2)), 50);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <motion.div
+      animate={{ y: [0, -6, 0] }}
+      transition={{ repeat: Infinity, duration: 0.28 }}
+      className="font-display text-6xl font-bold text-slate-400 tabular-nums"
+      style={{ textShadow: '0 0 30px rgba(168,85,247,0.5)' }}
+    >
+      {text}
+    </motion.div>
   );
 }
 

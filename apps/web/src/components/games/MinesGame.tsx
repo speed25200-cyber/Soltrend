@@ -98,8 +98,12 @@ export function MinesGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params 
     <GameLayout
       meta={meta}
       stage={
-        <div className="grid h-full place-items-center">
-          <div className="grid grid-cols-5 gap-2 md:gap-2.5">
+        <div className="grid h-full place-items-center" style={{ perspective: 900 }}>
+          <motion.div
+            className="grid grid-cols-5 gap-2 md:gap-2.5"
+            animate={phase === 'busted' ? { x: [0, -8, 8, -5, 5, 0] } : { x: 0 }}
+            transition={{ duration: 0.45 }}
+          >
             {Array.from({ length: GRID }, (_, i) => {
               const isRevealed = revealed.has(i);
               const isBomb = showBomb(i);
@@ -109,30 +113,72 @@ export function MinesGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params 
                   whileTap={{ scale: 0.92 }}
                   disabled={phase !== 'playing' || isRevealed}
                   onClick={() => reveal(i)}
-                  className={`grid h-14 w-14 place-items-center rounded-xl transition-all md:h-16 md:w-16 ${
-                    isBomb
-                      ? 'bg-loss/20 border border-loss/50 text-loss'
-                      : isRevealed
-                        ? 'bg-win/15 border border-win/40 text-win'
-                        : 'border border-white/[0.07] bg-void-900/70 hover:border-neon-violet/50 hover:bg-void-700/60'
-                  }`}
-                  style={isRevealed && !isBomb ? { boxShadow: '0 0 20px -6px #10f5a0' } : undefined}
+                  className="group relative h-14 w-14 md:h-16 md:w-16"
+                  style={{ transformStyle: 'preserve-3d' }}
                 >
-                  {isBomb ? (
-                    <motion.span initial={{ scale: 0 }} animate={{ scale: 1 }}>
-                      <Icon name="bomb" size={26} />
-                    </motion.span>
-                  ) : isRevealed ? (
-                    <motion.span initial={{ scale: 0, rotate: -30 }} animate={{ scale: 1, rotate: 0 }}>
-                      <Icon name="gem" size={26} />
-                    </motion.span>
-                  ) : (
-                    ''
+                  <motion.div
+                    className="absolute inset-0"
+                    style={{ transformStyle: 'preserve-3d' }}
+                    animate={{ rotateY: isRevealed || isBomb ? 180 : 0 }}
+                    transition={{ duration: 0.42, ease: [0.3, 1.4, 0.5, 1] }}
+                  >
+                    {/* face down — a lacquered, beveled slab */}
+                    <div
+                      className="absolute inset-0 rounded-xl transition-all duration-200 group-hover:-translate-y-1"
+                      style={{
+                        backfaceVisibility: 'hidden',
+                        background: 'linear-gradient(160deg,#232848 0%,#141833 55%,#0b0e22 100%)',
+                        boxShadow:
+                          'inset 0 1.5px 0 rgba(255,255,255,0.14), inset 0 -2px 4px rgba(0,0,0,0.55), 0 6px 14px -6px rgba(0,0,0,0.8)',
+                        border: '1px solid rgba(255,255,255,0.07)',
+                      }}
+                    >
+                      <span
+                        className="absolute inset-[26%] rounded-lg opacity-25 transition group-hover:opacity-70"
+                        style={{
+                          background: 'linear-gradient(160deg,#8b5cf6,#3b0764)',
+                          boxShadow: '0 0 14px rgba(139,92,246,0.6)',
+                        }}
+                      />
+                    </div>
+                    {/* face up — gem or bomb */}
+                    <div
+                      className="absolute inset-0 grid place-items-center rounded-xl"
+                      style={{
+                        backfaceVisibility: 'hidden',
+                        transform: 'rotateY(180deg)',
+                        background: isBomb
+                          ? 'linear-gradient(160deg,#4d1024,#1c0710)'
+                          : 'linear-gradient(160deg,#0a3d2a,#071c14)',
+                        boxShadow: isBomb
+                          ? 'inset 0 0 0 1.5px rgba(255,59,107,0.6), 0 0 26px -4px rgba(255,59,107,0.7)'
+                          : 'inset 0 0 0 1.5px rgba(16,245,160,0.5), 0 0 26px -6px rgba(16,245,160,0.7)',
+                      }}
+                    >
+                      {isBomb ? (
+                        <motion.span initial={{ scale: 0, rotate: -40 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: 'spring', stiffness: 300, damping: 14 }} className="text-loss">
+                          <Icon name="bomb" size={26} />
+                        </motion.span>
+                      ) : (
+                        <motion.span initial={{ scale: 0, rotate: -30 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: 'spring', stiffness: 300, damping: 14 }} className="text-win">
+                          <Icon name="gem" size={26} />
+                        </motion.span>
+                      )}
+                    </div>
+                  </motion.div>
+                  {/* bomb shockwave */}
+                  {isBomb && (
+                    <motion.span
+                      className="pointer-events-none absolute inset-0 rounded-xl border-2 border-loss"
+                      initial={{ opacity: 0.9, scale: 1 }}
+                      animate={{ opacity: 0, scale: 1.9 }}
+                      transition={{ duration: 0.7, ease: 'easeOut' }}
+                    />
                   )}
                 </motion.button>
               );
             })}
-          </div>
+          </motion.div>
         </div>
       }
       controls={

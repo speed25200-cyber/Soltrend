@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { motion, useAnimationControls } from 'framer-motion';
+import { useEffect, useRef, useState } from 'react';
+import { motion } from 'framer-motion';
 import { GameLayout } from '@/components/GameLayout';
 import { BetAmount } from '@/components/BetControls';
 import { BetButton } from './BetButton';
@@ -29,8 +29,8 @@ export function LimboGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params,
   const [result, setResult] = useState<number | null>(null);
   const [win, setWin] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
+  const [launch, setLaunch] = useState(0); // increments per round — drives the arc
   const [mode, setMode] = useState<'manual' | 'auto'>('manual');
-  const controls = useAnimationControls();
 
   const winChance = ((1 - clampEdge(edge)) / target) * 100;
   const g = guard(bet);
@@ -57,37 +57,43 @@ export function LimboGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params,
     return { win: res.win, payout: res.payout };
   };
 
-  const doBet = async () => {
+  const doBet = () => {
     setBusy(true);
     setWin(null);
-    await controls.start({ opacity: [0.3, 1], transition: { duration: 0.15 } });
-    playRound(bet, false);
-    setBusy(false);
+    setResult(null);
+    setLaunch((k) => k + 1);
+    // The climb is theatre (~1s); the point was decided by the seed already.
+    setTimeout(() => {
+      playRound(bet, false);
+      setBusy(false);
+    }, 950);
   };
 
   return (
     <GameLayout
       meta={meta}
       stage={
-        <div className="grid h-full place-items-center">
-          <div className="text-center">
-            <motion.div
-              animate={controls}
-              key={result ?? 'idle'}
-              className={`font-display text-7xl font-bold tabular-nums md:text-8xl ${
-                win === null ? 'text-slate-300' : win ? 'text-win' : 'text-loss'
-              }`}
-              style={{
-                textShadow:
-                  win === null
-                    ? '0 0 30px rgba(148,163,184,0.3)'
-                    : win
-                      ? '0 0 50px rgba(16,245,160,0.6)'
-                      : '0 0 50px rgba(255,59,107,0.5)',
-              }}
-            >
-              {result === null ? '1.00×' : fmtMult(result)}
-            </motion.div>
+        <div className="relative grid h-full place-items-center overflow-hidden">
+          <ClimbArc launch={launch} result={result} win={win} />
+          <div className="relative z-10 text-center">
+            {result === null && launch === 0 && (
+              <div className="font-display text-7xl font-bold tabular-nums text-slate-300 md:text-8xl" style={{ textShadow: '0 0 30px rgba(148,163,184,0.3)' }}>
+                1.00×
+              </div>
+            )}
+            {result === null && launch > 0 && <ClimbCounter />}
+            {result !== null && (
+              <motion.div
+                key={result}
+                initial={{ scale: 0.6, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ type: 'spring', stiffness: 280, damping: 16 }}
+                className={`font-display text-7xl font-bold tabular-nums md:text-8xl ${win ? 'text-win' : 'text-loss'}`}
+                style={{ textShadow: win ? '0 0 50px rgba(16,245,160,0.6)' : '0 0 50px rgba(255,59,107,0.5)' }}
+              >
+                {fmtMult(result)}
+              </motion.div>
+            )}
             {win !== null && (
               <motion.div
                 initial={{ opacity: 0, y: 8 }}
@@ -153,5 +159,68 @@ export function LimboGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params,
         </div>
       }
     />
+  );
+}
+
+/** The exponential climb, drawn as it happens — a rocket-arc behind the counter. */
+function ClimbArc({ launch, result, win }: { launch: number; result: number | null; win: boolean | null }) {
+  if (launch === 0) return null;
+  const done = result !== null;
+  const color = !done ? '#a855f7' : win ? '#10f5a0' : '#ff3b6b';
+  return (
+    <svg className="absolute inset-0 h-full w-full" viewBox="0 0 400 300" preserveAspectRatio="none" aria-hidden>
+      <defs>
+        <linearGradient id={`arc-${launch}`} x1="0" y1="1" x2="1" y2="0">
+          <stop offset="0" stopColor={color} stopOpacity="0.1" />
+          <stop offset="1" stopColor={color} />
+        </linearGradient>
+      </defs>
+      {/* grid */}
+      {[0.25, 0.5, 0.75].map((f) => (
+        <line key={f} x1="0" y1={300 * f} x2="400" y2={300 * f} stroke="#ffffff" strokeOpacity="0.05" />
+      ))}
+      <motion.path
+        key={launch}
+        d="M 20 285 Q 120 260 200 190 T 390 12"
+        fill="none"
+        stroke={`url(#arc-${launch})`}
+        strokeWidth="3.5"
+        strokeLinecap="round"
+        initial={{ pathLength: 0 }}
+        animate={{ pathLength: 1 }}
+        transition={{ duration: 0.95, ease: [0.25, 0.8, 0.35, 1] }}
+        style={{ filter: `drop-shadow(0 0 10px ${color})` }}
+      />
+      <motion.circle
+        key={`dot-${launch}`}
+        r="7"
+        fill={color}
+        initial={{ cx: 20, cy: 285, opacity: 1 }}
+        animate={{ cx: [20, 200, 390], cy: [285, 190, 12] }}
+        transition={{ duration: 0.95, ease: [0.25, 0.8, 0.35, 1] }}
+        style={{ filter: `drop-shadow(0 0 14px ${color})` }}
+      />
+    </svg>
+  );
+}
+
+/** The counter climbing while the outcome is still "in the air". */
+function ClimbCounter() {
+  const [v, setV] = useState(1);
+  useEffect(() => {
+    const t0 = performance.now();
+    let raf = 0;
+    const step = () => {
+      const e = performance.now() - t0;
+      setV(Math.max(1, Math.pow(Math.E, 0.0011 * e)));
+      if (e < 940) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  return (
+    <div className="font-display text-7xl font-bold tabular-nums text-neon-violet md:text-8xl" style={{ textShadow: '0 0 46px rgba(168,85,247,0.65)' }}>
+      {fmtMult(Math.floor(v * 100) / 100)}
+    </div>
   );
 }
