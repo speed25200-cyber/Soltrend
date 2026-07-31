@@ -1,7 +1,7 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { useMemo, useRef, useState } from 'react';
-import { motion } from 'framer-motion';
 import { GameLayout } from '@/components/GameLayout';
 import { BetAmount } from '@/components/BetControls';
 import { BetButton } from './BetButton';
@@ -9,12 +9,25 @@ import { usePlay } from '@/hooks/usePlay';
 import { useCasino } from '@/lib/store';
 import { minesLayout, minesMultiplier, MAX_MULTIPLIER, DEFAULT_EDGE, round2 } from '@/lib/games';
 import { fmtMult } from '@/lib/format';
-import { Icon } from '@/components/Icon';
+import { defaultWorld } from '@/lib/forge/world';
+import { BOARD_SKINS } from '@/lib/forge/board';
 import type { GameConfig } from './types';
+
+const World3D = dynamic(() => import('@/components/worlds/World3D'), {
+  ssr: false,
+  loading: () => <div className="grid h-full min-h-[380px] place-items-center text-sm text-slate-500">Loading the mine…</div>,
+});
 
 const GRID = 25;
 type Phase = 'idle' | 'playing' | 'busted' | 'cashed';
 
+const SKIN: keyof typeof BOARD_SKINS = 'gems';
+
+/**
+ * Mines — now dealt on the full 3D board (lacquered slabs, hover halos,
+ * floating gems, drifting atmosphere). The maths is untouched: same layout,
+ * same ladder, same seeds as the flat board it replaces.
+ */
 export function MinesGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params , maxBet, demo}: GameConfig) {
   const { guard, reserveSeeds, settle } = usePlay(maxBet, demo);
   const bumpUgc = useCasino((s) => s.bumpUgc);
@@ -24,14 +37,19 @@ export function MinesGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params 
   const [phase, setPhase] = useState<Phase>('idle');
   const [revealed, setRevealed] = useState<Set<number>>(new Set());
   const [bombSet, setBombSet] = useState<Set<number>>(new Set());
+  const [hitIndex, setHitIndex] = useState<number | null>(null);
   const [seeds, setSeeds] = useState<ReturnType<typeof reserveSeeds> | null>(null);
   // Synchronous re-entry guard: blocks a double-tap settling the same round twice
   // (React `phase` state updates async, so it can't block back-to-back events).
   const settledRef = useRef(false);
 
+  const spec = useMemo(() => defaultWorld({ rows: 5, cols: 5, bombs, skin: SKIN, fx: 'bloom' }), [bombs]);
+  const skin = BOARD_SKINS[SKIN];
+
   const picks = revealed.size;
   const nextMult = minesMultiplier(GRID, bombs, picks + 1, edge);
   const curMult = picks > 0 ? minesMultiplier(GRID, bombs, picks, edge) : 1;
+  const heat = Math.min(1, Math.log10(Math.max(1, curMult)) / 2);
   const g = guard(bet);
 
   const start = () => {
@@ -39,6 +57,7 @@ export function MinesGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params 
     setSeeds(s);
     setBombSet(minesLayout(GRID, bombs, s));
     setRevealed(new Set());
+    setHitIndex(null);
     settledRef.current = false;
     setPhase('playing');
   };
@@ -48,6 +67,7 @@ export function MinesGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params 
     if (bombSet.has(i)) {
       if (settledRef.current) return;
       settledRef.current = true;
+      setHitIndex(i);
       setBombSet(new Set(bombSet));
       setPhase('busted');
       settle({
@@ -92,93 +112,42 @@ export function MinesGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params 
     setTimeout(() => setPhase((ph) => (ph === 'cashed' ? 'idle' : ph)), 2200);
   };
 
-  const showBomb = (i: number) => (phase === 'busted' || phase === 'cashed') && bombSet.has(i);
+  const showBombs = phase === 'busted' || phase === 'cashed';
 
   return (
     <GameLayout
       meta={meta}
       stage={
-        <div className="grid h-full place-items-center" style={{ perspective: 900 }}>
-          <motion.div
-            className="grid grid-cols-5 gap-2 md:gap-2.5"
-            animate={phase === 'busted' ? { x: [0, -8, 8, -5, 5, 0] } : { x: 0 }}
-            transition={{ duration: 0.45 }}
-          >
-            {Array.from({ length: GRID }, (_, i) => {
-              const isRevealed = revealed.has(i);
-              const isBomb = showBomb(i);
-              return (
-                <motion.button
-                  key={i}
-                  whileTap={{ scale: 0.92 }}
-                  disabled={phase !== 'playing' || isRevealed}
-                  onClick={() => reveal(i)}
-                  className="group relative h-14 w-14 md:h-16 md:w-16"
-                  style={{ transformStyle: 'preserve-3d' }}
-                >
-                  <motion.div
-                    className="absolute inset-0"
-                    style={{ transformStyle: 'preserve-3d' }}
-                    animate={{ rotateY: isRevealed || isBomb ? 180 : 0 }}
-                    transition={{ duration: 0.42, ease: [0.3, 1.4, 0.5, 1] }}
-                  >
-                    {/* face down — a lacquered, beveled slab */}
-                    <div
-                      className="absolute inset-0 rounded-xl transition-all duration-200 group-hover:-translate-y-1"
-                      style={{
-                        backfaceVisibility: 'hidden',
-                        background: 'linear-gradient(160deg,#232848 0%,#141833 55%,#0b0e22 100%)',
-                        boxShadow:
-                          'inset 0 1.5px 0 rgba(255,255,255,0.14), inset 0 -2px 4px rgba(0,0,0,0.55), 0 6px 14px -6px rgba(0,0,0,0.8)',
-                        border: '1px solid rgba(255,255,255,0.07)',
-                      }}
-                    >
-                      <span
-                        className="absolute inset-[26%] rounded-lg opacity-25 transition group-hover:opacity-70"
-                        style={{
-                          background: 'linear-gradient(160deg,#8b5cf6,#3b0764)',
-                          boxShadow: '0 0 14px rgba(139,92,246,0.6)',
-                        }}
-                      />
-                    </div>
-                    {/* face up — gem or bomb */}
-                    <div
-                      className="absolute inset-0 grid place-items-center rounded-xl"
-                      style={{
-                        backfaceVisibility: 'hidden',
-                        transform: 'rotateY(180deg)',
-                        background: isBomb
-                          ? 'linear-gradient(160deg,#4d1024,#1c0710)'
-                          : 'linear-gradient(160deg,#0a3d2a,#071c14)',
-                        boxShadow: isBomb
-                          ? 'inset 0 0 0 1.5px rgba(255,59,107,0.6), 0 0 26px -4px rgba(255,59,107,0.7)'
-                          : 'inset 0 0 0 1.5px rgba(16,245,160,0.5), 0 0 26px -6px rgba(16,245,160,0.7)',
-                      }}
-                    >
-                      {isBomb ? (
-                        <motion.span initial={{ scale: 0, rotate: -40 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: 'spring', stiffness: 300, damping: 14 }} className="text-loss">
-                          <Icon name="bomb" size={26} />
-                        </motion.span>
-                      ) : (
-                        <motion.span initial={{ scale: 0, rotate: -30 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: 'spring', stiffness: 300, damping: 14 }} className="text-win">
-                          <Icon name="gem" size={26} />
-                        </motion.span>
-                      )}
-                    </div>
-                  </motion.div>
-                  {/* bomb shockwave */}
-                  {isBomb && (
-                    <motion.span
-                      className="pointer-events-none absolute inset-0 rounded-xl border-2 border-loss"
-                      initial={{ opacity: 0.9, scale: 1 }}
-                      animate={{ opacity: 0, scale: 1.9 }}
-                      transition={{ duration: 0.7, ease: 'easeOut' }}
-                    />
-                  )}
-                </motion.button>
-              );
-            })}
-          </motion.div>
+        <div className="relative h-full min-h-[420px] overflow-hidden rounded-2xl">
+          {/* The renderer is absolutely positioned: a percentage height resolves
+              against the parent's height, not its min-height. */}
+          <div className="absolute inset-0">
+            <World3D
+              spec={spec}
+              revealed={revealed}
+              bombSet={bombSet}
+              showBombs={showBombs}
+              playing={phase === 'playing'}
+              hitIndex={hitIndex}
+              onReveal={reveal}
+              heat={heat}
+            />
+          </div>
+          {/* HUD overlay */}
+          <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-4">
+            <div className="rounded-xl border border-white/10 bg-void-950/70 px-3 py-2 backdrop-blur">
+              <div className="font-mono text-2xl font-black" style={{ color: phase === 'busted' ? '#ff3b6b' : skin.gemGlow, textShadow: `0 0 ${14 + heat * 26}px ${skin.gem}` }}>
+                {phase === 'busted' ? 'BUST' : `${curMult.toFixed(2)}×`}
+              </div>
+              <div className="text-[0.62rem] uppercase tracking-[0.25em] text-slate-400">
+                {phase === 'playing' && picks > 0 ? `◎${(bet * curMult).toFixed(3)}` : `${GRID - bombs} safe · ${bombs} mines`}
+              </div>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-void-950/70 px-3 py-2 text-right backdrop-blur">
+              <div className="font-mono text-lg font-bold text-white">{picks}</div>
+              <div className="text-[0.62rem] uppercase tracking-[0.2em] text-slate-400">revealed</div>
+            </div>
+          </div>
         </div>
       }
       controls={
@@ -224,6 +193,7 @@ export function MinesGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params 
               Start ◎{bet}
             </BetButton>
           )}
+          <p className="text-center text-[0.68rem] text-slate-600">Drag to orbit the board · click a slab to reveal it</p>
         </div>
       }
     />
