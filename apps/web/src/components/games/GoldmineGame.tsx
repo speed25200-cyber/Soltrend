@@ -16,7 +16,7 @@ import { Icon } from '@/components/Icon';
 import { sfx } from '@/lib/sound';
 import { burstWin } from '@/lib/fx';
 import { Cabinet } from './goldmine/ReelMachine';
-import { ExpressReels, reelPlan } from './goldmine/ExpressReels';
+import { ExpressReels, reelPlan, litCells } from './goldmine/ExpressReels';
 import { ExpressSymbol, TRAIN_HEX } from './goldmine/ExpressSymbols';
 import {
   CART_CAPACITY, JACKPOTS, MAX_WIN, SYMBOLS,
@@ -236,6 +236,25 @@ export function GoldmineGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, para
   const collecting = phase === 'collect' || phase === 'train';
   const spinLocked = phase !== 'idle' && phase !== 'done';
 
+  // The 3D machine needs WebGL; without it the DOM reel head deals the same grid.
+  // `mounted` gates the swap until after hydration — deciding this during the
+  // first client render would mismatch the prerendered DOM (React #418).
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const canGL = useMemo(() => {
+    if (!mounted) return false;
+    try {
+      const c = document.createElement('canvas');
+      return !!(c.getContext('webgl2') || c.getContext('webgl'));
+    } catch {
+      return false;
+    }
+  }, [mounted]);
+  const lit = useMemo(
+    () => (showWins && phase !== 'train' ? litCells(view, view?.lineWins ?? []) : new Set<string>()),
+    [view, showWins, phase],
+  );
+
   return (
     <GameLayout
       meta={meta}
@@ -257,136 +276,159 @@ export function GoldmineGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, para
                 step: trainStep,
                 count: bonus?.carriages.length ?? 0,
               }}
+              machine={
+                canGL
+                  ? {
+                      active: true,
+                      spin: view,
+                      plan,
+                      spinning: reelsMoving,
+                      spinKey,
+                      free: phase === 'free',
+                      showWins: showWins && phase !== 'train',
+                      collected: collecting,
+                      lit,
+                    }
+                  : null
+              }
             />
           </div>
 
-          <div className="relative z-10 flex h-full flex-col items-center justify-center gap-2 p-3 pb-3">
-            {/* jackpots */}
-            <div className="flex gap-1.5 sm:gap-2">
-              {JACKPOTS.map((j) => (
-                <span
-                  key={j.tier}
-                  className="rounded-lg border px-2 py-0.5 font-mono text-[0.58rem] font-black uppercase tracking-wider sm:text-[0.66rem]"
-                  style={{
-                    color: TRAIN_HEX[j.color].glow,
-                    borderColor: `${TRAIN_HEX[j.color].a}55`,
-                    background: `${TRAIN_HEX[j.color].b}cc`,
-                    textShadow: `0 0 10px ${TRAIN_HEX[j.color].glow}`,
-                  }}
-                >
-                  {j.tier} {(j.value * cfg.payScale).toFixed(0)}×
-                </span>
-              ))}
-            </div>
-
-            {/* the mine cart meter */}
-            <div className="w-full max-w-md rounded-xl border border-white/[0.05] bg-void-950/60 px-3 py-2 backdrop-blur-sm">
-              <div className="flex items-center justify-between text-[0.6rem] font-bold uppercase tracking-wider text-amber-200/70">
-                <span>Mine cart</span>
-                <span>{cart >= CART_CAPACITY ? 'FULL — drops next spin' : `${cart.toFixed(1)} / ${CART_CAPACITY}`}</span>
-              </div>
-              <div className="mt-1 h-2.5 overflow-hidden rounded-full border border-amber-900/60 bg-black/50">
-                <motion.div
-                  className="h-full rounded-full"
-                  style={{ background: 'linear-gradient(90deg,#b45309,#fcd34d)', boxShadow: '0 0 12px rgba(252,211,77,0.6)' }}
-                  animate={{ width: `${cartPct}%` }}
-                  transition={{ type: 'spring', stiffness: 120, damping: 20 }}
-                />
-              </div>
-            </div>
-
-            {/* the machine */}
-            <Cabinet title="Gold Mine Express" lit={showWins && (view?.total ?? 0) > 0} spinning={phase === 'spinning'}>
-              <ExpressReels
-                spin={view}
-                plan={plan}
-                spinning={reelsMoving}
-                spinKey={spinKey}
-                free={phase === 'free'}
-                showWins={showWins && phase !== 'train'}
-                collected={collecting}
-              />
-            </Cabinet>
-
-            {/* readout */}
-            <div className="flex min-h-[2rem] flex-wrap items-center justify-center gap-2">
-              {phase === 'collect' && base?.collect && (
-                <motion.span
-                  initial={{ scale: 0.6, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  className="rounded-xl border border-gold/50 bg-gold/15 px-4 py-1.5 font-mono text-lg font-black text-gold"
-                  style={{ textShadow: '0 0 18px rgba(255,210,95,0.7)' }}
-                >
-                  {base.collect.kind === 'gtrain' ? `GOLDEN TRAIN ×${base.collect.multiplier} · ` : 'BELL COLLECTS · '}
-                  {base.collect.total.toFixed(2)}×
-                </motion.span>
-              )}
-              {phase === 'free' && (
-                <>
-                  <span className="rounded-xl border border-red-400/50 bg-red-500/10 px-3 py-1 font-mono text-sm font-black text-red-300">
-                    FREE GAME {freeIdx}/{round?.freeGames}
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-between gap-2 p-3 pb-3">
+            {/* top HUD — jackpots + mine cart, clear of the 3D machine */}
+            <div className="flex w-full flex-col items-center gap-2">
+              {/* jackpots */}
+              <div className="flex gap-1.5 sm:gap-2">
+                {JACKPOTS.map((j) => (
+                  <span
+                    key={j.tier}
+                    className="rounded-lg border px-2 py-0.5 font-mono text-[0.58rem] font-black uppercase tracking-wider sm:text-[0.66rem]"
+                    style={{
+                      color: TRAIN_HEX[j.color].glow,
+                      borderColor: `${TRAIN_HEX[j.color].a}55`,
+                      background: `${TRAIN_HEX[j.color].b}cc`,
+                      textShadow: `0 0 10px ${TRAIN_HEX[j.color].glow}`,
+                    }}
+                  >
+                    {j.tier} {(j.value * cfg.payScale).toFixed(0)}×
                   </span>
-                  <motion.span key={fsBank} initial={{ scale: 1.15 }} animate={{ scale: 1 }} className="font-mono text-xl font-black text-white">
-                    {fsBank.toFixed(2)}×
-                  </motion.span>
-                </>
-              )}
-              {phase === 'base' && base && base.linesTotal > 0 && !base.collect && (
-                <motion.span key={base.linesTotal} initial={{ scale: 1.2 }} animate={{ scale: 1 }} className="font-mono text-xl font-black text-white">
-                  {base.linesTotal.toFixed(2)}×
-                </motion.span>
-              )}
-            </div>
-
-            {/* the action bar — WIN readout, bet stepper, and the big spin */}
-            <div className="flex w-full max-w-xl items-stretch gap-2 rounded-2xl border border-white/[0.07] bg-void-950/70 p-2 backdrop-blur-md">
-              <div className="hidden min-w-[5.5rem] flex-col justify-center rounded-xl border border-white/[0.06] bg-void-900/70 px-2.5 sm:flex">
-                <span className="text-[0.55rem] font-bold uppercase tracking-widest text-slate-500">Win</span>
-                <span className={`font-mono text-sm font-black ${lastWin ? 'text-gold' : 'text-slate-500'}`}>
-                  {lastWin === null ? '—' : lastWin === 0 ? '0.00' : `${lastWin.toFixed(2)}×`}
-                </span>
+                ))}
               </div>
 
-              <div className="flex flex-col justify-center rounded-xl border border-white/[0.06] bg-void-900/70 px-2">
-                <span className="text-center text-[0.55rem] font-bold uppercase tracking-widest text-slate-500">Bet</span>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => setBet((b) => Math.max(0.01, Math.round(b * 50) / 100))}
-                    disabled={spinLocked}
-                    className="grid h-7 w-7 place-items-center rounded-lg border border-white/10 bg-white/[0.03] font-mono text-sm font-black text-slate-300 transition hover:border-gold/50 hover:text-gold disabled:opacity-30"
-                    aria-label="Halve bet"
-                  >
-                    −
-                  </button>
-                  <div className="min-w-[3.6rem] text-center">
-                    <div className="flex items-center justify-center gap-1 font-mono text-sm font-black text-white">
-                      <SolMark size={12} />{fmtSol(bet)}
-                    </div>
-                    <div className="font-mono text-[0.55rem] text-slate-500">≈ ${(bet * SOL_USD).toFixed(2)}</div>
-                  </div>
-                  <button
-                    onClick={() => setBet((b) => Math.round(b * 200) / 100)}
-                    disabled={spinLocked}
-                    className="grid h-7 w-7 place-items-center rounded-lg border border-white/10 bg-white/[0.03] font-mono text-sm font-black text-slate-300 transition hover:border-gold/50 hover:text-gold disabled:opacity-30"
-                    aria-label="Double bet"
-                  >
-                    +
-                  </button>
+              {/* the mine cart meter */}
+              <div className="w-full max-w-md rounded-xl border border-white/[0.05] bg-void-950/60 px-3 py-2 backdrop-blur-sm">
+                <div className="flex items-center justify-between text-[0.6rem] font-bold uppercase tracking-wider text-amber-200/70">
+                  <span>Mine cart</span>
+                  <span>{cart >= CART_CAPACITY ? 'FULL — drops next spin' : `${cart.toFixed(1)} / ${CART_CAPACITY}`}</span>
+                </div>
+                <div className="mt-1 h-2.5 overflow-hidden rounded-full border border-amber-900/60 bg-black/50">
+                  <motion.div
+                    className="h-full rounded-full"
+                    style={{ background: 'linear-gradient(90deg,#b45309,#fcd34d)', boxShadow: '0 0 12px rgba(252,211,77,0.6)' }}
+                    animate={{ width: `${cartPct}%` }}
+                    transition={{ type: 'spring', stiffness: 120, damping: 20 }}
+                  />
                 </div>
               </div>
+            </div>
 
-              <button
-                onClick={spin}
-                disabled={spinLocked || !g.ok}
-                className="group relative flex-1 overflow-hidden rounded-xl py-3 font-display text-xl font-black uppercase tracking-[0.2em] text-void-950 transition-all hover:brightness-110 active:translate-y-0.5 disabled:opacity-40"
-                style={{
-                  background: 'linear-gradient(160deg,#fde68a 0%,#f59e0b 45%,#b45309 100%)',
-                  boxShadow: '0 0 0 1px rgba(255,255,255,0.2) inset, 0 10px 30px -8px rgba(245,158,11,0.7), 0 0 34px -6px rgba(252,211,77,0.5)',
-                }}
-              >
-                <span className="relative z-10">{phase === 'free' ? 'Free…' : 'Spin'}</span>
-                <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/40 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
-              </button>
+            {/* the machine — full 3D with WebGL, the DOM reel head otherwise */}
+            {!canGL && (
+              <Cabinet title="Gold Mine Express" lit={showWins && (view?.total ?? 0) > 0} spinning={phase === 'spinning'}>
+                <ExpressReels
+                  spin={view}
+                  plan={plan}
+                  spinning={reelsMoving}
+                  spinKey={spinKey}
+                  free={phase === 'free'}
+                  showWins={showWins && phase !== 'train'}
+                  collected={collecting}
+                />
+              </Cabinet>
+            )}
+
+            {/* bottom HUD — readout + action bar, clear of the machine */}
+            <div className="flex w-full flex-col items-center gap-2">
+              {/* readout */}
+              <div className="flex min-h-[2rem] flex-wrap items-center justify-center gap-2">
+                {phase === 'collect' && base?.collect && (
+                  <motion.span
+                    initial={{ scale: 0.6, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    className="rounded-xl border border-gold/50 bg-gold/15 px-4 py-1.5 font-mono text-lg font-black text-gold"
+                    style={{ textShadow: '0 0 18px rgba(255,210,95,0.7)' }}
+                  >
+                    {base.collect.kind === 'gtrain' ? `GOLDEN TRAIN ×${base.collect.multiplier} · ` : 'BELL COLLECTS · '}
+                    {base.collect.total.toFixed(2)}×
+                  </motion.span>
+                )}
+                {phase === 'free' && (
+                  <>
+                    <span className="rounded-xl border border-red-400/50 bg-red-500/10 px-3 py-1 font-mono text-sm font-black text-red-300">
+                      FREE GAME {freeIdx}/{round?.freeGames}
+                    </span>
+                    <motion.span key={fsBank} initial={{ scale: 1.15 }} animate={{ scale: 1 }} className="font-mono text-xl font-black text-white">
+                      {fsBank.toFixed(2)}×
+                    </motion.span>
+                  </>
+                )}
+                {phase === 'base' && base && base.linesTotal > 0 && !base.collect && (
+                  <motion.span key={base.linesTotal} initial={{ scale: 1.2 }} animate={{ scale: 1 }} className="font-mono text-xl font-black text-white">
+                    {base.linesTotal.toFixed(2)}×
+                  </motion.span>
+                )}
+              </div>
+
+              {/* the action bar — WIN readout, bet stepper, and the big spin */}
+              <div className="flex w-full max-w-xl items-stretch gap-2 rounded-2xl border border-white/[0.07] bg-void-950/70 p-2 backdrop-blur-md">
+                <div className="hidden min-w-[5.5rem] flex-col justify-center rounded-xl border border-white/[0.06] bg-void-900/70 px-2.5 sm:flex">
+                  <span className="text-[0.55rem] font-bold uppercase tracking-widest text-slate-500">Win</span>
+                  <span className={`font-mono text-sm font-black ${lastWin ? 'text-gold' : 'text-slate-500'}`}>
+                    {lastWin === null ? '—' : lastWin === 0 ? '0.00' : `${lastWin.toFixed(2)}×`}
+                  </span>
+                </div>
+
+                <div className="flex flex-col justify-center rounded-xl border border-white/[0.06] bg-void-900/70 px-2">
+                  <span className="text-center text-[0.55rem] font-bold uppercase tracking-widest text-slate-500">Bet</span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setBet((b) => Math.max(0.01, Math.round(b * 50) / 100))}
+                      disabled={spinLocked}
+                      className="grid h-7 w-7 place-items-center rounded-lg border border-white/10 bg-white/[0.03] font-mono text-sm font-black text-slate-300 transition hover:border-gold/50 hover:text-gold disabled:opacity-30"
+                      aria-label="Halve bet"
+                    >
+                      −
+                    </button>
+                    <div className="min-w-[3.6rem] text-center">
+                      <div className="flex items-center justify-center gap-1 font-mono text-sm font-black text-white">
+                        <SolMark size={12} />{fmtSol(bet)}
+                      </div>
+                      <div className="font-mono text-[0.55rem] text-slate-500">≈ ${(bet * SOL_USD).toFixed(2)}</div>
+                    </div>
+                    <button
+                      onClick={() => setBet((b) => Math.round(b * 200) / 100)}
+                      disabled={spinLocked}
+                      className="grid h-7 w-7 place-items-center rounded-lg border border-white/10 bg-white/[0.03] font-mono text-sm font-black text-slate-300 transition hover:border-gold/50 hover:text-gold disabled:opacity-30"
+                      aria-label="Double bet"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  onClick={spin}
+                  disabled={spinLocked || !g.ok}
+                  className="group relative flex-1 overflow-hidden rounded-xl py-3 font-display text-xl font-black uppercase tracking-[0.2em] text-void-950 transition-all hover:brightness-110 active:translate-y-0.5 disabled:opacity-40"
+                  style={{
+                    background: 'linear-gradient(160deg,#fde68a 0%,#f59e0b 45%,#b45309 100%)',
+                    boxShadow: '0 0 0 1px rgba(255,255,255,0.2) inset, 0 10px 30px -8px rgba(245,158,11,0.7), 0 0 34px -6px rgba(252,211,77,0.5)',
+                  }}
+                >
+                  <span className="relative z-10">{phase === 'free' ? 'Free…' : 'Spin'}</span>
+                  <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/40 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
+                </button>
+              </div>
             </div>
           </div>
 
