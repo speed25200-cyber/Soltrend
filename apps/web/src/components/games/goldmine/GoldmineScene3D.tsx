@@ -7,6 +7,7 @@ import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
 import * as THREE from 'three';
 import type { TrainColor } from '@/lib/slots/gold-express';
 import { TRAIN_HEX } from './ExpressSymbols';
+import { SlotMachine, MachineCam, type Machine3DProps } from './SlotMachine3D';
 
 /**
  * The Gold Mine Express in 3D — the living mine around the reels. Wooden
@@ -15,8 +16,8 @@ import { TRAIN_HEX } from './ExpressSymbols';
  * coin eruption on every collect and big win; and the bonus train that
  * physically rides through the shaft while the carriages pay out.
  *
- * It is a *backdrop*: the reel machine stays a DOM overlay (crisp text,
- * perfect interaction) while everything atmospheric lives in WebGL behind it.
+ * When `machine` is set, the slot machine itself takes centre stage as a full
+ * 3D cabinet with cylindrical reels — the DOM layer keeps only the HUD.
  */
 
 export interface Scene3DProps {
@@ -29,6 +30,8 @@ export interface Scene3DProps {
   winStrength: number; // 0..1
   collectSignal: number;
   train: { active: boolean; color: TrainColor; step: number; count: number };
+  /** the 3D slot machine — set to put it centre stage */
+  machine?: (Machine3DProps & { active: boolean }) | null;
 }
 
 /* ------------------------------------------------------------------- set */
@@ -277,14 +280,17 @@ function BonusTrain({ color, step, count }: { color: TrainColor; step: number; c
 
 /* ------------------------------------------------------------------ scene */
 
-function Shaft({ cartLevel, dropSignal, winSignal, winStrength, collectSignal, train }: Scene3DProps) {
+function Shaft({ cartLevel, dropSignal, winSignal, winStrength, collectSignal, train, machine }: Scene3DProps) {
+  const machineActive = !!machine?.active;
   const cam = useRef({ t: 0 });
   useFrame((s, dt) => {
+    if (machineActive) return; // MachineCam owns the camera
     // slow cinematic sway
     cam.current.t += dt;
     const t = cam.current.t;
     s.camera.position.x = Math.sin(t * 0.11) * 0.7;
     s.camera.position.y = 2.7 + Math.sin(t * 0.07) * 0.25;
+    s.camera.position.z = THREE.MathUtils.damp(s.camera.position.z, 8.6, 2, dt);
     s.camera.lookAt(0, 1.7, 0);
   });
   return (
@@ -293,6 +299,8 @@ function Shaft({ cartLevel, dropSignal, winSignal, winStrength, collectSignal, t
       <fog attach="fog" args={['#0a0603', 6, 20]} />
       <ambientLight intensity={0.32} color="#ffd9a0" />
       <directionalLight position={[2, 6, 4]} intensity={0.4} color="#ffdcb0" />
+      {/* warm key on the machine face */}
+      {machineActive && <pointLight position={[0, 1.6, 4.5]} color="#ffe0b0" intensity={5.5} distance={12} />}
 
       {/* rock walls + floor */}
       <mesh position={[0, -0.05, 0]} rotation={[-Math.PI / 2, 0, 0]}>
@@ -312,6 +320,13 @@ function Shaft({ cartLevel, dropSignal, winSignal, winStrength, collectSignal, t
       <Lantern position={[0, 4.4, -3.4]} color="#ffd25f" />
 
       <Sparkles count={70} scale={[10, 5, 6]} size={3} speed={0.25} color="#fcd34d" position={[0, 2, 0]} opacity={0.6} />
+
+      {machineActive && (
+        <group position={[0, 2.05, 0]} scale={1.3}>
+          <SlotMachine {...machine!} />
+        </group>
+      )}
+      <MachineCam spinning={machine?.spinning ?? false} active={machineActive} />
 
       <MineCart level={cartLevel} dropSignal={dropSignal} />
       <CoinBurst signal={winSignal} strength={winStrength} />
