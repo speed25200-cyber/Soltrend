@@ -37,7 +37,7 @@ const ballX = (sr: number, r: number, rows: number) => ((2 * sr - r) / (2 * rows
 function PegField({ rows }: { rows: number }) {
   const geo = useMemo(() => new THREE.SphereGeometry(0.075, 10, 8), []);
   const mat = useMemo(
-    () => new THREE.MeshStandardMaterial({ color: '#cbd5e1', metalness: 0.9, roughness: 0.25 }),
+    () => new THREE.MeshStandardMaterial({ color: '#e2e8f0', emissive: '#64748b', emissiveIntensity: 0.35, metalness: 0.8, roughness: 0.3 }),
     [],
   );
   const pegs = useMemo(() => {
@@ -159,34 +159,35 @@ function Board({ rows, balls, onLand }: PlinkoScene3DProps) {
 
   return (
     <>
-      <color attach="background" args={['#070914']} />
-      <fog attach="fog" args={['#070914', 8, 22]} />
-      <ambientLight intensity={0.4} />
+      <color attach="background" args={['#0b0e22']} />
+      <fog attach="fog" args={['#0b0e22', 8, 22]} />
+      <ambientLight intensity={0.75} />
+      <directionalLight position={[2, 3, 6]} intensity={1.1} color="#dbe4ff" />
       <pointLight position={[0, TOP_Y + 2, 3]} color="#a855f7" intensity={9} distance={14} />
       <pointLight position={[-4, 0, 2]} color="#22d3ee" intensity={4} distance={12} />
 
       {/* board backplate */}
       <mesh position={[0, TOP_Y - rows * ROW_GAP_Y * 0.5 + 0.3, -0.35]}>
         <boxGeometry args={[width, height, 0.14]} />
-        <meshStandardMaterial color="#0d1128" metalness={0.6} roughness={0.5} />
+        <meshStandardMaterial color="#1a2044" emissive="#0d1230" emissiveIntensity={0.4} metalness={0.5} roughness={0.55} />
       </mesh>
       {/* rails */}
       {[-width / 2, width / 2].map((x, i) => (
         <mesh key={i} position={[x, TOP_Y - rows * ROW_GAP_Y * 0.5 + 0.3, -0.1]}>
           <boxGeometry args={[0.14, height, 0.34]} />
-          <meshStandardMaterial color="#8a5f22" metalness={0.85} roughness={0.3} />
+          <meshStandardMaterial color="#c9a35a" emissive="#6b4a17" emissiveIntensity={0.3} metalness={0.8} roughness={0.3} />
         </mesh>
       ))}
       {/* funnel */}
       <mesh position={[0, TOP_Y + 0.55, 0]}>
         <cylinderGeometry args={[0.42, 0.16, 0.5, 20, 1, true]} />
-        <meshStandardMaterial color="#8a5f22" metalness={0.85} roughness={0.3} side={THREE.DoubleSide} />
+        <meshStandardMaterial color="#c9a35a" emissive="#6b4a17" emissiveIntensity={0.3} metalness={0.8} roughness={0.3} side={THREE.DoubleSide} />
       </mesh>
       {/* bucket dividers */}
       {Array.from({ length: rows + 2 }).map((_, i) => (
         <mesh key={i} position={[(i - (rows + 1) / 2) * PEG_GAP_X * 1.05, TOP_Y - rows * ROW_GAP_Y - 0.15, -0.05]}>
           <boxGeometry args={[0.05, 0.7, 0.3]} />
-          <meshStandardMaterial color="#3a3f6a" metalness={0.7} roughness={0.4} />
+          <meshStandardMaterial color="#8a90c0" emissive="#3a3f6a" emissiveIntensity={0.4} metalness={0.6} roughness={0.4} />
         </mesh>
       ))}
 
