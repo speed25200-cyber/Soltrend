@@ -1,6 +1,6 @@
 'use client';
 
-import { Component, useMemo, useRef, type ReactNode } from 'react';
+import { Component, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Trail, Sparkles } from '@react-three/drei';
 import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
@@ -122,9 +122,8 @@ function LandingGlow({ rows, bucket }: { rows: number; bucket: number | null }) 
     const target = bucket !== null ? 0.5 + Math.sin(s.clock.elapsedTime * 6) * 0.3 : 0;
     m.opacity = THREE.MathUtils.damp(m.opacity, target, 8, dt);
   });
-  if (bucket === null) return <mesh ref={ref} visible={false} />;
   const buckets = rows + 1;
-  const x = (bucket - (buckets - 1) / 2) * PEG_GAP_X * ((rows * PEG_GAP_X) / (buckets * PEG_GAP_X)) * 1.05;
+  const x = bucket === null ? 0 : (bucket - (buckets - 1) / 2) * PEG_GAP_X * 1.05;
   return (
     <mesh ref={ref} position={[x, TOP_Y - rows * ROW_GAP_Y - 0.25, 0]}>
       <cylinderGeometry args={[0.3, 0.42, 1.4, 16, 1, true]} />
@@ -133,10 +132,31 @@ function LandingGlow({ rows, bucket }: { rows: number; bucket: number | null }) 
   );
 }
 
+function CamRig({ rows }: { rows: number }) {
+  const look = useMemo(() => new THREE.Vector3(0, TOP_Y - rows * ROW_GAP_Y * 0.5, 0), [rows]);
+  useFrame((s, dt) => {
+    const t = s.clock.elapsedTime;
+    s.camera.position.x = THREE.MathUtils.damp(s.camera.position.x, Math.sin(t * 0.25) * 0.35, 2, dt);
+    s.camera.position.y = THREE.MathUtils.damp(s.camera.position.y, look.y + 0.7, 2, dt);
+    s.camera.position.z = THREE.MathUtils.damp(s.camera.position.z, 4.4 + rows * 0.42, 2, dt);
+    s.camera.lookAt(look);
+  });
+  return null;
+}
+
 function Board({ rows, balls, onLand }: PlinkoScene3DProps) {
-  const [landed, setLanded] = useStateBucket();
+  const [landedBucket, setLandedBucket] = useState<number | null>(null);
+  const clearTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const width = (rows + 2) * PEG_GAP_X + 0.6;
   const height = rows * ROW_GAP_Y + 1.9;
+
+  const handleLand = (b: PlinkoBall) => {
+    setLandedBucket(b.bucket);
+    if (clearTimer.current) clearTimeout(clearTimer.current);
+    clearTimer.current = setTimeout(() => setLandedBucket(null), 900);
+    onLand(b);
+  };
+
   return (
     <>
       <color attach="background" args={['#070914']} />
@@ -173,9 +193,9 @@ function Board({ rows, balls, onLand }: PlinkoScene3DProps) {
       <PegField rows={rows} />
       <Sparkles count={24} scale={[width, height, 2]} size={2.5} speed={0.25} color="#a855f7" position={[0, 0.6, 1]} />
       {balls.map((b) => (
-        <Ball key={b.id} rows={rows} ball={b} onLand={(x) => { setLanded(x.bucket); onLand(x); }} />
+        <Ball key={b.id} rows={rows} ball={b} onLand={handleLand} />
       ))}
-      <LandingGlow rows={rows} bucket={landed} />
+      <LandingGlow rows={rows} bucket={landedBucket} />
 
       <CamRig rows={rows} />
       <EffectComposer>
@@ -184,31 +204,6 @@ function Board({ rows, balls, onLand }: PlinkoScene3DProps) {
       </EffectComposer>
     </>
   );
-}
-
-function CamRig({ rows }: { rows: number }) {
-  const look = useMemo(() => new THREE.Vector3(0, TOP_Y - rows * ROW_GAP_Y * 0.5, 0), [rows]);
-  useFrame((s, dt) => {
-    const t = s.clock.elapsedTime;
-    s.camera.position.x = THREE.MathUtils.damp(s.camera.position.x, Math.sin(t * 0.25) * 0.35, 2, dt);
-    s.camera.position.y = THREE.MathUtils.damp(s.camera.position.y, look.y + 0.7, 2, dt);
-    s.camera.position.z = THREE.MathUtils.damp(s.camera.position.z, 4.4 + rows * 0.42, 2, dt);
-    s.camera.lookAt(look);
-  });
-  return null;
-}
-
-/** Tiny landing-state holder shared by Board + LandingGlow. */
-function useStateBucket(): [number | null, (b: number) => void] {
-  const ref = useRef<number | null>(null);
-  const [, force] = useMemo(() => [0, () => {}], []);
-  const set = (b: number) => {
-    ref.current = b;
-    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-    force;
-  };
-  // re-render not strictly needed — LandingGlow reads via prop cycle; keep simple
-  return [ref.current, set];
 }
 
 class GLErrorBoundary extends Component<{ children: ReactNode; fallback: ReactNode }, { failed: boolean }> {

@@ -1,5 +1,6 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { GameLayout } from '@/components/GameLayout';
@@ -10,16 +11,15 @@ import { useCasino } from '@/lib/store';
 import { dropPlinko, plinkoPayouts, DEFAULT_EDGE, round2 } from '@/lib/games';
 import { fmtMult } from '@/lib/format';
 import type { GameConfig } from './types';
+import type { PlinkoBall } from './PlinkoScene3D';
+
+const Scene3D = dynamic(() => import('./PlinkoScene3D'), {
+  ssr: false,
+  loading: () => <div className="grid h-full min-h-[380px] place-items-center text-sm text-slate-500">Loading the board…</div>,
+});
 
 type Risk = 'low' | 'medium' | 'high';
 type RowCount = 8 | 12 | 16;
-
-interface Ball {
-  id: string;
-  xs: number[];
-  ys: number[];
-  bucket: number;
-}
 
 /** A bucket's payout, at the shortest length that still reads as a number and
  *  never rounds up. Full precision stays on the tooltip. */
@@ -30,6 +30,11 @@ function bucketLabel(m: number): string {
   return down(2);
 }
 
+/**
+ * Plinko — dealt on the full 3D board now: brass pins, a glowing ball that
+ * squashes at every pin, a column of light where it lands. Buckets stay DOM
+ * (crisp labels, exact values); the ball's lane maps 1:1 onto them.
+ */
 export function PlinkoGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params , maxBet, demo}: GameConfig) {
   const { guard, reserveSeeds, settle } = usePlay(maxBet, demo);
   const bumpUgc = useCasino((s) => s.bumpUgc);
@@ -37,7 +42,7 @@ export function PlinkoGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params
   const [bet, setBet] = useState(0.1);
   const [risk, setRisk] = useState<Risk>((params?.risk as Risk) ?? 'medium');
   const [rows, setRows] = useState<RowCount>((params?.rows as RowCount) ?? 12);
-  const [balls, setBalls] = useState<Ball[]>([]);
+  const [balls, setBalls] = useState<PlinkoBall[]>([]);
   const [flash, setFlash] = useState<number | null>(null);
 
   // Already edge-solved: what the buckets show is what the ball pays.
@@ -48,18 +53,8 @@ export function PlinkoGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params
     const seeds = reserveSeeds();
     const { path, bucket } = dropPlinko(rows, seeds);
     const mult = round2(payouts[bucket] ?? 1);
-    const xs: number[] = [];
-    const ys: number[] = [];
-    let sr = 0;
-    xs.push(50);
-    ys.push(0);
-    for (let r = 1; r <= rows; r++) {
-      sr += path[r - 1];
-      xs.push(50 + ((2 * sr - r) / (2 * rows)) * 84);
-      ys.push((r / rows) * 88);
-    }
-    const id = seeds.nonce + '-' + Math.round(xs[xs.length - 1]);
-    setBalls((b) => [...b, { id, xs, ys, bucket }]);
+    const id = seeds.nonce + '-' + bucket;
+    setBalls((b) => [...b, { id, path, bucket }]);
 
     settle({
       game: gameName ?? meta.name,
@@ -74,77 +69,26 @@ export function PlinkoGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params
     if (gameId) bumpUgc(gameId, bet);
   };
 
-  const onLand = (ball: Ball) => {
+  const onLand = (ball: PlinkoBall) => {
     setFlash(ball.bucket);
     setTimeout(() => setFlash((f) => (f === ball.bucket ? null : f)), 500);
     setTimeout(() => setBalls((b) => b.filter((x) => x.id !== ball.id)), 200);
   };
 
-  const pegRows = Array.from({ length: rows }, (_, r) => r + 3);
-
   return (
     <GameLayout
       meta={meta}
       stage={
-        <div className="flex h-full flex-col">
-          <div
-            className="relative flex-1 rounded-2xl border border-white/[0.07] p-2"
-            style={{
-              background: 'radial-gradient(120% 100% at 50% 0%, #171a35 0%, #0a0c1e 60%, #05060f 100%)',
-              boxShadow: 'inset 0 2px 0 rgba(255,255,255,0.06), inset 0 -14px 30px rgba(0,0,0,0.5)',
-            }}
-          >
-            {/* pegs — brass pins with a lit crown, staggered rows */}
-            <div className="absolute inset-0 flex flex-col justify-between p-2">
-              {pegRows.map((count, r) => (
-                <div key={r} className="flex justify-center gap-[3%]">
-                  {Array.from({ length: count }, (_, i) => (
-                    <span
-                      key={i}
-                      className="h-2 w-2 rounded-full md:h-2.5 md:w-2.5"
-                      style={{
-                        background: 'radial-gradient(circle at 35% 30%, #e2e8f0, #64748b 65%, #334155)',
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.8), 0 0 6px rgba(203,213,225,0.25)',
-                      }}
-                    />
-                  ))}
-                </div>
-              ))}
+        <div className="flex h-full flex-col gap-2">
+          <div className="relative min-h-[380px] flex-1 overflow-hidden rounded-2xl">
+            <div className="absolute inset-0">
+              <Scene3D rows={rows} balls={balls} onLand={onLand} />
             </div>
-            {/* balls — layered ghosts read as a motion trail */}
-            {balls.map((ball) => (
-              <div key={ball.id}>
-                {[0.12, 0.06].map((delay, gi) => (
-                  <motion.div
-                    key={gi}
-                    className="absolute h-3 w-3 rounded-full bg-neon-violet/25"
-                    style={{ left: '50%', top: 0, marginLeft: -6, filter: 'blur(1px)' }}
-                    initial={{ left: '50%', top: '0%' }}
-                    animate={{ left: ball.xs.map((x) => `${x}%`), top: ball.ys.map((y) => `${y}%`) }}
-                    transition={{ duration: rows * 0.085, ease: 'linear', times: ball.xs.map((_, i) => i / rows), delay }}
-                  />
-                ))}
-                <motion.div
-                  className="absolute h-3 w-3 rounded-full"
-                  style={{
-                    left: '50%',
-                    top: 0,
-                    marginLeft: -6,
-                    background: 'radial-gradient(circle at 35% 30%, #e9d5ff, #a855f7 60%, #7e22ce)',
-                    boxShadow: '0 0 14px rgba(168,85,247,0.9), inset 0 -2px 3px rgba(0,0,0,0.4)',
-                  }}
-                  initial={{ left: '50%', top: '0%' }}
-                  animate={{ left: ball.xs.map((x) => `${x}%`), top: ball.ys.map((y) => `${y}%`) }}
-                  transition={{ duration: rows * 0.085, ease: 'linear', times: ball.xs.map((_, i) => i / rows) }}
-                  onAnimationComplete={() => onLand(ball)}
-                />
-              </div>
-            ))}
           </div>
           {/* buckets — 17 of them have to fit a 390px phone, so the label is
               compacted rather than allowed to push the page sideways. It still
               rounds down, so it never promises more than the bucket pays. */}
-          <div className="mt-2 flex justify-center gap-0.5 sm:gap-1">
+          <div className="flex justify-center gap-0.5 sm:gap-1">
             {payouts.map((m: number, i: number) => {
               const hot = m >= 5;
               return (
