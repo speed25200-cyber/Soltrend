@@ -4,12 +4,12 @@ import { useId } from 'react';
 import { BELL, GOLDMINE, GTRAIN, SCATTER, TRAIN, WILD, type TrainColor } from '@/lib/slots/gold-express';
 
 /**
- * The Gold Mine Express symbol set — atelier-grade vector art. Every symbol
- * is built from layered gradients, rim lights and hand-placed highlights:
- * gilded serif ranks with a bevel and a shine pass, glass lanterns with a
- * live flame, faceted nuggets with sparkle stars, full-detailed locomotives
- * with boiler bands, spoked counterweighted wheels and a real connecting rod.
- * No flat emoji shapes anywhere.
+ * The Gold Mine Express symbol set — atelier-grade vector art that scales to
+ * any tile size. Every symbol is built from layered gradients, rim lights and
+ * hand-placed highlights: gilded serif ranks with a bevel and a shine pass,
+ * glass lanterns with a live flame, faceted nuggets with sparkle stars,
+ * full-detailed locomotives with spoked counterweighted wheels and a real
+ * connecting rod. No flat emoji shapes anywhere.
  */
 
 export const TRAIN_HEX: Record<TrainColor, { a: string; b: string; glow: string }> = {
@@ -162,12 +162,10 @@ function Loco({ hex, uid }: { hex: { a: string; b: string }; uid: string }) {
 
 export function CanyonSymbol({
   sym,
-  size = 52,
   cash,
   trainColor,
 }: {
   sym: number;
-  size?: number;
   cash?: number | null;
   trainColor?: TrainColor | null;
 }) {
@@ -423,7 +421,7 @@ export function CanyonSymbol({
   }
 
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100" aria-hidden>
+    <svg width="100%" height="100%" viewBox="0 0 100 100" aria-hidden>
       {body}
     </svg>
   );
