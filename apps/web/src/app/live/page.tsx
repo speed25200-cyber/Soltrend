@@ -10,6 +10,9 @@ import { BetAmount } from '@/components/BetControls';
 import { BetButton } from '@/components/games/BetButton';
 import { useCrashRoom, REALTIME_URL } from '@/hooks/useCrashRoom';
 import { usePlay } from '@/hooks/usePlay';
+import { usePlayMode } from '@/hooks/usePlayMode';
+import { PlayModeToggle } from '@/components/games/PlayModeToggle';
+import { DemoBar } from '@/components/games/DemoBar';
 import { useShipSkin } from '@/hooks/useShipSkin';
 import { ShipPicker } from '@/components/worlds/ShipPicker';
 import { firstFloat } from '@/lib/provably-fair';
@@ -47,7 +50,10 @@ export default function LivePage() {
 /* --------------------------------------------------------------- solo (offline) */
 
 function SoloCrash() {
-  const { guard, reserveSeeds, settle } = usePlay();
+  // Solo runs entirely in the browser, so it gets the same demo/real switch as
+  // every other game — the Live rooms below are multiplayer and stay real-only.
+  const { demo, pick, connected } = usePlayMode();
+  const { guard, reserveSeeds, settle } = usePlay(undefined, demo);
   const [ship, setShip] = useShipSkin();
   const [bet, setBet] = useState(0.1);
   const [mult, setMult] = useState(1);
@@ -107,6 +113,9 @@ function SoloCrash() {
   const color = busted ? '#ff3b6b' : status === 'cashed' ? '#10f5a0' : '#a855f7';
 
   return (
+    <div className="space-y-2">
+      <PlayModeToggle demo={demo} connected={connected} onPick={pick} />
+      {demo && <DemoBar compact theoreticalRtp={1 - EDGE} />}
     <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
       <div className="glass relative min-h-[380px] overflow-hidden p-2">
         <div className="relative h-[380px] overflow-hidden rounded-2xl sm:h-[460px]">
@@ -138,6 +147,7 @@ function SoloCrash() {
           <div className="mt-2"><ShipPicker value={ship} onChange={setShip} /></div>
         </div>
       </div>
+    </div>
     </div>
   );
 }

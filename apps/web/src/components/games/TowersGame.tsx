@@ -153,6 +153,8 @@ export function TowersGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params
                       </motion.button>
                     );
                   })}
+                  {/* mirrors the multiplier label so the tiles sit optically centred */}
+                  <span aria-hidden className="w-8" />
                 </div>
               );
             })}

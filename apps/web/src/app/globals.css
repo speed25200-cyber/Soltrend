@@ -183,6 +183,15 @@
       font-mono text-white outline-none transition
       focus:border-neon-violet/60 focus:shadow-glow-violet;
   }
+  /* A <select> keeps the OS chrome unless appearance is reset — skin it like
+     the inputs beside it, with our own chevron. */
+  select.input-num {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.9rem center;
+    padding-right: 2.4rem;
+  }
 
   .label-eyebrow {
     @apply text-[0.7rem] uppercase tracking-[0.18em] text-slate-500 font-semibold;
@@ -283,27 +292,6 @@
   100% {
     transform: translateX(100%);
   }
-}
-
-/* Wallet-adapter modal → match our theme */
-.wallet-adapter-button {
-  font-family: var(--font-display) !important;
-}
-.wallet-adapter-modal-wrapper {
-  background: #0d1024 !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  box-shadow: 0 0 80px -20px rgba(139, 92, 246, 0.5) !important;
-}
-.wallet-adapter-modal-title {
-  color: #fff !important;
-}
-.wallet-adapter-modal-list .wallet-adapter-button {
-  background: rgba(255, 255, 255, 0.03) !important;
-  border: 1px solid rgba(255, 255, 255, 0.06) !important;
-  border-radius: 12px !important;
-}
-.wallet-adapter-modal-list .wallet-adapter-button:hover {
-  background: rgba(139, 92, 246, 0.14) !important;
 }
 
 /* Reduced-motion respect */

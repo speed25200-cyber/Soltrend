@@ -23,9 +23,12 @@ export default function LobbyPage() {
           title="House games"
           sub="Instant, provably fair, built for micro-betting"
         />
+        {/* Nine games on a five-column grid leaves one empty slot — the flagship
+            slot takes a double-width card instead, which fills the row exactly
+            and gives the newest game the visual weight it deserves. */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {CATALOG.map((g, i) => (
-            <GameCard key={g.slug} meta={g} index={i} />
+            <GameCard key={g.slug} meta={g} index={i} wide={g.slug === 'goldmine'} />
           ))}
         </div>
       </section>

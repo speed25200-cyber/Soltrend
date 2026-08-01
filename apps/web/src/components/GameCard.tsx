@@ -6,7 +6,7 @@ import { motion } from 'framer-motion';
 import { GameMeta, ACCENT_HEX } from '@/lib/catalog';
 import { Icon } from './Icon';
 
-export function GameCard({ meta, index = 0 }: { meta: GameMeta; index?: number }) {
+export function GameCard({ meta, index = 0, wide = false }: { meta: GameMeta; index?: number; wide?: boolean }) {
   const hex = ACCENT_HEX[meta.accent];
   const card = useRef<HTMLDivElement>(null);
 
@@ -33,13 +33,14 @@ export function GameCard({ meta, index = 0 }: { meta: GameMeta; index?: number }
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.04, type: 'spring', stiffness: 260, damping: 24 }}
+      className={wide ? 'col-span-2' : undefined}
     >
-      <Link href={`/play/${meta.slug}`} className="group block">
+      <Link href={`/play/${meta.slug}`} className="group block h-full">
         <div
           ref={card}
           onPointerMove={onMove}
           onPointerLeave={onLeave}
-          className="glass glass-premium spot-card tilt glass-hover relative aspect-[4/5] overflow-hidden p-4"
+          className={`glass glass-premium spot-card tilt glass-hover relative overflow-hidden p-4 ${wide ? 'h-full min-h-[15rem]' : 'aspect-[4/5]'}`}
           style={{ ['--hex' as string]: hex }}
         >
           {/* ambient glow */}
@@ -59,7 +60,7 @@ export function GameCard({ meta, index = 0 }: { meta: GameMeta; index?: number }
                 className="transition-transform duration-500 group-hover:scale-110 group-hover:-rotate-6"
                 style={{ color: hex, filter: `drop-shadow(0 8px 24px ${hex}88)` }}
               >
-                <Icon name={meta.icon} size={56} strokeWidth={1.5} />
+                <Icon name={meta.icon} size={wide ? 72 : 56} strokeWidth={1.5} />
               </span>
             </div>
             <div>

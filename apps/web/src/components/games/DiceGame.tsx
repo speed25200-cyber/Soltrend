@@ -75,7 +75,12 @@ export function DiceGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params ,
             {rolling ? (
               <Scramble />
             ) : roll === null ? (
-              <div className="font-display text-6xl font-bold text-slate-700">00.00</div>
+              // Before the first roll there is no number — "00.00" reads like a
+              // broken result, so show an explicit resting state instead.
+              <div>
+                <div className="font-mono text-6xl font-bold tabular-nums text-slate-800">--.--</div>
+                <div className="mt-2 text-[0.65rem] uppercase tracking-[0.3em] text-slate-600">Set your target, then roll</div>
+              </div>
             ) : (
               <motion.div
                 key={roll + '' + (lastWin ? 'w' : 'l')}
