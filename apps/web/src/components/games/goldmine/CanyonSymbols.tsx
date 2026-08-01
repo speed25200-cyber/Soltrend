@@ -8,7 +8,8 @@ import { BELL, GOLDMINE, GTRAIN, SCATTER, TRAIN, WILD, type TrainColor } from '@
  * is built from layered gradients, rim lights and hand-placed highlights:
  * gilded serif ranks with a bevel and a shine pass, glass lanterns with a
  * live flame, faceted nuggets with sparkle stars, full-detailed locomotives
- * with boiler bands and spoked wheels. No flat emoji shapes anywhere.
+ * with boiler bands, spoked counterweighted wheels and a real connecting rod.
+ * No flat emoji shapes anywhere.
  */
 
 export const TRAIN_HEX: Record<TrainColor, { a: string; b: string; glow: string }> = {
@@ -113,9 +114,11 @@ function Loco({ hex, uid }: { hex: { a: string; b: string }; uid: string }) {
       <rect x="50" y="11" width="32" height="5" rx="2.5" fill={hex.b} />
       {/* frame + cowcatcher */}
       <rect x="12" y="56" width="66" height="7" rx="3" fill="#3f2a12" />
+      <rect x="12" y="56" width="66" height="2.5" rx="1.2" fill="#000" opacity="0.35" />
       <path d="M8 58 L24 58 L15 72 L5 72 Z" fill={hex.b} />
       <path d="M8 58 L24 58 L21 63 L6.5 63 Z" fill={hex.a} opacity="0.7" />
-      {/* spoked wheels + rods */}
+      <path d="M9.5 61 L19 61 M8 64.5 L17 64.5 M6.5 68 L15 68" stroke="#000" strokeWidth="1.2" opacity="0.3" />
+      {/* spoked wheels + counterweights + rods */}
       {[
         { cx: 30, r: 10 },
         { cx: 56, r: 10 },
@@ -134,10 +137,23 @@ function Loco({ hex, uid }: { hex: { a: string; b: string }; uid: string }) {
               strokeWidth="1.4"
             />
           ))}
+          {/* counterweight */}
+          <path
+            d={`M${w.cx} 70 m ${w.r * 0.55} 0 a ${w.r * 0.45} ${w.r * 0.45} 0 1 0 ${-w.r * 1.1} 0 a ${w.r * 0.45} ${w.r * 0.45} 0 1 0 ${w.r * 1.1} 0`}
+            fill="#44403c"
+            transform={`rotate(35 ${w.cx} 70)`}
+          />
           <circle cx={w.cx} cy="70" r={w.r * 0.38} fill="#a8a29e" />
+          <circle cx={w.cx - w.r * 0.15} cy="69.8" r={w.r * 0.12} fill="#e7e5e4" opacity="0.8" />
         </g>
       ))}
-      <rect x="30" y="67" width="40" height="3" rx="1.5" fill="#78716c" />
+      {/* the connecting rod, drive wheel to piston */}
+      <rect x="28" y="66.5" width="42" height="3" rx="1.5" fill="#a8a29e" />
+      <rect x="28" y="66.5" width="42" height="1.2" rx="0.6" fill="#e7e5e4" opacity="0.7" />
+      <circle cx="30" cy="68" r="2.4" fill="#78716c" />
+      <circle cx="56" cy="68" r="2.4" fill="#78716c" />
+      {/* piston rod into the frame */}
+      <rect x="66" y="67" width="10" height="2.4" rx="1.2" fill="#a8a29e" />
     </g>
   );
 }
