@@ -10,8 +10,8 @@ import { fmtSol, SOL_USD } from '@/lib/format';
  * The canyon chrome — the premium frame around the machine. A warm painted
  * desert sky with drifting clouds, layered mesas, a full-detail golden ore
  * train on a stone viaduct with faceted nuggets and counterweighted wheels,
- * the glossy jackpot ladder, the gilded logo, and the Balance/Bet/WIN bar
- * with the big round spin.
+ * the glossy jackpot ladder, the gilded logo (compact on phones), and the
+ * Balance/Bet/WIN bar with the big round spin.
  */
 
 /* ------------------------------------------------------------- backdrop */
@@ -286,7 +286,7 @@ export function CanyonLogo() {
   return (
     <div className="select-none text-right leading-none">
       <div
-        className="font-display text-xl font-black uppercase tracking-wide sm:text-2xl"
+        className="font-display text-base font-black uppercase tracking-wide sm:text-2xl"
         style={{
           color: '#ffd76a',
           textShadow: '0 1px 0 #fff3c4, 0 3px 0 #a85a10, 0 5px 0 #7c3a08, 0 8px 18px rgba(0,0,0,0.6)',
@@ -295,7 +295,7 @@ export function CanyonLogo() {
         Gold<span style={{ color: '#fff3c4' }}>Mine</span>
       </div>
       <div
-        className="font-display text-2xl font-black uppercase tracking-[0.12em] sm:text-3xl"
+        className="font-display text-lg font-black uppercase tracking-[0.12em] sm:text-3xl"
         style={{
           color: '#ff9d3c',
           textShadow: '0 1px 0 #ffe9a8, 0 3px 0 #b34a0e, 0 5px 0 #7c2808, 0 8px 20px rgba(0,0,0,0.6)',
