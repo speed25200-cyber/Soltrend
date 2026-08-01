@@ -9,8 +9,9 @@ import { fmtSol, SOL_USD } from '@/lib/format';
 /**
  * The canyon chrome — the premium frame around the machine. A warm painted
  * desert sky with drifting clouds, layered mesas, a full-detail golden ore
- * train with faceted nuggets and turning wheels, the glossy jackpot ladder,
- * the gilded logo, and the Balance/Bet/WIN bar with the big round spin.
+ * train on a stone viaduct with faceted nuggets and counterweighted wheels,
+ * the glossy jackpot ladder, the gilded logo, and the Balance/Bet/WIN bar
+ * with the big round spin.
  */
 
 /* ------------------------------------------------------------- backdrop */
@@ -114,6 +115,11 @@ function OreCart({ uid }: { uid: string }) {
           {Array.from({ length: 6 }).map((_, k) => (
             <line key={k} x1={cx} y1="72" x2={cx + 9 * Math.cos((k * Math.PI) / 3)} y2={72 + 9 * Math.sin((k * Math.PI) / 3)} stroke="#78716c" strokeWidth="1.2" />
           ))}
+          <path
+            d={`M${cx} 72 m 5 0 a 4 4 0 1 0 -10 0 a 4 4 0 1 0 10 0`}
+            fill="#44403c"
+            transform={`rotate(35 ${cx} 72)`}
+          />
           <circle cx={cx} cy="72" r="3.5" fill="#a8a29e" />
         </g>
       ))}
@@ -162,16 +168,28 @@ function GoldenLoco({ uid }: { uid: string }) {
       <path d="M8 76 L30 76 L26 82 L6.5 82 Z" fill="#f3b93f" opacity="0.7" />
       {/* frame, wheels, rods */}
       <rect x="22" y="74" width="134" height="10" rx="4" fill="#3f2a12" />
+      <rect x="22" y="74" width="134" height="3" rx="1.5" fill="#000" opacity="0.35" />
       {[{ cx: 52, r: 13 }, { cx: 86, r: 13 }, { cx: 122, r: 10 }].map((w, i) => (
         <g key={i}>
           <circle cx={w.cx} cy="92" r={w.r} fill="#292524" />
           {Array.from({ length: 8 }).map((_, k) => (
             <line key={k} x1={w.cx} y1="92" x2={w.cx + w.r * Math.cos((k * Math.PI) / 4)} y2={92 + w.r * Math.sin((k * Math.PI) / 4)} stroke="#78716c" strokeWidth="1.4" />
           ))}
+          {/* counterweight */}
+          <path
+            d={`M${w.cx} 92 m ${w.r * 0.55} 0 a ${w.r * 0.45} ${w.r * 0.45} 0 1 0 ${-w.r * 1.1} 0 a ${w.r * 0.45} ${w.r * 0.45} 0 1 0 ${w.r * 1.1} 0`}
+            fill="#44403c"
+            transform={`rotate(35 ${w.cx} 92)`}
+          />
           <circle cx={w.cx} cy="92" r={w.r * 0.4} fill="#a8a29e" />
+          <circle cx={w.cx - w.r * 0.15} cy="91.7" r={w.r * 0.13} fill="#e7e5e4" opacity="0.8" />
         </g>
       ))}
-      <rect x="52" y="88" width="70" height="4" rx="2" fill="#78716c" />
+      {/* connecting rod */}
+      <rect x="50" y="87.5" width="74" height="4" rx="2" fill="#a8a29e" />
+      <rect x="50" y="87.5" width="74" height="1.5" rx="0.75" fill="#e7e5e4" opacity="0.7" />
+      <circle cx="52" cy="89.5" r="2.6" fill="#78716c" />
+      <circle cx="86" cy="89.5" r="2.6" fill="#78716c" />
     </svg>
   );
 }
@@ -179,13 +197,31 @@ function GoldenLoco({ uid }: { uid: string }) {
 export function OreTrain({ running }: { running?: boolean }) {
   return (
     <div className="relative h-[52px] w-full sm:h-[64px]">
-      {/* bridge beam + ties */}
-      <div className="absolute inset-x-0 bottom-[14px] h-[10px] rounded-sm" style={{ background: 'linear-gradient(180deg,#5b3a1c,#33200e)' }} />
-      <div className="absolute inset-x-0 bottom-[24px] h-[3px]" style={{ background: 'rgba(255,220,150,0.35)' }} />
+      {/* the stone viaduct — arch openings, string course, parapet */}
+      <div className="absolute inset-x-0 bottom-[24px] h-[3px]" style={{ background: 'rgba(255,220,150,0.4)' }} />
       <div
-        className="absolute inset-x-0 bottom-[14px] h-[10px]"
-        style={{ backgroundImage: 'repeating-linear-gradient(90deg,rgba(0,0,0,0.35) 0 3px,transparent 3px 22px)' }}
+        className="absolute inset-x-0 bottom-[14px] h-[10px] rounded-sm"
+        style={{
+          background: 'linear-gradient(180deg,#7a5230,#4a2f14)',
+          boxShadow: 'inset 0 2px 0 rgba(255,220,150,0.3), inset 0 -2px 3px rgba(0,0,0,0.5)',
+        }}
       />
+      <svg className="absolute inset-x-0 bottom-0 h-[15px] w-full" viewBox="0 0 1200 30" preserveAspectRatio="none" aria-hidden>
+        <defs>
+          <linearGradient id="stone" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="#8a5f3a" />
+            <stop offset="1" stopColor="#5b3a1c" />
+          </linearGradient>
+        </defs>
+        <rect x="0" y="0" width="1200" height="30" fill="url(#stone)" />
+        {Array.from({ length: 9 }).map((_, i) => (
+          <path key={i} d={`M${40 + i * 130} 30 L${40 + i * 130} 22 Q${70 + i * 130} 4 ${100 + i * 130} 22 L${100 + i * 130} 30 Z`} fill="#241207" />
+        ))}
+        <path d="M0 4 L1200 4" stroke="#a5764a" strokeWidth="1.5" opacity="0.6" />
+        {Array.from({ length: 10 }).map((_, i) => (
+          <rect key={i} x={i * 130 + 100} y="0" width="14" height="30" fill="#6e4626" opacity="0.5" />
+        ))}
+      </svg>
       <motion.div
         className="absolute bottom-[22px] flex items-end"
         animate={running ? { x: ['-30%', '110%'] } : { x: '22%' }}
