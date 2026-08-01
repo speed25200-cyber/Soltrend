@@ -237,17 +237,19 @@ export function GoldmineGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, para
             {/* the ore train above the reels */}
             <OreTrain running={phase === 'train' || phase === 'free'} />
 
-            {/* the machine */}
+            {/* the machine — fluid: five columns share the width on any screen */}
             <div className="flex flex-1 items-center justify-center">
-              <CanyonReels
-                spin={view}
-                plan={plan}
-                spinning={reelsMoving}
-                spinKey={spinKey}
-                free={phase === 'free'}
-                showWins={showWins && phase !== 'train'}
-                collected={collecting}
-              />
+              <div className="w-full max-w-[540px]">
+                <CanyonReels
+                  spin={view}
+                  plan={plan}
+                  spinning={reelsMoving}
+                  spinKey={spinKey}
+                  free={phase === 'free'}
+                  showWins={showWins && phase !== 'train'}
+                  collected={collecting}
+                />
+              </div>
             </div>
 
             {/* the mine cart gauge, kept slim and golden */}
