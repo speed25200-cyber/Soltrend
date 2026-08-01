@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { CanyonSymbol } from './CanyonSymbols';
+import { useProcTextures } from './useTextures';
 import {
   REELS, ROWS, REEL_WEIGHTS, GOLDMINE, TRAIN, BELL, GTRAIN, PAYLINES,
   type GXSpin, type LineWin, type TrainColor,
@@ -11,10 +12,10 @@ import { reelPlan } from './ExpressReels';
 
 /**
  * The reel window of the canyon machine — a cabinet-maker's object: honeyed
- * wood with visible grain, brass corners and rivets, five recessed channels
- * the reels travel in, parchment tiles with real drop shadows, and a glass
- * pane that catches the sun. The travelling-band deal is identical to the
- * DOM machine (same reelPlan); everything here is realism.
+ * wood with real grain (procedural texture), brass corners and rivets, five
+ * recessed channels the reels travel in, parchment tiles with real drop
+ * shadows, and a glass pane that catches the sun. Fully fluid: five columns
+ * that share the width on any screen, from a phone to a desktop.
  */
 
 const SYMBOLS_PER_SEC = 26;
@@ -62,9 +63,10 @@ interface ReelProps {
   lit: Set<string>;
   showWins: boolean;
   collected: boolean;
+  parchment: string | null;
 }
 
-function Reel({ index, spin, stopAt, antic, spinKey, spinning, free, lit, showWins, collected }: ReelProps) {
+function Reel({ index, spin, stopAt, antic, spinKey, spinning, free, lit, showWins, collected, parchment }: ReelProps) {
   const weights = (free ? REEL_WEIGHTS.free : REEL_WEIGHTS.base)[index];
   const band = useMemo(
     () => buildBand(weights, Math.max(12, Math.round((stopAt / 1000) * SYMBOLS_PER_SEC)), spinKey * 31 + index),
@@ -80,7 +82,7 @@ function Reel({ index, spin, stopAt, antic, spinKey, spinning, free, lit, showWi
 
   return (
     <div
-      className="relative h-[196px] w-[56px] overflow-hidden rounded-md sm:h-[236px] sm:w-[68px] lg:h-[264px] lg:w-[76px]"
+      className="relative h-full min-w-0 flex-1 overflow-hidden rounded-md"
       style={{
         // the recessed channel the reel travels in — dark groove, lit edges
         background: 'linear-gradient(180deg,#170d04 0%,#241307 50%,#170d04 100%)',
@@ -113,6 +115,7 @@ function Reel({ index, spin, stopAt, antic, spinKey, spinning, free, lit, showWi
               dim={showWins && lit.size > 0 && isFinal && !lit.has(key)}
               hit={showWins && isFinal && lit.has(key)}
               collected={collected && isFinal && sym === GOLDMINE}
+              parchment={parchment}
             />
           );
         })}
@@ -135,7 +138,7 @@ function Reel({ index, spin, stopAt, antic, spinKey, spinning, free, lit, showWi
 }
 
 function Cell({
-  sym, cash, trainColor, blurring, blurDur, dim, hit, collected,
+  sym, cash, trainColor, blurring, blurDur, dim, hit, collected, parchment,
 }: {
   sym: number;
   cash: number | null;
@@ -145,9 +148,10 @@ function Cell({
   dim: boolean;
   hit: boolean;
   collected: boolean;
+  parchment: string | null;
 }) {
   return (
-    <div className="relative grid h-[49px] w-[56px] place-items-center sm:h-[59px] sm:w-[68px] lg:h-[66px] lg:w-[76px]">
+    <div className="relative grid h-1/4 w-full place-items-center">
       <motion.div
         animate={
           blurring
@@ -163,7 +167,8 @@ function Cell({
         }
         className="relative grid h-[88%] w-[88%] place-items-center rounded-lg will-change-transform"
         style={{
-          background: 'linear-gradient(160deg,#faf0d8 0%,#f0dcae 50%,#dfbd85 100%)',
+          backgroundImage: `${parchment ? `url(${parchment}), ` : ''}linear-gradient(160deg,#faf0d8 0%,#f0dcae 50%,#dfbd85 100%)`,
+          backgroundSize: parchment ? 'cover, cover' : 'cover',
           boxShadow:
             'inset 0 2px 0 rgba(255,255,255,0.8), inset 0 -3px 6px rgba(122,72,20,0.4), 0 3px 7px rgba(30,16,4,0.55), 0 1px 1px rgba(30,16,4,0.4)',
           border: '1.5px solid #b48a3c',
@@ -174,8 +179,8 @@ function Cell({
           className="pointer-events-none absolute inset-0 rounded-lg"
           style={{ boxShadow: 'inset 0 0 10px rgba(122,72,20,0.28)' }}
         />
-        <span style={{ filter: 'drop-shadow(0 2.5px 2.5px rgba(30,16,4,0.45))' }}>
-          <CanyonSymbol sym={sym} size={44} cash={cash} trainColor={trainColor} />
+        <span className="grid h-[82%] w-[82%] place-items-center" style={{ filter: 'drop-shadow(0 2.5px 2.5px rgba(30,16,4,0.45))' }}>
+          <CanyonSymbol sym={sym} cash={cash} trainColor={trainColor} />
         </span>
       </motion.div>
 
@@ -201,7 +206,7 @@ function Cell({
 
 /* ------------------------------------------------------------ the cabinet */
 
-function BrassCorner({ pos }: { pos: string }) {
+function BrassCorner({ pos, brass }: { pos: string; brass: string | null }) {
   return (
     <svg className={`pointer-events-none absolute ${pos} z-10`} width="30" height="30" viewBox="0 0 30 30" aria-hidden>
       <defs>
@@ -248,23 +253,24 @@ export interface CanyonReelsProps {
 export function CanyonReels({ spin, plan, spinning, spinKey, free, showWins, collected }: CanyonReelsProps) {
   const lit = useMemo(() => (showWins ? litCells(spin, spin?.lineWins ?? []) : new Set<string>()), [spin, showWins]);
   const anticipating = spinning && plan.antic.some(Boolean);
+  const { wood, parchment, brass } = useProcTextures();
 
   return (
     <div
-      className="relative overflow-hidden rounded-2xl p-[3px]"
+      className="relative w-full overflow-hidden rounded-2xl p-[3px]"
       style={{
-        // honeyed wood with visible grain + a soft outer shadow
-        background:
-          'repeating-linear-gradient(94deg, rgba(0,0,0,0.10) 0 2px, transparent 2px 9px), repeating-linear-gradient(87deg, rgba(255,235,190,0.05) 0 1px, transparent 1px 13px), linear-gradient(180deg,#8a5f2c 0%,#6b4a22 45%,#4a2f14 80%,#33200e 100%)',
+        // honeyed wood — real procedural grain over the base gradient
+        backgroundImage: `${wood ? `url(${wood}), ` : ''}linear-gradient(180deg,#8a5f2c 0%,#6b4a22 45%,#4a2f14 80%,#33200e 100%)`,
+        backgroundSize: wood ? 'cover, cover' : 'cover',
         boxShadow:
           'inset 0 2px 0 rgba(255,220,150,0.4), inset 0 -4px 10px rgba(0,0,0,0.55), inset 3px 0 8px rgba(0,0,0,0.25), 0 22px 44px -14px rgba(20,10,2,0.85)',
         border: '2px solid #6e4c1c',
       }}
     >
-      <BrassCorner pos="left-1 top-1" />
-      <BrassCorner pos="right-1 top-1 -scale-x-100" />
-      <BrassCorner pos="left-1 bottom-1 -scale-y-100" />
-      <BrassCorner pos="right-1 bottom-1 -scale-x-100 -scale-y-100" />
+      <BrassCorner pos="left-1 top-1" brass={brass} />
+      <BrassCorner pos="right-1 top-1 -scale-x-100" brass={brass} />
+      <BrassCorner pos="left-1 bottom-1 -scale-y-100" brass={brass} />
+      <BrassCorner pos="right-1 bottom-1 -scale-x-100 -scale-y-100" brass={brass} />
       <RivetRow className="inset-x-0 top-1.5" />
       <RivetRow className="inset-x-0 bottom-1.5" />
 
@@ -272,7 +278,11 @@ export function CanyonReels({ spin, plan, spinning, spinKey, free, showWins, col
         animate={anticipating ? { x: [0, -1.5, 1.5, -1, 0] } : { x: 0 }}
         transition={anticipating ? { duration: 0.28, repeat: Infinity } : { duration: 0.2 }}
         className="flex gap-[3px] rounded-xl p-1.5"
-        style={{ background: 'linear-gradient(180deg,rgba(40,24,8,0.85),rgba(26,15,5,0.9))', boxShadow: 'inset 0 3px 12px rgba(0,0,0,0.8)' }}
+        style={{
+          background: 'linear-gradient(180deg,rgba(40,24,8,0.85),rgba(26,15,5,0.9))',
+          boxShadow: 'inset 0 3px 12px rgba(0,0,0,0.8)',
+          height: 'clamp(190px, 46vw, 268px)',
+        }}
       >
         {Array.from({ length: REELS }).map((_, r) => (
           <Reel
@@ -287,6 +297,7 @@ export function CanyonReels({ spin, plan, spinning, spinKey, free, showWins, col
             lit={lit}
             showWins={showWins}
             collected={collected}
+            parchment={parchment}
           />
         ))}
       </motion.div>
