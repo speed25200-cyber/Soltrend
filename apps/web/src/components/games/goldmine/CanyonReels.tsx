@@ -10,12 +10,13 @@ import {
 import { reelPlan } from './ExpressReels';
 
 /**
- * The reel window of the canyon machine — parchment tiles in a gilded wooden
- * frame, like the reference game's bright reels. The travelling-band deal is
- * identical to the DOM machine (same reelPlan), only the wardrobe changed.
+ * The reel window of the canyon machine — a cabinet-maker's object: honeyed
+ * wood with visible grain, brass corners and rivets, five recessed channels
+ * the reels travel in, parchment tiles with real drop shadows, and a glass
+ * pane that catches the sun. The travelling-band deal is identical to the
+ * DOM machine (same reelPlan); everything here is realism.
  */
 
-const SETTLE_MS = 170;
 const SYMBOLS_PER_SEC = 26;
 
 /** Cells lit by a line win. */
@@ -78,7 +79,16 @@ function Reel({ index, spin, stopAt, antic, spinKey, spinning, free, lit, showWi
   const dur = stopAt / 1000;
 
   return (
-    <div className="relative h-[196px] w-[56px] overflow-hidden sm:h-[236px] sm:w-[68px] lg:h-[264px] lg:w-[76px]">
+    <div
+      className="relative h-[196px] w-[56px] overflow-hidden rounded-md sm:h-[236px] sm:w-[68px] lg:h-[264px] lg:w-[76px]"
+      style={{
+        // the recessed channel the reel travels in — dark groove, lit edges
+        background: 'linear-gradient(180deg,#170d04 0%,#241307 50%,#170d04 100%)',
+        boxShadow:
+          'inset 0 6px 14px rgba(0,0,0,0.85), inset 0 -6px 14px rgba(0,0,0,0.85), inset 3px 0 6px rgba(0,0,0,0.5), inset -3px 0 6px rgba(0,0,0,0.5)',
+        border: '1px solid rgba(255,220,150,0.14)',
+      }}
+    >
       <motion.div
         key={`${spinKey}-${index}`}
         initial={spinning ? { y: `-${travel}%` } : { y: '0%' }}
@@ -141,7 +151,7 @@ function Cell({
       <motion.div
         animate={
           blurring
-            ? { filter: ['blur(4.5px)', 'blur(3.2px)', 'blur(0px)'], scaleY: [1.16, 1.1, 1] }
+            ? { filter: ['blur(5px)', 'blur(3.2px)', 'blur(0px)'], scaleY: [1.18, 1.1, 1] }
             : { filter: 'blur(0px)', scaleY: 1, opacity: dim ? 0.3 : 1, scale: hit ? [1, 1.14, 1] : 1 }
         }
         transition={
@@ -153,12 +163,20 @@ function Cell({
         }
         className="relative grid h-[88%] w-[88%] place-items-center rounded-lg will-change-transform"
         style={{
-          background: 'linear-gradient(160deg,#f7e8c9 0%,#ecd3a3 55%,#d9b47e 100%)',
-          boxShadow: 'inset 0 1.5px 0 rgba(255,255,255,0.65), inset 0 -2px 5px rgba(122,72,20,0.35), 0 2px 5px rgba(60,35,8,0.45)',
+          background: 'linear-gradient(160deg,#faf0d8 0%,#f0dcae 50%,#dfbd85 100%)',
+          boxShadow:
+            'inset 0 2px 0 rgba(255,255,255,0.8), inset 0 -3px 6px rgba(122,72,20,0.4), 0 3px 7px rgba(30,16,4,0.55), 0 1px 1px rgba(30,16,4,0.4)',
           border: '1.5px solid #b48a3c',
         }}
       >
-        <CanyonSymbol sym={sym} size={44} cash={cash} trainColor={trainColor} />
+        {/* ambient occlusion at the tile's edges */}
+        <span
+          className="pointer-events-none absolute inset-0 rounded-lg"
+          style={{ boxShadow: 'inset 0 0 10px rgba(122,72,20,0.28)' }}
+        />
+        <span style={{ filter: 'drop-shadow(0 2.5px 2.5px rgba(30,16,4,0.45))' }}>
+          <CanyonSymbol sym={sym} size={44} cash={cash} trainColor={trainColor} />
+        </span>
       </motion.div>
 
       {hit && (
@@ -181,7 +199,41 @@ function Cell({
   );
 }
 
-/* -------------------------------------------------------------- the window */
+/* ------------------------------------------------------------ the cabinet */
+
+function BrassCorner({ pos }: { pos: string }) {
+  return (
+    <svg className={`pointer-events-none absolute ${pos} z-10`} width="30" height="30" viewBox="0 0 30 30" aria-hidden>
+      <defs>
+        <linearGradient id="bc" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#f3d98b" />
+          <stop offset="0.5" stopColor="#c9a35a" />
+          <stop offset="1" stopColor="#8a6528" />
+        </linearGradient>
+      </defs>
+      <path d="M2 28 L2 8 Q2 2 8 2 L28 2 L28 6 L8 6 Q6 6 6 8 L6 28 Z" fill="url(#bc)" />
+      <circle cx="9" cy="9" r="2.6" fill="#5b3a10" />
+      <circle cx="8.4" cy="8.4" r="1" fill="#ffe9a8" />
+    </svg>
+  );
+}
+
+function RivetRow({ className, count = 9 }: { className: string; count?: number }) {
+  return (
+    <div className={`pointer-events-none absolute flex justify-between px-2 ${className} z-10`}>
+      {Array.from({ length: count }).map((_, i) => (
+        <span
+          key={i}
+          className="h-1.5 w-1.5 rounded-full"
+          style={{
+            background: 'radial-gradient(circle at 35% 30%, #ffe9a8, #8a6528 70%)',
+            boxShadow: '0 1px 1px rgba(0,0,0,0.6), inset 0 -1px 1px rgba(0,0,0,0.5)',
+          }}
+        />
+      ))}
+    </div>
+  );
+}
 
 export interface CanyonReelsProps {
   spin: GXSpin | null;
@@ -199,44 +251,53 @@ export function CanyonReels({ spin, plan, spinning, spinKey, free, showWins, col
 
   return (
     <div
-      className="relative overflow-hidden rounded-2xl"
+      className="relative overflow-hidden rounded-2xl p-[3px]"
       style={{
-        background: 'linear-gradient(180deg,#6b4a22 0%,#4a2f14 50%,#33200e 100%)',
-        boxShadow: 'inset 0 2px 0 rgba(255,220,150,0.35), inset 0 -3px 8px rgba(0,0,0,0.5), 0 18px 40px -14px rgba(0,0,0,0.7)',
-        border: '2px solid #8a6528',
+        // honeyed wood with visible grain + a soft outer shadow
+        background:
+          'repeating-linear-gradient(94deg, rgba(0,0,0,0.10) 0 2px, transparent 2px 9px), repeating-linear-gradient(87deg, rgba(255,235,190,0.05) 0 1px, transparent 1px 13px), linear-gradient(180deg,#8a5f2c 0%,#6b4a22 45%,#4a2f14 80%,#33200e 100%)',
+        boxShadow:
+          'inset 0 2px 0 rgba(255,220,150,0.4), inset 0 -4px 10px rgba(0,0,0,0.55), inset 3px 0 8px rgba(0,0,0,0.25), 0 22px 44px -14px rgba(20,10,2,0.85)',
+        border: '2px solid #6e4c1c',
       }}
     >
+      <BrassCorner pos="left-1 top-1" />
+      <BrassCorner pos="right-1 top-1 -scale-x-100" />
+      <BrassCorner pos="left-1 bottom-1 -scale-y-100" />
+      <BrassCorner pos="right-1 bottom-1 -scale-x-100 -scale-y-100" />
+      <RivetRow className="inset-x-0 top-1.5" />
+      <RivetRow className="inset-x-0 bottom-1.5" />
+
       <motion.div
         animate={anticipating ? { x: [0, -1.5, 1.5, -1, 0] } : { x: 0 }}
         transition={anticipating ? { duration: 0.28, repeat: Infinity } : { duration: 0.2 }}
-        className="flex gap-[3px] p-2"
-        style={{ background: 'linear-gradient(180deg,rgba(46,29,10,0.7),rgba(30,18,6,0.85))' }}
+        className="flex gap-[3px] rounded-xl p-1.5"
+        style={{ background: 'linear-gradient(180deg,rgba(40,24,8,0.85),rgba(26,15,5,0.9))', boxShadow: 'inset 0 3px 12px rgba(0,0,0,0.8)' }}
       >
         {Array.from({ length: REELS }).map((_, r) => (
-          <div key={r} className="relative rounded-lg" style={{ background: 'linear-gradient(180deg,#2e1d0c,#1c1006)' }}>
-            <Reel
-              index={r}
-              spin={spin}
-              stopAt={plan.stops[r]}
-              antic={plan.antic[r]}
-              spinKey={spinKey}
-              spinning={spinning}
-              free={free}
-              lit={lit}
-              showWins={showWins}
-              collected={collected}
-            />
-          </div>
+          <Reel
+            key={r}
+            index={r}
+            spin={spin}
+            stopAt={plan.stops[r]}
+            antic={plan.antic[r]}
+            spinKey={spinKey}
+            spinning={spinning}
+            free={free}
+            lit={lit}
+            showWins={showWins}
+            collected={collected}
+          />
         ))}
       </motion.div>
 
-      {/* glass: soft top shadow + diagonal sheen */}
+      {/* the glass pane: edge shadows + two angled reflections */}
       <div
         className="pointer-events-none absolute inset-0 rounded-2xl"
         style={{
           background:
-            'linear-gradient(180deg,rgba(30,18,6,0.45),rgba(0,0,0,0) 14%,rgba(0,0,0,0) 86%,rgba(30,18,6,0.5)),' +
-            'linear-gradient(112deg,rgba(255,255,255,0.10) 0%,rgba(255,255,255,0) 34%,rgba(255,255,255,0) 66%,rgba(255,255,255,0.05) 100%)',
+            'linear-gradient(180deg,rgba(20,10,2,0.5),rgba(0,0,0,0) 12%,rgba(0,0,0,0) 88%,rgba(20,10,2,0.55)),' +
+            'linear-gradient(112deg,rgba(255,255,255,0.13) 0%,rgba(255,255,255,0) 30%,rgba(255,255,255,0) 62%,rgba(255,255,255,0.06) 100%)',
         }}
       />
       {showWins && lit.size > 0 && (
