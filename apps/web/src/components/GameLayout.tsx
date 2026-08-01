@@ -45,7 +45,7 @@ export function GameLayout({
 
       <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
         {/* Controls come first in DOM on mobile for thumb reach, but visually second on desktop */}
-        <div className="order-2 lg:order-1">
+        <div className="order-2 min-w-0 lg:order-1">
           <div
             className="glass relative min-h-[380px] overflow-hidden p-5"
             style={{ boxShadow: `inset 0 1px 0 0 rgba(255,255,255,0.05), 0 0 60px -30px ${hex}` }}
@@ -57,7 +57,7 @@ export function GameLayout({
           </div>
           {footer}
         </div>
-        <div className="order-1 lg:order-2">
+        <div className="order-1 min-w-0 lg:order-2">
           <div className="glass p-5">{controls}</div>
         </div>
       </div>
