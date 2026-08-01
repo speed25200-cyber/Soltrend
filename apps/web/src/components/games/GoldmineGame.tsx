@@ -12,9 +12,17 @@ import { floatStream } from '@/lib/provably-fair';
 import { Icon } from '@/components/Icon';
 import { sfx } from '@/lib/sound';
 import { burstWin } from '@/lib/fx';
+import dynamic from 'next/dynamic';
 import { reelPlan } from './goldmine/ExpressReels';
-import { CanyonReels } from './goldmine/CanyonReels';
-import { CanyonBackdrop, OreTrain, JackpotLadder, CanyonLogo, BottomBar } from './goldmine/CanyonChrome';
+import { JackpotLadder, BottomBar } from './goldmine/CanyonChrome';
+
+// The whole game stage is one WebGL canvas — canyon, viaduct, cabinet, drums.
+const Goldmine3DStage = dynamic(() => import('./goldmine/Goldmine3D'), {
+  ssr: false,
+  loading: () => (
+    <div className="grid h-full place-items-center text-sm text-amber-200/70">Stoking the boiler…</div>
+  ),
+});
 import { ExpressSymbol, TRAIN_HEX } from './goldmine/ExpressSymbols';
 import {
   CART_CAPACITY, JACKPOTS, MAX_WIN, SYMBOLS,
@@ -225,35 +233,40 @@ export function GoldmineGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, para
       meta={meta}
       stage={
         <div className="relative h-full min-h-[660px] overflow-hidden rounded-2xl sm:min-h-[720px]">
-          <CanyonBackdrop />
+          {/* the living mine — GPU-rendered, the DOM above it is HUD only */}
+          <div className="absolute inset-0">
+            <Goldmine3DStage
+              spin={view}
+              plan={plan}
+              spinning={reelsMoving}
+              spinKey={spinKey}
+              free={phase === 'free'}
+              showWins={showWins && phase !== 'train'}
+              collected={collecting}
+              train={{
+                active: phase === 'train',
+                color: bonus?.color ?? 'red',
+                step: trainStep,
+                count: bonus?.carriages.length ?? 0,
+              }}
+              cartLevel={Math.min(1, cart / CART_CAPACITY)}
+              winStrength={Math.min(1, (lastWin ?? 0) > 0 ? Math.log10(1 + (round?.total ?? 0)) / 2 : 0)}
+            />
+          </div>
 
-          <div className="relative z-10 flex h-full flex-col gap-1.5 p-3 pb-3">
-            {/* jackpot ladder (left) + logo (right) */}
+          {/* absolute, not h-full: the stage box only has a min-height, so a
+              percentage height collapses and the HUD would pile up at the top */}
+          <div className="pointer-events-none absolute inset-0 z-10 flex flex-col gap-1.5 p-3 pb-3">
+            {/* jackpot ladder (left) — the marquee on the 3D cabinet is the logo */}
             <div className="flex items-start justify-between">
               <JackpotLadder payScale={cfg.payScale} />
-              <CanyonLogo />
             </div>
 
-            {/* the ore train above the reels */}
-            <OreTrain running={phase === 'train' || phase === 'free'} />
-
-            {/* the machine — fluid: five columns share the width on any screen */}
-            <div className="flex flex-1 items-center justify-center">
-              <div className="w-full max-w-[540px]">
-                <CanyonReels
-                  spin={view}
-                  plan={plan}
-                  spinning={reelsMoving}
-                  spinKey={spinKey}
-                  free={phase === 'free'}
-                  showWins={showWins && phase !== 'train'}
-                  collected={collecting}
-                />
-              </div>
-            </div>
+            {/* the drums live in the canvas behind — this keeps their space */}
+            <div className="flex-1" />
 
             {/* the mine cart gauge, kept slim and golden */}
-            <div className="mx-auto flex w-full max-w-md items-center gap-2 rounded-xl border border-amber-300/25 bg-black/40 px-3 py-1.5 backdrop-blur">
+            <div className="pointer-events-auto mx-auto flex w-full max-w-md items-center gap-2 rounded-xl border border-amber-300/25 bg-black/40 px-3 py-1.5 backdrop-blur">
               <span className="text-[0.58rem] font-black uppercase tracking-widest text-amber-300/90">Mine cart</span>
               <div className="h-2 flex-1 overflow-hidden rounded-full bg-black/60">
                 <motion.div
@@ -299,6 +312,7 @@ export function GoldmineGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, para
             </div>
 
             {/* Balance / Bet / WIN / big round spin */}
+            <div className="pointer-events-auto">
             <BottomBar
               balance={balance}
               bet={bet}
@@ -308,6 +322,7 @@ export function GoldmineGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, para
               onBet={setBet}
               onSpin={spin}
             />
+            </div>
           </div>
 
           {/* big banners */}
