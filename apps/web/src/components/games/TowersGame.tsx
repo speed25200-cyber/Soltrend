@@ -118,7 +118,7 @@ export function TowersGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params
               const chosen = picks[row];
               return (
                 <div key={row} className={`flex gap-1.5 rounded-lg p-1 transition ${isCurrent ? 'bg-neon-violet/10 ring-1 ring-neon-violet/40' : ''}`}>
-                  <span className="grid w-8 place-items-center font-mono text-[10px] text-slate-600">{fmtMult(towersMultiplier(cols, row + 1, edge))}</span>
+                  <span className={`grid w-8 place-items-center font-mono text-[10px] ${cleared ? 'text-win/80' : isCurrent ? 'text-neon-violet' : 'text-slate-500'}`}>{fmtMult(towersMultiplier(cols, row + 1, edge))}</span>
                   {Array.from({ length: cols }, (_, c) => {
                     const isTrap = revealTraps && traps[row] === c;
                     const isChosenSafe = (cleared || revealTraps) && chosen === c && traps[row] !== c;
@@ -135,7 +135,7 @@ export function TowersGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params
                               ? 'border-win/40 bg-win/15 text-win'
                               : isCurrent
                                 ? 'border-neon-violet/40 bg-void-900/70 hover:border-neon-violet/70 hover:bg-void-700/60'
-                                : 'border-white/[0.05] bg-void-950/50'
+                                : 'border-white/[0.09] bg-gradient-to-b from-white/[0.06] to-white/[0.015] shadow-[inset_0_1px_0_rgba(255,255,255,0.07)]'
                         }`}
                         style={isChosenSafe ? { boxShadow: '0 0 18px -6px #10f5a0' } : undefined}
                       >

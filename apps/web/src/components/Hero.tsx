@@ -1,11 +1,15 @@
 'use client';
 
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { motion } from 'framer-motion';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { ConnectButton } from './ConnectButton';
 import { Icon } from './Icon';
 import { fmtCompact } from '@/lib/format';
+
+// Ornament only — never load it on phones, never block the lobby on it.
+const HeroScene3D = dynamic(() => import('./HeroScene3D'), { ssr: false, loading: () => null });
 
 export function Hero() {
   const { connected } = useWallet();
@@ -21,6 +25,11 @@ export function Hero() {
         style={{ animationDelay: '-3.5s' }}
       />
       <div className="pointer-events-none absolute right-1/4 top-0 h-40 w-40 rounded-full bg-neon-cyan/15 blur-3xl animate-float-slow" style={{ animationDelay: '-1.8s' }} />
+
+      {/* the jewellery — floating coin, gem and die over the right half */}
+      <div className="pointer-events-none absolute inset-y-0 right-0 hidden w-[46%] lg:block">
+        <HeroScene3D />
+      </div>
 
       <div className="relative z-10 max-w-3xl">
         <motion.span
