@@ -1,23 +1,33 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { motion } from 'framer-motion';
 import { GameLayout } from '@/components/GameLayout';
 import { BetAmount } from '@/components/BetControls';
 import { BetButton } from './BetButton';
 import { usePlay } from '@/hooks/usePlay';
+import { useShipSkin } from '@/hooks/useShipSkin';
 import { useCasino } from '@/lib/store';
 import { crashPointFromFloat, DEFAULT_EDGE, round2 } from '@/lib/games';
 import { firstFloat } from '@/lib/provably-fair';
 import { fmtMult } from '@/lib/format';
 import { Icon } from '@/components/Icon';
 import type { GameConfig } from './types';
+import type { CrashShip } from '@/components/worlds/CrashScene3D';
+
+// The same 3D flight the Live page flies — rocket, star field, bust fireball.
+const CrashScene3D = dynamic(() => import('@/components/worlds/CrashScene3D'), {
+  ssr: false,
+  loading: () => <div className="grid h-full place-items-center text-sm text-slate-500">Fuelling the rocket…</div>,
+});
+
+const SHIP_IDS = ['dart', 'delta', 'orbiter', 'saucer', 'comet', 'talon'];
 
 type Phase = 'idle' | 'running' | 'crashed' | 'cashed';
 
 // Multiplier as a function of elapsed seconds — smooth exponential ramp.
 const multAt = (s: number) => Math.max(1, Math.pow(Math.E, 0.11 * s));
-const RATE = 0.11;
 
 const PLAYER_NAMES = ['degenape', '0xVela', 'moonboy', 'satosh', 'pixel', 'gm_wagmi', 'solmaxi', 'frenzy', 'zkNova', 'luna', 'chad', 'wojak', 'vitalik', 'ansem'];
 interface Player {
@@ -43,6 +53,7 @@ function genPlayers(): Player[] {
 export function CrashGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, maxBet, demo }: GameConfig) {
   const { guard, reserveSeeds, settle } = usePlay(maxBet, demo);
   const bumpUgc = useCasino((s) => s.bumpUgc);
+  const [ship] = useShipSkin();
 
   const [bet, setBet] = useState(0.1);
   const [autoCashout, setAutoCashout] = useState(2);
@@ -158,52 +169,58 @@ export function CrashGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, maxBet,
     setTimeout(() => setPhase((p) => (p === 'cashed' ? 'idle' : p)), 1800);
   };
 
-  // Build the curve path (0..1 normalized then scaled in SVG viewBox 100x100).
-  const curve = buildCurve(mult);
   const color = phase === 'crashed' ? '#ff3b6b' : phase === 'cashed' ? '#10f5a0' : '#a855f7';
+  // The table rides along in 3D: every simulated player is a ship in the ring,
+  // greened the moment they cash.
+  const ships: CrashShip[] = useMemo(
+    () =>
+      players.map((p) => ({
+        wallet: p.name,
+        cashedAt: p.status === 'won' ? p.at : null,
+        ship: SHIP_IDS[p.name.charCodeAt(0) % SHIP_IDS.length],
+      })),
+    [players],
+  );
 
   return (
     <GameLayout
       meta={meta}
       stage={
-        <div className="relative grid h-full place-items-center">
-          <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 h-full w-full opacity-90">
-            <defs>
-              <linearGradient id="crashFill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0" stopColor={color} stopOpacity="0.35" />
-                <stop offset="1" stopColor={color} stopOpacity="0" />
-              </linearGradient>
-            </defs>
-            {/* grid */}
-            {[20, 40, 60, 80].map((y) => (
-              <line key={y} x1="0" y1={y} x2="100" y2={y} stroke="#ffffff" strokeOpacity="0.04" strokeWidth="0.3" />
-            ))}
-            <path d={`${curve} L 100 100 L 0 100 Z`} fill="url(#crashFill)" />
-            <path d={curve} fill="none" stroke={color} strokeWidth="1.2" strokeLinecap="round" />
-          </svg>
+        <div className="relative h-full min-h-[420px] overflow-hidden rounded-2xl">
+          <div className="absolute inset-0">
+            <CrashScene3D
+              multiplier={phase === 'cashed' && cashMult ? cashMult : mult}
+              status={phase === 'running' || phase === 'cashed' ? 'flying' : phase === 'crashed' ? 'busted' : 'idle'}
+              accent={color}
+              ships={ships}
+              skin={ship}
+            />
+          </div>
 
-          <div className="relative z-10 text-center">
-            <motion.div
-              key={phase}
-              className="font-display text-7xl font-bold tabular-nums md:text-8xl"
-              style={{ color, textShadow: `0 0 50px ${color}88` }}
-              animate={phase === 'crashed' ? { scale: [1, 1.1, 1], rotate: [0, -2, 2, 0] } : {}}
-            >
-              {fmtMult(phase === 'cashed' && cashMult ? cashMult : mult)}
-            </motion.div>
-            <div className="mt-2 flex h-6 items-center justify-center gap-1.5 font-semibold">
-              {phase === 'crashed' && (
-                <span className="inline-flex items-center gap-1.5 text-loss">
-                  <Icon name="flame" size={15} /> Crashed @ {fmtMult(crashPoint.current)}
-                </span>
-              )}
-              {phase === 'cashed' && (
-                <span className="inline-flex items-center gap-1.5 text-win">
-                  <Icon name="check" size={15} /> Cashed out {fmtMult(cashMult!)}
-                </span>
-              )}
-              {phase === 'running' && <span className="text-slate-400">Cash out any time…</span>}
-              {phase === 'idle' && <span className="text-slate-600">Place a bet to launch</span>}
+          <div className="pointer-events-none absolute inset-x-0 top-0 z-10 grid place-items-center p-5">
+            <div className="rounded-2xl border border-white/10 bg-void-950/60 px-6 py-2 text-center backdrop-blur">
+              <motion.div
+                key={phase}
+                className="font-display text-5xl font-bold tabular-nums md:text-6xl"
+                style={{ color, textShadow: `0 0 40px ${color}` }}
+                animate={phase === 'crashed' ? { scale: [1, 1.1, 1], rotate: [0, -2, 2, 0] } : {}}
+              >
+                {fmtMult(phase === 'cashed' && cashMult ? cashMult : mult)}
+              </motion.div>
+              <div className="mt-1 flex h-5 items-center justify-center gap-1.5 text-sm font-semibold">
+                {phase === 'crashed' && (
+                  <span className="inline-flex items-center gap-1.5 text-loss">
+                    <Icon name="flame" size={14} /> Crashed @ {fmtMult(crashPoint.current)}
+                  </span>
+                )}
+                {phase === 'cashed' && (
+                  <span className="inline-flex items-center gap-1.5 text-win">
+                    <Icon name="check" size={14} /> Cashed out {fmtMult(cashMult!)}
+                  </span>
+                )}
+                {phase === 'running' && <span className="text-slate-400">Cash out any time…</span>}
+                {phase === 'idle' && <span className="text-slate-600">Place a bet to launch</span>}
+              </div>
             </div>
           </div>
         </div>
@@ -282,18 +299,3 @@ function PlayersPanel({ players, phase }: { players: Player[]; phase: Phase }) {
   );
 }
 
-/** Sample the exponential up to the current multiplier into an SVG polyline. */
-function buildCurve(currentMult: number): string {
-  const totalS = Math.log(Math.max(1.0001, currentMult)) / RATE;
-  const yMax = Math.max(2, currentMult * 1.15);
-  const pts: string[] = [];
-  const N = 40;
-  for (let i = 0; i <= N; i++) {
-    const s = (totalS * i) / N;
-    const m = multAt(s);
-    const x = totalS > 0 ? (i / N) * 100 : 0;
-    const y = 100 - ((m - 1) / (yMax - 1)) * 96 - 2;
-    pts.push(`${i === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`);
-  }
-  return pts.join(' ');
-}
