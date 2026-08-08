@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
+import { SceneLoader } from './SceneLoader';
 import { motion } from 'framer-motion';
 import { GameLayout } from '@/components/GameLayout';
 import { BetAmount } from '@/components/BetControls';
@@ -18,7 +19,7 @@ import type { GameConfig } from './types';
 // The WebGL coin — leaps, tumbles, lands on the seed's answer.
 const CoinflipScene3D = dynamic(() => import('./CoinflipScene3D'), {
   ssr: false,
-  loading: () => <div className="grid h-full place-items-center text-sm text-slate-500">Minting the coin…</div>,
+  loading: () => <SceneLoader label="Minting the coin…" />,
 });
 
 export function CoinflipGame({ meta, edge = DEFAULT_EDGE, gameId, gameName , maxBet, demo}: GameConfig) {

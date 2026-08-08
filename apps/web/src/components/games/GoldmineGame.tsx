@@ -13,15 +13,14 @@ import { Icon } from '@/components/Icon';
 import { sfx } from '@/lib/sound';
 import { burstWin } from '@/lib/fx';
 import dynamic from 'next/dynamic';
+import { SceneLoader } from './SceneLoader';
 import { reelPlan } from './goldmine/ExpressReels';
 import { JackpotLadder, BottomBar } from './goldmine/CanyonChrome';
 
 // The whole game stage is one WebGL canvas — canyon, viaduct, cabinet, drums.
 const Goldmine3DStage = dynamic(() => import('./goldmine/Goldmine3D'), {
   ssr: false,
-  loading: () => (
-    <div className="grid h-full place-items-center text-sm text-amber-200/70">Stoking the boiler…</div>
-  ),
+  loading: () => <SceneLoader label="Stoking the boiler…" />,
 });
 import { ExpressSymbol, TRAIN_HEX } from './goldmine/ExpressSymbols';
 import {

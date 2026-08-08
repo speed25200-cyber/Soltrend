@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
+import { SceneLoader } from './SceneLoader';
 import { motion } from 'framer-motion';
 import { GameLayout } from '@/components/GameLayout';
 import { BetAmount } from '@/components/BetControls';
@@ -19,7 +20,7 @@ import type { CrashShip } from '@/components/worlds/CrashScene3D';
 // The same 3D flight the Live page flies — rocket, star field, bust fireball.
 const CrashScene3D = dynamic(() => import('@/components/worlds/CrashScene3D'), {
   ssr: false,
-  loading: () => <div className="grid h-full place-items-center text-sm text-slate-500">Fuelling the rocket…</div>,
+  loading: () => <SceneLoader label="Fuelling the rocket…" />,
 });
 
 const SHIP_IDS = ['dart', 'delta', 'orbiter', 'saucer', 'comet', 'talon'];

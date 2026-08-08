@@ -1,6 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import { SceneLoader } from './SceneLoader';
 import { useMemo, useRef, useState } from 'react';
 import { GameLayout } from '@/components/GameLayout';
 import { BetAmount } from '@/components/BetControls';
@@ -15,7 +16,7 @@ import type { GameConfig } from './types';
 
 const World3D = dynamic(() => import('@/components/worlds/World3D'), {
   ssr: false,
-  loading: () => <div className="grid h-full min-h-[380px] place-items-center text-sm text-slate-500">Loading the mine…</div>,
+  loading: () => <SceneLoader label="Loading the mine…" />,
 });
 
 const GRID = 25;

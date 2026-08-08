@@ -1,6 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import { SceneLoader } from './SceneLoader';
 import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { GameLayout } from '@/components/GameLayout';
@@ -15,7 +16,7 @@ import type { PlinkoBall } from './PlinkoScene3D';
 
 const Scene3D = dynamic(() => import('./PlinkoScene3D'), {
   ssr: false,
-  loading: () => <div className="grid h-full min-h-[380px] place-items-center text-sm text-slate-500">Loading the board…</div>,
+  loading: () => <SceneLoader label="Loading the board…" />,
 });
 
 type Risk = 'low' | 'medium' | 'high';

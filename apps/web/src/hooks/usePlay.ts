@@ -8,6 +8,7 @@ import type { BetRecord } from '@/lib/store';
 import type { Template } from '@/lib/games';
 import { sfx } from '@/lib/sound';
 import { burstJackpot, burstWin } from '@/lib/fx';
+import { track } from '@/lib/analytics';
 
 export interface BetGuard {
   ok: boolean;
@@ -111,6 +112,16 @@ export function usePlay(maxBet?: number, demo = false) {
         meta: args.meta,
         seeds: args.seeds,
       };
+      // Engagement telemetry: every settled round, demo or real, one seam.
+      track('round', {
+        game: args.game,
+        template: args.template,
+        bet: args.bet,
+        mult: args.multiplier,
+        payout: args.payout,
+        win: args.win,
+        demo,
+      });
       if (demo) {
         // Move only the pretend credits, then give the same feedback so the
         // demo feels like the real thing.
