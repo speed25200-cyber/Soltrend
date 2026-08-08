@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import dynamic from 'next/dynamic';
 import { motion } from 'framer-motion';
 import { GameLayout } from '@/components/GameLayout';
 import { BetAmount } from '@/components/BetControls';
@@ -14,13 +15,20 @@ import { fmtMult } from '@/lib/format';
 import { Icon } from '@/components/Icon';
 import type { GameConfig } from './types';
 
+// The WebGL coin — leaps, tumbles, lands on the seed's answer.
+const CoinflipScene3D = dynamic(() => import('./CoinflipScene3D'), {
+  ssr: false,
+  loading: () => <div className="grid h-full place-items-center text-sm text-slate-500">Minting the coin…</div>,
+});
+
 export function CoinflipGame({ meta, edge = DEFAULT_EDGE, gameId, gameName , maxBet, demo}: GameConfig) {
   const { guard, reserveSeeds, settle } = usePlay(maxBet, demo);
   const bumpUgc = useCasino((s) => s.bumpUgc);
 
   const [bet, setBet] = useState(0.1);
   const [pickHeads, setPickHeads] = useState(true);
-  const [spin, setSpin] = useState(0);
+  const [spinKey, setSpinKey] = useState(0);
+  const [flipHeads, setFlipHeads] = useState<boolean | null>(null);
   const [heads, setHeads] = useState<boolean | null>(null);
   const [win, setWin] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
@@ -52,18 +60,19 @@ export function CoinflipGame({ meta, edge = DEFAULT_EDGE, gameId, gameName , max
   const playRound = (amount: number, quiet: boolean) => {
     const seeds = reserveSeeds();
     const res = playCoinflip(amount, pickHeads, seeds, edge);
-    const base = spin - (spin % 360);
-    setSpin(base + 360 * 3 + (res.heads ? 0 : 180));
+    setFlipHeads(res.heads);
+    setSpinKey((k) => k + 1);
     settleFlip(amount, res, seeds, quiet);
     return { win: res.win, payout: res.payout };
   };
 
   const doBet = async () => {
     setBusy(true);
+    setWin(null);
     const seeds = reserveSeeds();
     const res = playCoinflip(bet, pickHeads, seeds, edge);
-    const base = spin - (spin % 360);
-    setSpin(base + 360 * 5 + (res.heads ? 0 : 180));
+    setFlipHeads(res.heads);
+    setSpinKey((k) => k + 1);
     setTimeout(() => {
       settleFlip(bet, res, seeds, false);
       setBusy(false);
@@ -74,45 +83,11 @@ export function CoinflipGame({ meta, edge = DEFAULT_EDGE, gameId, gameName , max
     <GameLayout
       meta={meta}
       stage={
-        <div className="grid h-full place-items-center gap-6">
-          <div style={{ perspective: 1100 }}>
-            <motion.div
-              className="relative h-44 w-44"
-              style={{ transformStyle: 'preserve-3d' }}
-              animate={{ rotateY: spin }}
-              transition={{ duration: 1.05, ease: [0.22, 1, 0.36, 1] }}
-            >
-              {/* the edge — stacked discs give the coin real thickness */}
-              {Array.from({ length: 9 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="absolute inset-0 rounded-full"
-                  style={{
-                    transform: `translateZ(${-4 + i}px)`,
-                    background: 'radial-gradient(circle at 40% 35%, #8a5f22, #4a2f0d 70%)',
-                  }}
-                />
-              ))}
-              <CoinFace side="H" />
-              <CoinFace side="T" back />
-              {/* gloss that sweeps the faces as the coin turns */}
-              <div
-                className="pointer-events-none absolute inset-0 rounded-full"
-                style={{
-                  transform: 'translateZ(5px)',
-                  background: 'linear-gradient(115deg, transparent 30%, rgba(255,255,255,0.28) 46%, transparent 60%)',
-                  backfaceVisibility: 'hidden',
-                }}
-              />
-            </motion.div>
-            {/* landing shadow */}
-            <motion.div
-              className="mx-auto mt-4 h-3 w-28 rounded-full bg-black/60 blur-md"
-              animate={{ scaleX: [1, 0.7, 1] }}
-              transition={{ duration: 1.05, ease: [0.22, 1, 0.36, 1] }}
-            />
+        <div className="relative flex h-full min-h-[380px] flex-col overflow-hidden rounded-2xl">
+          <div className="absolute inset-0">
+            <CoinflipScene3D spinKey={spinKey} resultHeads={flipHeads} win={busy ? null : win} />
           </div>
-          <div className="h-6 font-semibold">
+          <div className="relative z-10 mt-auto pb-4 text-center font-semibold">
             {win === true && (
               <motion.span initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="text-win" style={{ textShadow: '0 0 18px rgba(16,245,160,0.6)' }}>
                 {heads ? 'Heads' : 'Tails'} — you win!
@@ -169,28 +144,3 @@ export function CoinflipGame({ meta, edge = DEFAULT_EDGE, gameId, gameName , max
   );
 }
 
-function CoinFace({ side, back }: { side: 'H' | 'T'; back?: boolean }) {
-  const gold = side === 'H';
-  return (
-    <div
-      className="absolute inset-0 grid place-items-center rounded-full text-void-950"
-      style={{
-        backfaceVisibility: 'hidden',
-        transform: back ? 'rotateY(180deg) translateZ(5px)' : 'translateZ(5px)',
-        background: gold
-          ? 'radial-gradient(circle at 35% 28%, #fef3c7, #f59e0b 55%, #92400e)'
-          : 'radial-gradient(circle at 35% 28%, #ede9fe, #a855f7 55%, #6b21a8)',
-        boxShadow: `inset 0 0 0 5px ${gold ? 'rgba(120,53,15,0.55)' : 'rgba(76,29,149,0.5)'}, inset 0 0 0 9px rgba(255,255,255,0.18), inset -8px -10px 24px rgba(0,0,0,0.35), inset 6px 8px 18px rgba(255,255,255,0.35)`,
-      }}
-    >
-      {/* engraved ring + glyph */}
-      <div
-        className="absolute inset-[14%] rounded-full"
-        style={{ border: `2px dashed ${gold ? 'rgba(120,53,15,0.5)' : 'rgba(76,29,149,0.45)'}` }}
-      />
-      <span style={{ filter: 'drop-shadow(0 2px 2px rgba(0,0,0,0.3)) drop-shadow(0 -1px 0 rgba(255,255,255,0.4))' }}>
-        <Icon name={side === 'H' ? 'moon' : 'bolt'} size={58} strokeWidth={1.6} />
-      </span>
-    </div>
-  );
-}
