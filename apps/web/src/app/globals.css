@@ -1,0 +1,306 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* The -src variables are injected by next/font in the root layout. */
+  --font-sans: var(--font-sans-src), system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: var(--font-display-src), var(--font-sans-src), system-ui, sans-serif;
+  --font-mono: var(--font-mono-src), ui-monospace, 'SF Mono', monospace;
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    scroll-behavior: smooth;
+  }
+  /* Headlines sit tighter than the body — a grotesque at display size needs the
+     air taken out of it, or it reads as a paragraph that happens to be large. */
+  h1,
+  h2,
+  h3,
+  .font-display {
+    letter-spacing: -0.021em;
+  }
+  /* Every figure in this product is compared against another figure: balances
+     against balances, multipliers down a column. They must not shift width. */
+  code,
+  .font-mono {
+    font-variant-numeric: tabular-nums;
+  }
+  body {
+    @apply bg-void-950 text-slate-200 font-sans antialiased;
+    text-rendering: optimizeLegibility;
+    background-image:
+      radial-gradient(60% 50% at 20% -5%, rgba(139, 92, 246, 0.14), transparent 60%),
+      radial-gradient(50% 45% at 95% 0%, rgba(217, 70, 239, 0.1), transparent 55%),
+      radial-gradient(45% 45% at 50% 105%, rgba(34, 211, 238, 0.07), transparent 60%);
+    background-attachment: fixed;
+    overflow-x: hidden;
+  }
+  /* Film grain — a whisper of texture that kills the flat, purely-digital look.
+     Sits under every interactive layer (z < 50) and never intercepts input. */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    opacity: 0.035;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  /* Headlines wrap as a designer would set them, not wherever the box breaks. */
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  ::selection {
+    background: rgba(139, 92, 246, 0.35);
+    color: #fff;
+  }
+  /* Keyboard focus. There was none, which made the whole product unusable
+     without a mouse: you could tab onto a bet button and have no way to know
+     it. `:focus-visible` shows it for keyboard and assistive-tech users without
+     putting a ring around every click. */
+  :focus-visible {
+    outline: 2px solid rgba(168, 85, 247, 0.9);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  /* A skip link, so a keyboard user is not forced through the whole nav on
+     every page before reaching the game. */
+  .skip-link {
+    position: fixed;
+    top: 0.5rem;
+    left: 0.5rem;
+    z-index: 300;
+    transform: translateY(-200%);
+    transition: transform 0.15s ease;
+  }
+  .skip-link:focus {
+    transform: translateY(0);
+  }
+  /* Sleek scrollbars */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #2a2f57, #171a35);
+    border-radius: 99px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #3a3f6a;
+    background-clip: padding-box;
+  }
+}
+
+@layer components {
+  /* Frosted glass surface — the workhorse card */
+  .glass {
+    @apply bg-void-800/60 backdrop-blur-xl border border-white/[0.06] rounded-2xl;
+    box-shadow:
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.05),
+      0 20px 40px -24px rgba(0, 0, 0, 0.9);
+  }
+  .glass-hover {
+    @apply transition-all duration-300;
+  }
+  .glass-hover:hover {
+    @apply border-neon-violet/40 -translate-y-0.5;
+    box-shadow:
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.08),
+      0 24px 50px -20px rgba(0, 0, 0, 0.9),
+      0 0 40px -18px rgba(139, 92, 246, 0.6);
+  }
+
+  /* Primary CTA — the "bet" button. Loud, glowing, satisfying. */
+  .btn-primary {
+    @apply relative inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3
+      font-display font-bold tracking-wide text-void-950 select-none overflow-hidden
+      transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed;
+    background: linear-gradient(135deg, #c4b5fd 0%, #a855f7 40%, #d946ef 100%);
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.15) inset,
+      0 10px 30px -8px rgba(168, 85, 247, 0.7);
+  }
+  /* Light sweep on hover — the lacquered finish that reads "expensive". */
+  .btn-primary::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(105deg, transparent 42%, rgba(255, 255, 255, 0.38) 50%, transparent 58%);
+    transform: translateX(-130%);
+    transition: transform 0.55s ease;
+  }
+  .btn-primary:not(:disabled):hover::after {
+    transform: translateX(130%);
+  }
+  .btn-primary:not(:disabled):hover {
+    filter: brightness(1.08);
+    transform: translateY(-1px);
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.25) inset,
+      0 14px 40px -8px rgba(217, 70, 239, 0.85);
+  }
+  .btn-primary:not(:disabled):active {
+    transform: translateY(1px) scale(0.99);
+  }
+
+  .btn-win {
+    background: linear-gradient(135deg, #6ee7b7 0%, #10f5a0 50%, #059669 100%);
+    box-shadow: 0 10px 30px -8px rgba(16, 245, 160, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.15) inset;
+    @apply text-void-950;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5
+      font-semibold text-slate-300 border border-white/[0.08] bg-white/[0.02]
+      transition-all duration-200;
+  }
+  .btn-ghost:hover {
+    @apply border-white/20 bg-white/[0.05] text-white;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold
+      border border-white/10 bg-white/[0.03] text-slate-300;
+  }
+
+  .stat-tile {
+    @apply glass p-4 flex flex-col gap-1;
+  }
+
+  .input-num {
+    @apply w-full rounded-xl bg-void-900/80 border border-white/[0.08] px-4 py-3
+      font-mono text-white outline-none transition
+      focus:border-neon-violet/60 focus:shadow-glow-violet;
+  }
+  /* A <select> keeps the OS chrome unless appearance is reset — skin it like
+     the inputs beside it, with our own chevron. */
+  select.input-num {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.9rem center;
+    padding-right: 2.4rem;
+  }
+
+  .label-eyebrow {
+    @apply text-[0.7rem] uppercase tracking-[0.18em] text-slate-500 font-semibold;
+  }
+
+  .neon-text {
+    background: linear-gradient(120deg, #e9d5ff, #a855f7 40%, #22d3ee, #e9d5ff);
+    background-size: 250% 250%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: gradient-pan 8s ease-in-out infinite;
+  }
+
+  /* Gradient hairline border — the difference between "card" and "jewel case".
+     Painted into the border with a mask, so the fill stays translucent. */
+  .glass-premium {
+    position: relative;
+  }
+  .glass-premium::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(
+      140deg,
+      rgba(255, 255, 255, 0.22),
+      rgba(255, 255, 255, 0.03) 30%,
+      rgba(139, 92, 246, 0.4) 62%,
+      rgba(34, 211, 238, 0.28)
+    );
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  /* Cursor spotlight — set --mx/--my from a pointermove handler. */
+  .spot-card {
+    position: relative;
+  }
+  .spot-card::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    opacity: 0;
+    transition: opacity 0.35s ease;
+    pointer-events: none;
+    background: radial-gradient(
+      340px circle at var(--mx, 50%) var(--my, 50%),
+      rgba(139, 92, 246, 0.16),
+      transparent 65%
+    );
+  }
+  .spot-card:hover::after {
+    opacity: 1;
+  }
+
+  /* 3D tilt host — transform driven from JS, transition smooths the release. */
+  .tilt {
+    transform-style: preserve-3d;
+    transition: transform 0.16s ease-out;
+    will-change: transform;
+  }
+
+  .divider {
+    @apply h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent;
+  }
+}
+
+@keyframes gradient-pan {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+/* Shimmer skeleton */
+.shimmer {
+  position: relative;
+  overflow: hidden;
+}
+.shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.06), transparent);
+  animation: shimmer 1.8s infinite;
+}
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Reduced-motion respect */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

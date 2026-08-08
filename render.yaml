@@ -1,0 +1,16 @@
+# One-click deploy of the Soltrend realtime API to Render.
+# After it deploys, copy the service URL and set it in the web build:
+#   NEXT_PUBLIC_REALTIME_URL=https://soltrend-api.onrender.com
+services:
+  - type: web
+    name: soltrend-api
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: npm install --omit=optional --no-audit --no-fund
+    startCommand: npm run start --workspace @soltrend/api
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Render injects PORT automatically; the API reads process.env.PORT.

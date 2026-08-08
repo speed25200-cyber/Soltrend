@@ -1,0 +1,832 @@
+'use client';
+
+/**
+ * Client-side "hot balance" + session state + community progression.
+ *
+ * In production the balance lives in the House Vault on Solana (see
+ * /programs/house_vault) and bets settle on-chain. For this reference build we
+ * model the exact same flow against a local hot-balance so the whole community
+ * loop — play, level up, complete missions, feed the jackpot, earn creator
+ * royalties — is fully playable on devnet-style demo funds.
+ */
+
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+import { createServerSeed, randomHex, sha256Hex } from './provably-fair';
+import type { Template } from './games';
+import type { IconName } from '@/components/Icon';
+import type { Sprite } from './sprites';
+import {
+  ACHIEVEMENTS,
+  DAILY_MISSIONS,
+  JACKPOT_BASE_CHANCE,
+  JACKPOT_CONTRIB,
+  levelFromXp,
+  xpForBet,
+  type Metric,
+} from './progression';
+import { EDGE_SPLIT } from './economics';
+
+export interface BetRecord {
+  id: string;
+  game: string;
+  template: Template;
+  bet: number;
+  multiplier: number;
+  payout: number;
+  win: boolean;
+  serverSeed: string;
+  serverSeedHash: string;
+  clientSeed: string;
+  nonce: number;
+  meta?: Record<string, unknown>;
+  ts: number;
+}
+
+export interface UgcGame {
+  id: string;
+  name: string;
+  template: Template;
+  /** Display handle (shortened address). */
+  creator: string;
+  /** Full base58 wallet of the creator — seeds the on-chain game/pool PDAs. */
+  creatorWallet?: string;
+  edge: number;
+  params: Record<string, number | string>;
+  theme: {
+    accent: string;
+    icon: IconName;
+    aura?: string;
+    tagline?: string;
+    presentation?: string;
+    background?: string;
+    soundPack?: string;
+    winEffect?: string;
+    /** Custom pixel symbols drawn in the studio, carried inline so every player
+     *  renders the creator's own slot art (used by reel/scratch presentations). */
+    symbols?: Sprite[];
+  };
+  volume: number;
+  players: number;
+  plays: number;
+  rating: number;
+  createdAt: number;
+  featured?: boolean;
+  mine?: boolean;
+  specHash?: string;
+  /** Bankroll TVL — SOL staked to back this game (pays winners, earns edge yield). */
+  tvl?: number;
+  /** Top multiplier this game can pay — sets the bankroll-relative max bet. */
+  maxWin?: number;
+  /** If this game is a remix, the id of the game it was forked from. The parent
+   *  creator earns a share of this game's royalties (remix lineage). */
+  parentId?: string;
+}
+
+/** One completed Daily Nexus run — the thing that becomes a share card. */
+export interface DailyRun {
+  rooms: number;
+  total: number;
+  multiplier: number;
+  banked: boolean;
+  keysFound: number;
+  ts: number;
+}
+
+export interface RgLimits {
+  maxBet: number | null;
+  dailyLossLimit: number | null;
+  sessionMinutes: number | null;
+  selfExcludedUntil: number | null;
+}
+
+interface SeedState {
+  serverSeed: string;
+  serverSeedHash: string;
+  clientSeed: string;
+  nonce: number;
+}
+
+interface DailyState {
+  day: string;
+  bets: number;
+  wins: number;
+  wagered: number;
+  games: string[];
+  cashouts: number;
+  claimed: string[];
+}
+
+export interface Progress {
+  xp: number;
+  totalBets: number;
+  wageredTotal: number;
+  bestMultiplier: number;
+  gamesTried: string[];
+  publishedCount: number;
+  streak: number;
+  lastDailyClaim: string;
+  daily: DailyState;
+  achievements: string[];
+  claimedRoyalties: number;
+  referralCode: string;
+  referredBy?: string;
+}
+
+export interface JackpotWin {
+  user: string;
+  amount: number;
+  ts: number;
+}
+
+export interface ProgressEvents {
+  gainedXp: number;
+  leveledUp: boolean;
+  fromLevel: number;
+  toLevel: number;
+  unlocked: string[];
+  jackpotWon: number;
+}
+
+interface CasinoState {
+  balance: number;
+  ageVerified: boolean;
+  soundOn: boolean;
+  seeds: SeedState;
+  history: BetRecord[];
+  rg: RgLimits;
+  sessionLossToday: number;
+  lossDay: string;
+  ugc: UgcGame[];
+  progress: Progress;
+  jackpot: number;
+  jackpotWins: JackpotWin[];
+  bankrollStakes: Record<string, number>;
+  bankrollYield: number;
+  /** Cosmetic per-game "journey" — rounds this player has played on each game.
+   *  Drives collection tiers + emblems. Purely cosmetic: never affects odds,
+   *  payouts or the bankroll (vault-safety is untouched). */
+  journeys: Record<string, number>;
+  /** Best multiplier this player has ever banked on each game. Cosmetic bragging
+   *  rights + a visible goal to beat; never affects odds or payouts. */
+  bests: Record<string, number>;
+  /** Record a banked multiplier; keeps the max. Returns true if it's a new best. */
+  recordBest: (gameKey: string, multiplier: number) => boolean;
+
+  /** Daily Nexus — one free run per UTC day, keyed by day. */
+  dailyRuns: Record<string, DailyRun>;
+  dailyStreak: number;
+  /** Last day played, so the streak can tell "yesterday" from a broken chain. */
+  lastDailyRun: string;
+  recordDailyRun: (dayKey: string, run: DailyRun) => void;
+
+  setAgeVerified: (v: boolean) => void;
+  setSoundOn: (v: boolean) => void;
+  deposit: (amt: number) => void;
+  withdraw: (amt: number) => void;
+
+  setClientSeed: (s: string) => void;
+  rotateSeeds: () => void;
+  nextNonce: () => SeedState;
+
+  settleBet: (
+    r: Omit<BetRecord, 'id' | 'ts' | 'serverSeed' | 'serverSeedHash' | 'clientSeed' | 'nonce'> & {
+      seeds: SeedState;
+    },
+  ) => void;
+
+  /** Award XP / missions / jackpot for a settled bet; returns celebratory events. */
+  recordProgress: (a: { bet: number; win: boolean; payout: number; key: string }) => ProgressEvents;
+  claimDaily: () => number;
+  claimMission: (id: string) => void;
+  claimRoyalties: () => number;
+  setReferredBy: (code: string) => void;
+
+  setRg: (patch: Partial<RgLimits>) => void;
+  publishUgc: (g: Omit<UgcGame, 'id' | 'createdAt' | 'volume' | 'players' | 'plays' | 'rating'>) => UgcGame;
+  /** Edit one of MY published games in place (name, theme, params, edge, maxWin). */
+  updateUgc: (id: string, patch: Partial<Pick<UgcGame, 'name' | 'theme' | 'params' | 'edge' | 'maxWin'>>) => void;
+  /** Unpublish (delete) one of MY games. */
+  deleteUgc: (id: string) => void;
+  bumpUgc: (id: string, wagered: number) => void;
+
+  /** Stake SOL into a game's bankroll to earn a share of its edge yield. */
+  stakeBankroll: (id: string, amt: number) => void;
+  unstakeBankroll: (id: string, amt: number) => void;
+  claimBankrollYield: () => number;
+}
+
+const today = () => new Date().toISOString().slice(0, 10);
+const yesterdayOf = (d: string) => new Date(new Date(d).getTime() - 86400000).toISOString().slice(0, 10);
+
+const seedInit = (): SeedState => {
+  const { serverSeed, serverSeedHash } = createServerSeed();
+  return { serverSeed, serverSeedHash, clientSeed: randomHex(8), nonce: 0 };
+};
+
+const freshDaily = (d: string): DailyState => ({
+  day: d,
+  bets: 0,
+  wins: 0,
+  wagered: 0,
+  games: [],
+  cashouts: 0,
+  claimed: [],
+});
+
+const progressInit = (): Progress => ({
+  xp: 0,
+  totalBets: 0,
+  wageredTotal: 0,
+  bestMultiplier: 0,
+  gamesTried: [],
+  publishedCount: 0,
+  streak: 0,
+  lastDailyClaim: '',
+  daily: freshDaily(today()),
+  achievements: [],
+  claimedRoyalties: 0,
+  referralCode: randomHex(3).toUpperCase(),
+});
+
+export const metricValue = (d: DailyState, m: Metric): number => {
+  if (m === 'games') return d.games.length;
+  return (d as any)[m] ?? 0;
+};
+
+/** Share of a remixed game's royalty that flows UP to the original creator. */
+export const REMIX_PARENT_SHARE = 0.15;
+
+export const creatorEarnings = (ugc: UgcGame[]): number => {
+  const byId = new Map(ugc.map((g) => [g.id, g]));
+  let total = 0;
+  for (const g of ugc) {
+    const royalty = g.volume * g.edge * 0.3;
+    // My own games earn their royalty (minus the slice owed up to a parent).
+    if (g.mine) total += g.parentId ? royalty * (1 - REMIX_PARENT_SHARE) : royalty;
+    // If someone remixed MY game, I earn the parent share of their royalty.
+    if (g.parentId) {
+      const parent = byId.get(g.parentId);
+      if (parent?.mine) total += royalty * REMIX_PARENT_SHARE;
+    }
+  }
+  return round4(total);
+};
+
+export const seededUgc = (): UgcGame[] => [
+  {
+    id: 'ugc-neon-dice',
+    name: 'Neon Overdrive',
+    template: 'dice',
+    creator: 'CryptoWizard',
+    edge: 0.01,
+    params: { target: 50, over: 1 },
+    theme: { accent: 'violet', icon: 'dice', tagline: 'Pure adrenaline, every roll' },
+    volume: 184203,
+    players: 2841,
+    plays: 51204,
+    rating: 4.8,
+    tvl: 324,
+    maxWin: 2,
+    createdAt: Date.now() - 86400000 * 5,
+    featured: true,
+  },
+  {
+    id: 'ugc-moon-limbo',
+    name: 'Moonshot',
+    template: 'limbo',
+    creator: 'DegenKing',
+    edge: 0.02,
+    params: { target: 2 },
+    theme: { accent: 'cyan', icon: 'trend', tagline: 'Aim high, or go home' },
+    volume: 142980,
+    players: 1920,
+    plays: 38210,
+    rating: 4.6,
+    tvl: 187,
+    maxWin: 100,
+    createdAt: Date.now() - 86400000 * 3,
+  },
+  {
+    id: 'ugc-diamond-mines',
+    name: 'Diamond Depths',
+    template: 'mines',
+    creator: 'GemHunter',
+    edge: 0.015,
+    params: { grid: 25, bombs: 3 },
+    theme: { accent: 'gold', icon: 'gem', tagline: 'How deep will you dig?' },
+    volume: 98120,
+    players: 1502,
+    plays: 24012,
+    rating: 4.9,
+    tvl: 96,
+    // Clearing all 22 safe tiles reaches the 1000x vault cap, so that — not a
+    // "typical" win — is what the bet cap has to be sized against.
+    maxWin: 1000,
+    createdAt: Date.now() - 86400000 * 9,
+  },
+  // Two seeded 3D worlds — one per spatial mechanic — so the Worlds shelf and
+  // both genres are discoverable on a fresh install.
+  {
+    id: 'ugc-crystal-field',
+    name: 'Crystal Field',
+    template: 'board',
+    creator: 'Nova',
+    edge: 0.02,
+    params: { rows: 3, cols: 3, bombs: 4, skin: 'gems', fx: 'flip', environment: 'nebula', camera: 'orbit', logicScale: 1, mode: 'board' },
+    theme: { accent: 'cyan', icon: 'gem', tagline: 'Walk the field, bank the light', background: 'aurora', soundPack: 'crystal', winEffect: 'coins' },
+    volume: 41250,
+    players: 764,
+    plays: 11840,
+    rating: 4.7,
+    tvl: 74,
+    // A full clear pays 123.48x; maxWin must be the TRUE top so the
+    // bankroll-relative bet cap stays safe (maxBet = bankroll / RUIN_K / maxWin).
+    maxWin: 124,
+    createdAt: Date.now() - 86400000 * 5,
+  },
+  {
+    id: 'ugc-obsidian-spire',
+    name: 'Obsidian Spire',
+    template: 'board',
+    creator: 'Vertigo',
+    edge: 0.025,
+    params: { rows: 6, cols: 3, bombs: 1, skin: 'inferno', fx: 'shatter', environment: 'void', camera: 'cinematic', logicScale: 1, mode: 'ascent' },
+    theme: { accent: 'pink', icon: 'flame', tagline: 'Six floors. One way down.', background: 'aurora', soundPack: 'crystal', winEffect: 'coins' },
+    volume: 33780,
+    players: 612,
+    plays: 9260,
+    rating: 4.8,
+    tvl: 58,
+    maxWin: 11,
+    createdAt: Date.now() - 86400000 * 2,
+  },
+  {
+    id: 'ugc-sunken-keep',
+    name: 'Sunken Keep',
+    template: 'board',
+    creator: 'Cartographer',
+    edge: 0.025,
+    params: {
+      rows: 3, cols: 3, bombs: 1, skin: 'vault', fx: 'bloom',
+      environment: 'void', camera: 'orbit', logicScale: 1, mode: 'nexus',
+      nexus: JSON.stringify({
+        rooms: [
+          { id: 'n0', x: 0, z: 3.2, y: 0, risk: 0.08, label: 'Gate' },
+          { id: 'n1', x: -2.4, z: 1.2, y: 0, risk: 0.14, label: 'Hall' },
+          { id: 'n2', x: -2.6, z: -1.4, y: 0.5, risk: 0.42, label: 'Key vault', key: 'amber' },
+          { id: 'n3', x: 0.4, z: -0.4, y: 0, risk: 0.16, label: 'Crossing' },
+          { id: 'n4', x: 2.6, z: -2.2, y: 0.9, risk: 0.34, label: 'Treasury' },
+        ],
+        links: [['n0', 'n1'], ['n0', 'n3'], ['n1', 'n2'], ['n2', 'n3'], ['n3', 'n4']],
+        startId: 'n0',
+        gates: { 'n3>n4': 'amber' },
+      }),
+    },
+    theme: { accent: 'gold', icon: 'shield', tagline: 'The treasury only opens for the brave', background: 'aurora', soundPack: 'crystal', winEffect: 'coins' },
+    volume: 21400,
+    players: 388,
+    plays: 5210,
+    rating: 4.9,
+    tvl: 44,
+    // Richest route (via the key vault to the treasury) pays 3.53x.
+    maxWin: 4,
+    createdAt: Date.now() - 86400000,
+  },
+];
+
+
+/** Bump when the persisted shape changes incompatibly. */
+export const PERSIST_VERSION = 1;
+
+/** Largest history the client keeps; anything longer is a storage leak. */
+const HISTORY_CAP = 500;
+
+const num = (v: unknown, fallback: number, min = -Infinity, max = Infinity): number => {
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
+};
+const bool = (v: unknown, fallback: boolean) => (typeof v === 'boolean' ? v : fallback);
+const arr = <T,>(v: unknown, cap = Infinity): T[] => (Array.isArray(v) ? (v.slice(0, cap) as T[]) : []);
+const obj = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
+
+const hex64 = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{64}$/.test(v);
+
+/**
+ * Validate a persisted blob field by field.
+ *
+ * Only keys that survive validation are returned, so every dropped field falls
+ * back to the store's own default rather than to `undefined` — which is what
+ * turns a bad record into a crash.
+ */
+export function sanitize(raw: unknown): Partial<CasinoState> {
+  const p = obj(raw);
+  const out: Record<string, unknown> = {};
+
+  if ('balance' in p) out.balance = num(p.balance, 0, 0, 1e9);
+  if ('ageVerified' in p) out.ageVerified = bool(p.ageVerified, false);
+  if ('soundOn' in p) out.soundOn = bool(p.soundOn, true);
+
+  // The seed pair is the fairness commitment. A malformed one cannot be
+  // repaired — replaying past bets against it would fail — so it is replaced.
+  const seeds = obj(p.seeds);
+  if (hex64(seeds.serverSeed) && hex64(seeds.serverSeedHash) && typeof seeds.clientSeed === 'string') {
+    out.seeds = {
+      serverSeed: seeds.serverSeed,
+      serverSeedHash: seeds.serverSeedHash,
+      clientSeed: seeds.clientSeed,
+      nonce: Math.floor(num(seeds.nonce, 0, 0, Number.MAX_SAFE_INTEGER)),
+    };
+  }
+
+  if ('history' in p) {
+    out.history = arr<Record<string, unknown>>(p.history, HISTORY_CAP).filter(
+      (h) => h && typeof h.id === 'string' && Number.isFinite(Number(h.bet)),
+    );
+  }
+
+  const rg = obj(p.rg);
+  out.rg = {
+    maxBet: rg.maxBet == null ? null : num(rg.maxBet, 0, 0, 1e9),
+    dailyLossLimit: rg.dailyLossLimit == null ? null : num(rg.dailyLossLimit, 0, 0, 1e9),
+    sessionMinutes: rg.sessionMinutes == null ? null : num(rg.sessionMinutes, 0, 0, 10_080),
+    // A self-exclusion must survive a corrupt file — it is a safety commitment,
+    // so an unreadable value keeps the exclusion rather than dropping it.
+    selfExcludedUntil:
+      rg.selfExcludedUntil == null ? null : num(rg.selfExcludedUntil, Date.now() + 86_400_000, 0, 8.64e15),
+  };
+
+  if ('sessionLossToday' in p) out.sessionLossToday = num(p.sessionLossToday, 0, 0, 1e9);
+  if (typeof p.lossDay === 'string') out.lossDay = p.lossDay;
+
+  if ('ugc' in p) {
+    out.ugc = arr<Record<string, unknown>>(p.ugc, 500).filter(
+      (g) => g && typeof g.id === 'string' && typeof g.name === 'string' && typeof g.template === 'string',
+    );
+  }
+
+  if ('progress' in p && Object.keys(obj(p.progress)).length) out.progress = obj(p.progress);
+  if ('jackpot' in p) out.jackpot = num(p.jackpot, 0, 0, 1e9);
+  if ('jackpotWins' in p) out.jackpotWins = arr(p.jackpotWins, 200);
+  if ('bankrollStakes' in p) out.bankrollStakes = obj(p.bankrollStakes);
+  if ('bankrollYield' in p) out.bankrollYield = num(p.bankrollYield, 0, 0, 1e9);
+  if ('journeys' in p) out.journeys = obj(p.journeys);
+  if ('bests' in p) out.bests = obj(p.bests);
+  if ('dailyRuns' in p) out.dailyRuns = obj(p.dailyRuns);
+  if ('dailyStreak' in p) out.dailyStreak = num(p.dailyStreak, 0, 0, 1e6);
+  if ('lastDailyRun' in p) out.lastDailyRun = p.lastDailyRun;
+
+  return out as Partial<CasinoState>;
+}
+
+export const useCasino = create<CasinoState>()(
+  persist(
+    (set, get) => ({
+      balance: 5,
+      ageVerified: false,
+      soundOn: true,
+      seeds: seedInit(),
+      history: [],
+      rg: { maxBet: null, dailyLossLimit: null, sessionMinutes: null, selfExcludedUntil: null },
+      sessionLossToday: 0,
+      lossDay: today(),
+      ugc: seededUgc(),
+      progress: progressInit(),
+      jackpot: 12.84,
+      jackpotWins: [],
+      bankrollStakes: {},
+      bankrollYield: 0,
+      journeys: {},
+      bests: {},
+
+      setAgeVerified: (v) => set({ ageVerified: v }),
+      setSoundOn: (v) => set({ soundOn: v }),
+      deposit: (amt) => set((s) => ({ balance: round4(s.balance + amt) })),
+      withdraw: (amt) => set((s) => ({ balance: round4(Math.max(0, s.balance - amt)) })),
+
+      setClientSeed: (clientSeed) => set((s) => ({ seeds: { ...s.seeds, clientSeed } })),
+      rotateSeeds: () =>
+        set((s) => {
+          const { serverSeed, serverSeedHash } = createServerSeed();
+          return { seeds: { ...s.seeds, serverSeed, serverSeedHash, nonce: 0 } };
+        }),
+      nextNonce: () => {
+        const s = get();
+        const seeds = { ...s.seeds, nonce: s.seeds.nonce + 1 };
+        set({ seeds });
+        return seeds;
+      },
+
+      settleBet: ({ seeds, ...rest }) =>
+        set((s) => {
+          const d = today();
+          const lossReset = s.lossDay !== d;
+          const net = rest.payout - rest.bet;
+          const record: BetRecord = {
+            ...rest,
+            id: randomHex(6),
+            ts: Date.now(),
+            serverSeed: seeds.serverSeed,
+            serverSeedHash: seeds.serverSeedHash,
+            clientSeed: seeds.clientSeed,
+            nonce: seeds.nonce,
+          };
+          return {
+            // Floor at 0 — a stale/replayed settle with bet > balance must never
+            // drive the ledger negative (mirrors the on-chain "pull stake first").
+            balance: Math.max(0, round4(s.balance - rest.bet + rest.payout)),
+            history: [record, ...s.history].slice(0, 200),
+            lossDay: d,
+            sessionLossToday: Math.max(0, (lossReset ? 0 : s.sessionLossToday) - net),
+          };
+        }),
+
+      recordProgress: ({ bet, win, payout, key }) => {
+        const events: ProgressEvents = {
+          gainedXp: 0,
+          leveledUp: false,
+          fromLevel: 1,
+          toLevel: 1,
+          unlocked: [],
+          jackpotWon: 0,
+        };
+        set((s) => {
+          const p = s.progress;
+          const d = today();
+          const daily = p.daily.day === d ? { ...p.daily } : freshDaily(d);
+
+          const gainedXp = xpForBet(bet);
+          const beforeLevel = levelFromXp(p.xp).level;
+          const xp = p.xp + gainedXp;
+          const afterLevel = levelFromXp(xp).level;
+
+          daily.bets += 1;
+          if (win) daily.wins += 1;
+          daily.wagered = round4(daily.wagered + bet);
+          if (!daily.games.includes(key)) daily.games = [...daily.games, key];
+
+          const gamesTried = p.gamesTried.includes(key) ? p.gamesTried : [...p.gamesTried, key];
+          const mult = win && bet > 0 ? payout / bet : 0;
+          const bestMultiplier = Math.max(p.bestMultiplier, mult);
+          const totalBets = p.totalBets + 1;
+          const wageredTotal = round4(p.wageredTotal + bet);
+
+          // Community jackpot: grows with every wager, rare bonus trigger.
+          let jackpot = round4(s.jackpot + bet * JACKPOT_CONTRIB);
+          let jackpotWon = 0;
+          let jackpotWins = s.jackpotWins;
+          const chance = JACKPOT_BASE_CHANCE * Math.min(25, 1 + bet * 6);
+          if (Math.random() < chance && jackpot > 0.5) {
+            jackpotWon = jackpot;
+            jackpotWins = [{ user: 'You', amount: jackpot, ts: Date.now() }, ...jackpotWins].slice(0, 12);
+            jackpot = 0.5;
+          }
+
+          const stats = {
+            totalBets,
+            wageredTotal,
+            bestMultiplier,
+            gamesTried: gamesTried.length,
+            publishedGames: p.publishedCount,
+            level: afterLevel,
+          };
+          const unlocked = ACHIEVEMENTS.filter(
+            (a) => !p.achievements.includes(a.id) && a.test(stats),
+          ).map((a) => a.id);
+          const achievements = unlocked.length ? [...p.achievements, ...unlocked] : p.achievements;
+
+          events.gainedXp = gainedXp;
+          events.fromLevel = beforeLevel;
+          events.toLevel = afterLevel;
+          events.leveledUp = afterLevel > beforeLevel;
+          events.unlocked = unlocked;
+          events.jackpotWon = jackpotWon;
+
+          return {
+            progress: { ...p, xp, totalBets, wageredTotal, bestMultiplier, gamesTried, daily, achievements },
+            jackpot,
+            jackpotWins,
+            balance: jackpotWon ? round4(s.balance + jackpotWon) : s.balance,
+          };
+        });
+        return events;
+      },
+
+      claimDaily: () => {
+        const s = get();
+        const d = today();
+        if (s.progress.lastDailyClaim === d) return 0;
+        const streak = s.progress.lastDailyClaim === yesterdayOf(d) ? s.progress.streak + 1 : 1;
+        const bonus = round4(0.1 * Math.min(7, streak));
+        set({ balance: round4(s.balance + bonus), progress: { ...s.progress, lastDailyClaim: d, streak } });
+        return bonus;
+      },
+
+      claimMission: (id) =>
+        set((s) => {
+          const def = DAILY_MISSIONS.find((m) => m.id === id);
+          if (!def) return {};
+          const d = today();
+          const daily = s.progress.daily.day === d ? s.progress.daily : freshDaily(d);
+          if (daily.claimed.includes(id) || metricValue(daily, def.metric) < def.goal) return {};
+          return {
+            balance: round4(s.balance + def.reward),
+            progress: { ...s.progress, daily: { ...daily, claimed: [...daily.claimed, id] } },
+          };
+        }),
+
+      claimRoyalties: () => {
+        const s = get();
+        const earnings = creatorEarnings(s.ugc);
+        const claimable = round4(earnings - s.progress.claimedRoyalties);
+        if (claimable <= 0) return 0;
+        set({ balance: round4(s.balance + claimable), progress: { ...s.progress, claimedRoyalties: earnings } });
+        return claimable;
+      },
+
+      setReferredBy: (code) =>
+        set((s) =>
+          s.progress.referredBy || !code || code === s.progress.referralCode
+            ? {}
+            : { progress: { ...s.progress, referredBy: code } },
+        ),
+
+      setRg: (patch) => set((s) => ({ rg: { ...s.rg, ...patch } })),
+
+      publishUgc: (g) => {
+        const game: UgcGame = {
+          ...g,
+          id: 'ugc-' + randomHex(4),
+          specHash: sha256Hex(JSON.stringify({ t: g.template, e: g.edge, p: g.params, n: g.name })),
+          mine: true,
+          createdAt: Date.now(),
+          volume: 0,
+          players: 0,
+          plays: 0,
+          rating: 0,
+        };
+        set((s) => {
+          const publishedCount = s.progress.publishedCount + 1;
+          const unlocked = ACHIEVEMENTS.filter(
+            (a) => a.id === 'creator' && !s.progress.achievements.includes(a.id),
+          ).map((a) => a.id);
+          return {
+            ugc: [game, ...s.ugc],
+            progress: {
+              ...s.progress,
+              publishedCount,
+              achievements: [...s.progress.achievements, ...unlocked],
+            },
+          };
+        });
+        return game;
+      },
+      dailyRuns: {},
+      dailyStreak: 0,
+      lastDailyRun: '',
+      recordDailyRun: (key, run) =>
+        set((s) => {
+          if (s.dailyRuns[key]) return {}; // one run per day, first result stands
+          // A streak survives only if the previous run was the day before.
+          const prev = new Date(`${key}T00:00:00Z`).getTime() - 86_400_000;
+          const yesterday = new Date(prev).toISOString().slice(0, 10);
+          const streak = s.lastDailyRun === yesterday ? s.dailyStreak + 1 : 1;
+          return { dailyRuns: { ...s.dailyRuns, [key]: run }, dailyStreak: streak, lastDailyRun: key };
+        }),
+      recordBest: (gameKey, multiplier) => {
+        const prev = get().bests[gameKey] ?? 0;
+        if (!(multiplier > prev)) return false;
+        set((s) => ({ bests: { ...s.bests, [gameKey]: round4(multiplier) } }));
+        return true;
+      },
+      updateUgc: (id, patch) =>
+        set((s) => ({
+          ugc: s.ugc.map((g) => {
+            if (g.id !== id || !g.mine) return g;
+            const next = { ...g, ...patch, theme: patch.theme ?? g.theme };
+            // Refresh the fairness/spec hash if the mechanic-defining fields changed.
+            next.specHash = sha256Hex(JSON.stringify({ t: next.template, e: next.edge, p: next.params, n: next.name }));
+            return next;
+          }),
+        })),
+      deleteUgc: (id) =>
+        set((s) => {
+          if (!s.ugc.find((g) => g.id === id)?.mine) return {};
+          const stakes = { ...s.bankrollStakes };
+          delete stakes[id];
+          const journeys = { ...s.journeys };
+          delete journeys[id];
+          return { ugc: s.ugc.filter((g) => g.id !== id), bankrollStakes: stakes, journeys };
+        }),
+      bumpUgc: (id, wagered) =>
+        set((s) => {
+          const game = s.ugc.find((g) => g.id === id);
+          // Accrue the bankroll-edge yield (20% of the edge) to the player's stake, pro-rata.
+          let bankrollYield = s.bankrollYield;
+          const stake = s.bankrollStakes[id] ?? 0;
+          if (game && stake > 0) {
+            const tvl = game.tvl || stake;
+            const share = Math.min(1, stake / tvl);
+            bankrollYield = round4(bankrollYield + wagered * game.edge * EDGE_SPLIT.bankroll * share);
+          }
+          return {
+            bankrollYield,
+            // Cosmetic journey progress — one round played on this game.
+            journeys: { ...s.journeys, [id]: (s.journeys[id] ?? 0) + 1 },
+            ugc: s.ugc.map((g) =>
+              g.id === id ? { ...g, volume: round4(g.volume + wagered), plays: g.plays + 1 } : g,
+            ),
+          };
+        }),
+
+      stakeBankroll: (id, amt) =>
+        set((s) => {
+          const a = round4(Math.min(amt, s.balance));
+          if (a <= 0) return {};
+          return {
+            balance: round4(s.balance - a),
+            bankrollStakes: { ...s.bankrollStakes, [id]: round4((s.bankrollStakes[id] ?? 0) + a) },
+            ugc: s.ugc.map((g) => (g.id === id ? { ...g, tvl: round4((g.tvl ?? 0) + a) } : g)),
+          };
+        }),
+
+      unstakeBankroll: (id, amt) =>
+        set((s) => {
+          const cur = s.bankrollStakes[id] ?? 0;
+          const a = round4(Math.min(amt, cur));
+          if (a <= 0) return {};
+          const nextStakes = { ...s.bankrollStakes, [id]: round4(cur - a) };
+          if (nextStakes[id] <= 0) delete nextStakes[id];
+          return {
+            balance: round4(s.balance + a),
+            bankrollStakes: nextStakes,
+            ugc: s.ugc.map((g) => (g.id === id ? { ...g, tvl: round4(Math.max(0, (g.tvl ?? 0) - a)) } : g)),
+          };
+        }),
+
+      claimBankrollYield: () => {
+        const s = get();
+        const y = round4(s.bankrollYield);
+        if (y <= 0) return 0;
+        set({ balance: round4(s.balance + y), bankrollYield: 0 });
+        return y;
+      },
+    }),
+    {
+      name: 'soltrend-casino-v2',
+      version: PERSIST_VERSION,
+      /**
+       * Do not restore the saved session while React is hydrating.
+       *
+       * Rehydrating at store-creation time means the first client render already
+       * carries browser state the prerendered HTML could not have — a different
+       * community-game list, a different balance — so React finds a mismatch and
+       * throws the whole server tree away. It showed up as an intermittent
+       * failure on Discover, where a card's accent colour differed between the
+       * two renders. `HydrateStore` calls `rehydrate()` once, after mount.
+       */
+      skipHydration: true,
+      /**
+       * Anything read back from storage is untrusted input.
+       *
+       * It may be from an older build, hand-edited, or truncated by a full disk
+       * quota. Merging it blindly means one bad record white-screens the app on
+       * every load, with no way out but clearing site data. So each field is
+       * validated on the way in and falls back to its default on its own — a
+       * corrupt history costs the history, not the session.
+       */
+      migrate: (persisted, version) => (version === PERSIST_VERSION ? persisted : sanitize(persisted)),
+      merge: (persisted, current) => ({ ...current, ...sanitize(persisted) }),
+      onRehydrateStorage: () => (_state, error) => {
+        if (error) console.error('[store] saved session could not be read; starting fresh', error);
+      },
+      partialize: (s) => ({
+        balance: s.balance,
+        ageVerified: s.ageVerified,
+        soundOn: s.soundOn,
+        seeds: s.seeds,
+        history: s.history,
+        rg: s.rg,
+        sessionLossToday: s.sessionLossToday,
+        lossDay: s.lossDay,
+        ugc: s.ugc,
+        progress: s.progress,
+        jackpot: s.jackpot,
+        jackpotWins: s.jackpotWins,
+        bankrollStakes: s.bankrollStakes,
+        bankrollYield: s.bankrollYield,
+        journeys: s.journeys,
+        bests: s.bests,
+        dailyRuns: s.dailyRuns,
+        dailyStreak: s.dailyStreak,
+        lastDailyRun: s.lastDailyRun,
+      }),
+    },
+  ),
+);
+
+function round4(n: number): number {
+  return Math.round((n + Number.EPSILON) * 10000) / 10000;
+}
+
+export { sha256Hex };

@@ -1,0 +1,20 @@
+{
+  "name": "@soltrend/shared",
+  "version": "0.1.0",
+  "description": "Shared provably-fair engine, game math and GameSpec contract for Soltrend",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./games": "./src/games.ts",
+    "./gamespec": "./src/gamespec.ts",
+    "./provably-fair": "./src/provably-fair.ts",
+    "./sha256": "./src/sha256.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4"
+  }
+}

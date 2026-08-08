@@ -1,0 +1,28 @@
+{
+  "name": "soltrend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Soltrend — the on-chain casino the community builds. Provably-fair Solana Originals + a no-code creator studio.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @soltrend/web",
+    "build": "npm run build --workspace @soltrend/web",
+    "start": "npm run start --workspace @soltrend/web",
+    "typecheck:shared": "npm run typecheck --workspace @soltrend/shared"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.31",
+    "@types/react-dom": "18.3.7",
+    "playwright": "^1.49.1"
+  },
+  "overrides": {
+    "@types/react": "18.3.31",
+    "@types/react-dom": "18.3.7"
+  }
+}
