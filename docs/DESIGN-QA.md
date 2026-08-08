@@ -55,6 +55,35 @@ Performance discipline is uniform: instanced meshes, all per-frame motion
 written to refs inside `useFrame` (zero React renders per frame), DPR
 clamped, bloom gated above 1.0 so only true emitters glow.
 
+## UI component system
+
+Every interactive surface is built from one set of primitives defined in
+`globals.css` and shared components, so polish applied once applies
+everywhere:
+
+- **Buttons** — `.btn-primary` (gradient fill, sweep highlight on hover,
+  press compression, disabled dimming), `.btn-win` (cash-out green
+  variant), `.btn-ghost` (outline). Every game uses `BetButton`, which
+  wraps the guard state (insufficient funds, limits, self-exclusion)
+  into the disabled reason.
+- **Forms** — `BetAmount` (shared bet input with ½/2×/Max and quick
+  chips), `.input-num` (mono numeric fields with a styled select
+  variant), range sliders accented to the palette; all carry accessible
+  labels (see the axe pass).
+- **Navigation** — `AppShell` header (active-route highlight, jackpot
+  ticker, wallet button) + mobile bottom tab bar; every page renders
+  inside the same shell.
+- **Surfaces** — `.glass` / `.glass-hover` panels, `.chip` badges,
+  `label-eyebrow` section headings, `neon-text` display accents.
+- **Modals** — one `Modal` component (wallet, confirmations) with
+  backdrop blur and motion in/out.
+- **Feedback** — win/loss colour semantics everywhere, `sfx` audio
+  cues, confetti bursts scaled to the multiplier, and the `DemoBar`
+  strip tracking rounds/hit-rate/return in demo play.
+
+The smoke sweep loads all of these on every route at both viewports;
+the axe sweep checks them against serious/critical WCAG rules.
+
 ## Error, loading and empty states
 
 - **404** — branded `not-found.tsx`, compiled to `404.html`, which GitHub
