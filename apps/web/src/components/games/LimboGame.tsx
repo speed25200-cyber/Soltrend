@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { motion } from 'framer-motion';
 import { GameLayout } from '@/components/GameLayout';
 import { BetAmount } from '@/components/BetControls';
@@ -13,6 +14,9 @@ import { playLimbo, clampEdge, DEFAULT_EDGE } from '@/lib/games';
 import { MAX_PAYOUT } from '@/lib/forge/board';
 import { fmtMult } from '@/lib/format';
 import type { GameConfig } from './types';
+
+// Ambience only — the readout stays DOM-crisp on top of it.
+const CrystalScene3D = dynamic(() => import('./CrystalScene3D'), { ssr: false, loading: () => null });
 
 export function LimboGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params, maxBet, maxWin, demo}: GameConfig) {
   const { guard, reserveSeeds, settle } = usePlay(maxBet, demo);
@@ -74,6 +78,10 @@ export function LimboGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params,
       meta={meta}
       stage={
         <div className="relative grid h-full place-items-center overflow-hidden">
+          {/* the oracle crystal tumbles while the climb is live */}
+          <div className="pointer-events-none absolute inset-0">
+            <CrystalScene3D spin={busy} verdict={result === null ? null : win ? 'win' : 'loss'} />
+          </div>
           <ClimbArc launch={launch} result={result} win={win} />
           <div className="relative z-10 text-center">
             {result === null && launch === 0 && (

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { motion } from 'framer-motion';
 import { GameLayout } from '@/components/GameLayout';
 import { BetAmount } from '@/components/BetControls';
@@ -12,6 +13,9 @@ import { useCasino } from '@/lib/store';
 import { playDice, diceMultiplier, DEFAULT_EDGE } from '@/lib/games';
 import { fmtMult } from '@/lib/format';
 import type { GameConfig } from './types';
+
+// Ambience only — the readout stays DOM-crisp on top of it.
+const CrystalScene3D = dynamic(() => import('./CrystalScene3D'), { ssr: false, loading: () => null });
 
 export function DiceGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params , maxBet, demo}: GameConfig) {
   const { guard, reserveSeeds, settle } = usePlay(maxBet, demo);
@@ -69,9 +73,13 @@ export function DiceGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params ,
     <GameLayout
       meta={meta}
       stage={
-        <div className="flex h-full flex-col justify-center">
+        <div className="relative flex h-full flex-col justify-center overflow-hidden">
+          {/* the oracle crystal tumbles behind the number while the roll is live */}
+          <div className="pointer-events-none absolute inset-0">
+            <CrystalScene3D spin={rolling} verdict={roll === null ? null : lastWin ? 'win' : 'loss'} />
+          </div>
           {/* Result number */}
-          <div className="mb-8 text-center">
+          <div className="relative z-10 mb-8 text-center">
             {rolling ? (
               <Scramble />
             ) : roll === null ? (
@@ -96,7 +104,7 @@ export function DiceGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params ,
           </div>
 
           {/* Track — a glass gauge with tick marks and a glowing read-head */}
-          <div className="relative mx-auto w-full max-w-xl">
+          <div className="relative z-10 mx-auto w-full max-w-xl">
             <div
               className="relative h-4 overflow-visible rounded-full border border-white/[0.08]"
               style={{ background: 'linear-gradient(180deg,#10142c,#080a18)', boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.7)' }}
