@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { motion } from 'framer-motion';
 import { GameLayout } from '@/components/GameLayout';
 import { BetAmount } from '@/components/BetControls';
@@ -10,6 +11,9 @@ import { useCasino } from '@/lib/store';
 import { towersLayout, towersMultiplier, DEFAULT_EDGE, round2 } from '@/lib/games';
 import { fmtMult } from '@/lib/format';
 import { Icon } from '@/components/Icon';
+
+// The night tower behind the grid — loaded lazily, skipped without WebGL.
+const TowersScene3D = dynamic(() => import('./TowersScene3D'), { ssr: false, loading: () => null });
 import { sfx } from '@/lib/sound';
 import { burstWin } from '@/lib/fx';
 import type { GameConfig } from './types';
@@ -110,8 +114,12 @@ export function TowersGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params
     <GameLayout
       meta={meta}
       stage={
-        <div className="grid h-full place-items-center py-2">
-          <div className="flex flex-col gap-1.5">
+        <div className="relative grid h-full place-items-center overflow-hidden rounded-2xl py-2">
+          {/* the tower climbing behind the grid — pure scenography */}
+          <div className="absolute inset-0" aria-hidden>
+            <TowersScene3D rows={ROWS} level={level} phase={phase} />
+          </div>
+          <div className="relative z-10 flex flex-col gap-1.5">
             {Array.from({ length: ROWS }, (_, r) => ROWS - 1 - r).map((row) => {
               const isCurrent = phase === 'playing' && row === level;
               const cleared = row < level;

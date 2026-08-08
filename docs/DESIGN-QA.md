@@ -49,7 +49,7 @@ Every stage was screenshotted at idle, mid-round and settled states.
 | Coinflip | WebGL coin with engraved canvas faces; leaps, tumbles, lands on the seed's answer with a bounce and a verdict ring | idle breathing, mid-air, heads and tails landings |
 | Dice | Oracle crystal behind the glass gauge — tumbles during the roll, rings green/red on the verdict | rest, roll, win, loss |
 | Limbo | Same crystal + the climb arc | rest, climb, bust |
-| Towers | DOM board with gradient tile faces; multiplier ladder colours track the climb | rest, climb, bust, cash-out |
+| Towers | WebGL night tower behind the DOM grid — floors light green as they're cleared, the active floor breathes violet, a bust floods it red, a cash-out gilds it; the camera rides the climb | rest, climb, bust, cash-out |
 
 Performance discipline is uniform: instanced meshes, all per-frame motion
 written to refs inside `useFrame` (zero React renders per frame), DPR
