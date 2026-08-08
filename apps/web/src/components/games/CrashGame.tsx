@@ -236,6 +236,7 @@ export function CrashGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, maxBet,
                 className="w-full bg-transparent py-2.5 font-mono text-white outline-none"
                 value={autoCashout}
                 inputMode="decimal"
+                aria-label="Auto cash-out multiplier"
                 disabled={phase === 'running'}
                 onChange={(e) => {
                   const n = parseFloat(e.target.value.replace(/[^0-9.]/g, ''));

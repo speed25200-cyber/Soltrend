@@ -127,6 +127,7 @@ export function TowersGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params
                         key={c}
                         whileTap={isCurrent ? { scale: 0.9 } : undefined}
                         disabled={!isCurrent}
+                        aria-label={`Row ${row + 1}, tile ${c + 1}${isTrap ? ' — trap' : isChosenSafe ? ' — safe' : ''}`}
                         onClick={() => pick(row, c)}
                         className={`grid h-11 w-14 place-items-center rounded-lg border transition-all md:w-16 ${
                           isTrap

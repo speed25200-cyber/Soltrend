@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef } from 'react';
+import { Component, useRef, type ReactNode } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Sparkles } from '@react-three/drei';
 import * as THREE from 'three';
@@ -95,13 +95,22 @@ function Crystal({ spin, verdict }: CrystalScene3DProps) {
   );
 }
 
+/** Ornament must never take the game down with it: no WebGL → no crystal, that's all. */
+class GLBoundary extends Component<{ children: ReactNode }, { broken: boolean }> {
+  state = { broken: false };
+  static getDerivedStateFromError() { return { broken: true }; }
+  render() { return this.state.broken ? null : this.props.children; }
+}
+
 export default function CrystalScene3D(props: CrystalScene3DProps) {
   return (
+    <GLBoundary>
     <Canvas dpr={[1, 1.5]} gl={{ antialias: true, alpha: true }} camera={{ fov: 42, position: [0, 0, 4.6] }}>
       <ambientLight intensity={0.4} />
       <directionalLight position={[2, 3, 4]} intensity={0.9} color="#e9d5ff" />
       <Crystal {...props} />
       <Sparkles count={34} scale={[7, 4.5, 3]} size={1.9} speed={0.22} color="#c4b5fd" opacity={0.5} />
     </Canvas>
+    </GLBoundary>
   );
 }

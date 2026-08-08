@@ -127,6 +127,7 @@ export function LimboGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params,
                 className="w-full bg-transparent py-3 font-mono text-lg font-bold text-white outline-none"
                 value={target}
                 inputMode="decimal"
+                aria-label="Target multiplier"
                 onChange={(e) => {
                   const n = parseFloat(e.target.value.replace(/[^0-9.]/g, ''));
                   setTarget(clampTarget(Number.isFinite(n) ? n : 1.01));

@@ -40,7 +40,12 @@ export function LiveWinsTicker() {
         <span className="h-2 w-2 animate-pulse-glow rounded-full bg-win" />
         <span className="text-xs font-semibold text-slate-400">Live wins</span>
       </div>
-      <div className="flex gap-2 overflow-x-auto p-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div
+        className="flex gap-2 overflow-x-auto p-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        role="region"
+        aria-label="Live wins"
+        tabIndex={0}
+      >
         {wins.map((w) => (
           <div
             key={w.id}

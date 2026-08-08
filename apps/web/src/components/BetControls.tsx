@@ -30,6 +30,7 @@ export function BetAmount({
             value={value}
             disabled={disabled}
             inputMode="decimal"
+            aria-label="Bet amount in SOL"
             onChange={(e) => {
               const n = parseFloat(e.target.value.replace(/[^0-9.]/g, ''));
               onChange(Number.isFinite(n) ? n : 0);

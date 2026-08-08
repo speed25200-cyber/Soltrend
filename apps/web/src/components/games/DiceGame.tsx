@@ -160,6 +160,7 @@ export function DiceGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params ,
               min={2}
               max={98}
               step={1}
+              aria-label="Roll threshold"
               value={target}
               onChange={(e) => setTarget(parseInt(e.target.value))}
               className="mt-5 w-full accent-neon-violet"

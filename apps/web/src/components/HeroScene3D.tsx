@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef } from 'react';
+import { Component, useMemo, useRef, type ReactNode } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Sparkles, Float } from '@react-three/drei';
 import * as THREE from 'three';
@@ -77,8 +77,16 @@ function Rig() {
   return null;
 }
 
+/** Ornament must never take the lobby down: no WebGL → just the aurora. */
+class GLBoundary extends Component<{ children: ReactNode }, { broken: boolean }> {
+  state = { broken: false };
+  static getDerivedStateFromError() { return { broken: true }; }
+  render() { return this.state.broken ? null : this.props.children; }
+}
+
 export default function HeroScene3D() {
   return (
+    <GLBoundary>
     <Canvas dpr={[1, 1.5]} gl={{ antialias: true, alpha: true }} camera={{ fov: 40, position: [0, 0.4, 5.6] }}>
       <ambientLight intensity={0.5} />
       <directionalLight position={[3, 4, 5]} intensity={1.7} color="#f3e8ff" />
@@ -90,5 +98,6 @@ export default function HeroScene3D() {
       <Sparkles count={40} scale={[6, 4, 3]} size={2} speed={0.25} color="#c4b5fd" opacity={0.6} position={[0.3, 0.5, 0]} />
       <Rig />
     </Canvas>
+    </GLBoundary>
   );
 }

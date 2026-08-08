@@ -161,6 +161,7 @@ export function MinesGame({ meta, edge = DEFAULT_EDGE, gameId, gameName, params 
               type="range"
               min={1}
               max={24}
+              aria-label="Number of mines"
               value={bombs}
               disabled={phase === 'playing'}
               onChange={(e) => setBombs(parseInt(e.target.value))}
